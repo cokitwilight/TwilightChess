@@ -2,7 +2,7 @@
 
 Twilight Chess is a chess engine written entirely in Rust. 
 
-The goal of this project is to build a solid chess engine with clean architecture. The project remains education and focuses on learning engine design, move ordering, heuristics, and low level optimizations rather than compete with chess giants like StockFish or Leela.
+The goal of this project is to build a solid chess engine with clean architecture. The project remains educational and focuses on learning engine design, move ordering heuristics, and low level optimizations rather than compete with chess giants like StockFish or Leela.
 
 ## Project Status
 
@@ -22,6 +22,7 @@ The move generator, board representation, GUI, Zobrist hashing, and game-end det
 
 ## In Progress
 
+- [ ] Insufficient Material Stalemate
 - [ ] Static Evaluation
 - [ ] Negamax Search with Alpha Beta pruning
 - [ ] Quiescence Search
@@ -39,6 +40,7 @@ The move generator, board representation, GUI, Zobrist hashing, and game-end det
 
 - [ ] Null Move Pruning
 - [ ] Magic Bitboards
+- [ ] Pin Masks
 - [ ] UCI Support
 - [ ] SMP Search
 
@@ -66,3 +68,9 @@ Run all tests:
 ```bash
 cargo test --release
 ```
+
+## Performance Notes
+
+During the bitboard rewrite, the perft performance significantly improved compared to the previous 2D array representation.
+On my machine(AMD 9700x) in release mode, the 2D array version reached roughly 16 million nodes/second while the bitboard representation reach roughly 42 million nodes/second.
+These numbers are informal and are likely to change as the engine is optimized further.
