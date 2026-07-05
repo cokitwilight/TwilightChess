@@ -2,9 +2,12 @@ use crate::{
     board::Board,
     eval::{
         king::king_eval,
+        knight::knight_eval,
         mobility::mobility_score,
+        pawn::pawn_eval,
         phase::MAX_PHASE,
         pst::{self, pst_bonus},
+        sliders::sliders_eval,
     },
     types::{Color, PieceType},
 };
@@ -25,6 +28,10 @@ pub fn evaluation(board: &Board) -> i32 {
 
     total_eval += mobility_score(board, phase);
 
+    total_eval += pawn_eval(board, phase);
+    total_eval += knight_eval(board, phase);
+    // bishop, rook, queen
+    total_eval += sliders_eval(board, phase);
     total_eval += king_eval(board, phase);
 
     total_eval

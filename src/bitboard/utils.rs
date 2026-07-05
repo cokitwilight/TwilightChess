@@ -13,6 +13,10 @@ pub const FILE_F: Bitboard = FILE_A << 5;
 pub const FILE_G: Bitboard = FILE_A << 6;
 pub const FILE_H: Bitboard = FILE_A << 7;
 
+pub const FILE_MASKS: [Bitboard; 8] = [
+    FILE_A, FILE_B, FILE_C, FILE_D, FILE_E, FILE_F, FILE_G, FILE_H,
+];
+
 pub const NOT_FILE_A: Bitboard = !FILE_A;
 pub const NOT_FILE_H: Bitboard = !FILE_H;
 pub const NOT_FILE_AB: Bitboard = !(FILE_A | FILE_B);
@@ -30,6 +34,10 @@ pub const RANK_5: Bitboard = 0x0000_00FF_0000_0000;
 pub const RANK_6: Bitboard = 0x0000_FF00_0000_0000;
 pub const RANK_7: Bitboard = 0x00FF_0000_0000_0000;
 pub const RANK_8: Bitboard = 0xFF00_0000_0000_0000;
+
+pub const RANK_MASKS: [Bitboard; 8] = [
+    RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8,
+];
 
 // -------------------------
 // Useful square constants

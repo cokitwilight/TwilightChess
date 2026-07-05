@@ -5,8 +5,7 @@ use crate::{
         king_attacks, knight_attacks, pop_lsb,
         rays::{all_bishop_attacks, all_queen_attacks, all_rook_attacks},
     },
-    board::{Board, MoveList},
-    moves::{knight::pseudo_knight_moves, pawn::pseudo_pawn_moves},
+    board::Board,
     types::{Color, PieceType},
 };
 
@@ -17,6 +16,8 @@ pub fn mobility_score(board: &Board, phase: i32) -> i32 {
 pub fn mobility_score_raw(board: &Board, color: Color, phase: i32) -> i32 {
     // check every move and subtract how many valid moves there are
     let mut score = 0;
+
+    let friends = board.occupancy_of(color);
 
     score += pawn_moves_bitboard(board, color).count_ones() as i32;
 
@@ -33,23 +34,25 @@ pub fn mobility_score_raw(board: &Board, color: Color, phase: i32) -> i32 {
         all_queen_attacks(board.pieces(color.opposite(), PieceType::Queen), occupied);
 
     let available_knight_moves =
-        all_knight_attacks(board.pieces(color, PieceType::Knight)) & !pawn_attacks;
+        all_knight_attacks(board.pieces(color, PieceType::Knight)) & !pawn_attacks & !friends;
 
     let available_bishop_moves =
-        all_bishop_attacks(board.pieces(color, PieceType::Bishop), occupied) & !pawn_attacks;
+        all_bishop_attacks(board.pieces(color, PieceType::Bishop), occupied)
+            & !pawn_attacks
+            & !friends;
 
     let available_rook_moves = all_rook_attacks(board.pieces(color, PieceType::Rook), occupied)
-        & !(pawn_attacks | knight_and_bishop_attacks);
+        & !(pawn_attacks | knight_and_bishop_attacks | friends);
 
     let available_queen_moves = all_queen_attacks(board.pieces(color, PieceType::Queen), occupied)
-        & !(pawn_attacks | knight_and_bishop_attacks | rook_attacks);
+        & !(pawn_attacks | knight_and_bishop_attacks | rook_attacks | friends);
 
     let Some(king_sq) = pop_lsb(&mut board.pieces(color, PieceType::King)) else {
         panic!("No king in king bit board in mobility score!");
     };
 
     let safe_king_squares = (king_attacks(king_sq)
-        & !(pawn_attacks | knight_and_bishop_attacks | rook_attacks | queen_attacks))
+        & !(pawn_attacks | knight_and_bishop_attacks | rook_attacks | queen_attacks | friends))
         .count_ones() as i32;
 
     if safe_king_squares <= 1 {

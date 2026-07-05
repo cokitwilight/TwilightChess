@@ -5,7 +5,7 @@ use crate::{
 };
 
 pub fn knight_eval(board: &Board, phase: i32) -> i32 {
-    0 // placeholder
+    knight_eval_raw(board, Color::White, phase) - knight_eval_raw(board, Color::Black, phase)
 }
 
 pub fn knight_eval_raw(board: &Board, color: Color, phase: i32) -> i32 {
