@@ -1,4 +1,3 @@
-mod bishop;
 pub mod eval;
 mod king;
 mod knight;
@@ -9,3 +8,4 @@ pub mod phase;
 pub mod pst;
 mod queen;
 mod rook;
+mod sliders;

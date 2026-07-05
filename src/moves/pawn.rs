@@ -1,5 +1,5 @@
 use crate::bitboard::{
-    FILE_A, FILE_H, RANK_1, RANK_3, RANK_6, RANK_8, Square, bit, pawn_attacks, pop_lsb,
+    Bitboard, FILE_A, FILE_H, RANK_1, RANK_3, RANK_6, RANK_8, Square, bit, pawn_attacks, pop_lsb,
 };
 use crate::board::{Board, Move, MoveList, MoveType};
 use crate::types::{Color, PieceType};
@@ -148,6 +148,56 @@ pub fn pseudo_pawn_moves(board: &Board, color: Color, moves: &mut MoveList) {
         }
     }
 }
+
+// pub fn pseudo_pawn_moves_bb(board: &Board, color: Color) -> Bitboard {
+//     let pawns = board.pieces(color, PieceType::Pawn);
+//     let occupancy = board.all_occupancy();
+//     let enemies = board.occupancy_of(color.opposite());
+//     let empty = !occupancy;
+
+//     let mut moves = 0u64;
+
+//     match color {
+//         Color::White => {
+//             let single_pushes = (pawns << 8) & empty; // single pushes
+
+//             moves |= single_pushes;
+
+//             moves |= ((single_pushes & RANK_3) << 8) & empty; // double pushes
+
+//             moves |= ((pawns & !FILE_A) << 7) & enemies; // captures left
+
+//             moves |= ((pawns & !FILE_H) << 9) & enemies; // captures right
+
+//             if let Some(en_pass_to) = board.en_passant() {
+//                 // en_pass_to is the target square(where the pawn will end up at)
+//                 let en_passant_to_bb = bit(en_pass_to);
+//                 moves |= ((pawns & !FILE_A) << 7) & en_passant_to_bb;
+//                 moves |= ((pawns & !FILE_H) << 9) & en_passant_to_bb;
+//             }
+//         }
+
+//         Color::Black => {
+//             let single_pushes = (pawns >> 8) & empty; // single pushes
+
+//             moves |= single_pushes;
+
+//             moves |= ((single_pushes & RANK_6) >> 8) & empty; // double pushes
+
+//             moves |= ((pawns & !FILE_A) >> 9) & enemies; // captures left
+
+//             moves |= ((pawns & !FILE_H) >> 7) & enemies; // captures right
+
+//             if let Some(en_pass_to) = board.en_passant() {
+//                 // en_pass_to is the target square(where the pawn will end up at)
+//                 let en_passant_to_bb = bit(en_pass_to);
+//                 moves |= ((pawns & !FILE_A) >> 9) & en_passant_to_bb;
+//                 moves |= ((pawns & !FILE_H) >> 7) & en_passant_to_bb;
+//             }
+//         }
+//     }
+//     moves
+// }
 
 pub fn pseudo_pawn_moves_at(board: &Board, color: Color, sq: Square, moves: &mut MoveList) {
     if sq >= 64 {

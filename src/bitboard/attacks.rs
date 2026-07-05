@@ -1,10 +1,26 @@
-use crate::types::Color;
+use crate::bitboard::rays::{all_bishop_attacks, all_queen_attacks, all_rook_attacks};
+use crate::board::Board;
+use crate::types::{Color, PieceType};
 
-use crate::bitboard::{Bitboard, NOT_FILE_A, NOT_FILE_H, Square, attack_tables};
+use crate::bitboard::{
+    Bitboard, NOT_FILE_A, NOT_FILE_H, Square, attack_tables, attacks, bishop_attacks, pop_lsb,
+    queen_attacks, rook_attacks,
+};
 
 #[inline]
 pub fn knight_attacks(sq: Square) -> Bitboard {
     attack_tables().knight[sq as usize]
+}
+
+pub fn all_knight_attacks(knights: Bitboard) -> Bitboard {
+    let mut attacks = 0;
+    let mut knights_copy = knights;
+
+    while let Some(sq) = pop_lsb(&mut knights_copy) {
+        attacks |= knight_attacks(sq);
+    }
+
+    attacks
 }
 
 #[inline]
@@ -36,6 +52,23 @@ pub fn pawn_attacks(pawns: Bitboard, color: Color) -> Bitboard {
         Color::White => white_pawn_attacks(pawns),
         Color::Black => black_pawn_attacks(pawns),
     }
+}
+
+pub fn all_attacks(board: &Board, by_color: Color) -> Bitboard {
+    let occupancy = board.all_occupancy();
+    let mut attacks = pawn_attacks(board.pieces(by_color, PieceType::Pawn), by_color);
+
+    let Some(king_sq) = pop_lsb(&mut board.pieces(by_color, PieceType::King)) else {
+        panic!("No king in all_attacks!");
+    };
+
+    attacks |= all_knight_attacks(board.pieces(by_color, PieceType::Knight));
+    attacks |= king_attacks(king_sq);
+    attacks |= all_bishop_attacks(board.pieces(by_color, PieceType::Bishop), occupancy);
+    attacks |= all_rook_attacks(board.pieces(by_color, PieceType::Rook), occupancy);
+    attacks |= all_queen_attacks(board.pieces(by_color, PieceType::Queen), occupancy);
+
+    attacks
 }
 
 #[cfg(test)]

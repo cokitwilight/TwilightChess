@@ -1,6 +1,8 @@
 use crate::{
     board::Board,
     eval::{
+        king::king_eval,
+        mobility::mobility_score,
         phase::MAX_PHASE,
         pst::{self, pst_bonus},
     },
@@ -20,6 +22,10 @@ pub fn evaluation(board: &Board) -> i32 {
 
     total_eval += board.material();
     total_eval += pst_eval;
+
+    total_eval += mobility_score(board, phase);
+
+    total_eval += king_eval(board, phase);
 
     total_eval
 }

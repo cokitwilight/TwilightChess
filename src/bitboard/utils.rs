@@ -74,6 +74,22 @@ pub fn file_of(sq: Square) -> u8 {
     sq % 8
 }
 
+pub fn file_mask(file: u8) -> Bitboard {
+    match file {
+        0 => FILE_A,
+        1 => FILE_B,
+        2 => FILE_C,
+        3 => FILE_D,
+        4 => FILE_E,
+        5 => FILE_F,
+        6 => FILE_G,
+        7 => FILE_H,
+        _ => {
+            panic!("Larger file number > 8 in file_mask!");
+        }
+    }
+}
+
 #[inline]
 pub fn rank_of(sq: Square) -> u8 {
     sq / 8

@@ -1,4 +1,4 @@
-use crate::bitboard::{Bitboard, Square, bit, file_of, rank_of, square};
+use crate::bitboard::{Bitboard, Square, bit, file_of, pop_lsb, rank_of, square};
 
 /// Generate attacks in one direction until edge of board or first blocker.
 ///
@@ -54,6 +54,39 @@ pub fn bishop_attacks(sq: Square, occupied: Bitboard) -> Bitboard {
 #[inline]
 pub fn queen_attacks(sq: Square, occupied: Bitboard) -> Bitboard {
     rook_attacks(sq, occupied) | bishop_attacks(sq, occupied)
+}
+
+pub fn all_bishop_attacks(bishops: Bitboard, occupied: Bitboard) -> Bitboard {
+    let mut attacks = 0u64;
+    let mut b = bishops;
+
+    while let Some(sq) = pop_lsb(&mut b) {
+        attacks |= bishop_attacks(sq, occupied);
+    }
+
+    attacks
+}
+
+pub fn all_rook_attacks(rooks: Bitboard, occupied: Bitboard) -> Bitboard {
+    let mut attacks = 0u64;
+    let mut r = rooks;
+
+    while let Some(sq) = pop_lsb(&mut r) {
+        attacks |= rook_attacks(sq, occupied);
+    }
+
+    attacks
+}
+
+pub fn all_queen_attacks(queens: Bitboard, occupied: Bitboard) -> Bitboard {
+    let mut attacks = 0u64;
+    let mut q = queens;
+
+    while let Some(sq) = pop_lsb(&mut q) {
+        attacks |= queen_attacks(sq, occupied);
+    }
+
+    attacks
 }
 
 #[cfg(test)]

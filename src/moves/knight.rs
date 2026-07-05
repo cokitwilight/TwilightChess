@@ -32,6 +32,7 @@ pub fn pseudo_knight_moves(board: &Board, color: Color, moves: &mut MoveList) {
         }
     }
 }
+
 pub fn pseudo_knight_moves_at(board: &Board, color: Color, sq: Square, moves: &mut MoveList) {
     if sq >= 64 {
         return;
