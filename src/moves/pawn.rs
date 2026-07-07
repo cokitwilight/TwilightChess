@@ -309,7 +309,7 @@ pub fn pseudo_pawn_moves_at(board: &Board, color: Color, sq: Square, moves: &mut
 pub fn pseudo_pawn_capture_moves(board: &Board, color: Color, moves: &mut MoveList) {
     let pawns = board.pieces(color, PieceType::Pawn);
     let enemies = board.occupancy_of(color.opposite());
-    let empty = board.all_occupancy();
+    let empty = !board.all_occupancy();
 
     let promotion_rank = match color {
         Color::White => 7,
@@ -393,7 +393,7 @@ pub fn pseudo_pawn_capture_moves(board: &Board, color: Color, moves: &mut MoveLi
             let mut captures_right = ((pawns & !FILE_H) >> 7) & enemies;
 
             while let Some(to) = pop_lsb(&mut single_pushes) {
-                let from = to - 8;
+                let from = to + 8;
                 if rank_of(to) == promotion_rank {
                     for promotion in [
                         PieceType::Queen,

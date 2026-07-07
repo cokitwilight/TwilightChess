@@ -1,4 +1,4 @@
-use crate::bitboard::{Square, bit, file_of, rank_of, square};
+use crate::bitboard::{Square, bit, file_of, print_all_bitboards, rank_of, square};
 use crate::board::{
     BLACK_KINGSIDE, BLACK_QUEENSIDE, Board, Move, MoveType, UndoMove, WHITE_KINGSIDE,
     WHITE_QUEENSIDE, piece,
@@ -36,7 +36,11 @@ impl Board {
         } else {
             self.piece_at(mv.to).map(|piece| {
                 debug_assert_ne!(piece.color, us, "Tried to capture own piece");
-                debug_assert_ne!(piece.kind, PieceType::King, "Move illegally captures king");
+                if piece.kind == PieceType::King {
+                    print_all_bitboards(&self);
+                    panic!("Move illegally captures king. Move: from: {}, to: {}, kind: {:?}, promtion: {}", mv.from, mv.to, mv.kind, mv.is_promotion());
+                }
+                // debug_assert_ne!(piece.kind, PieceType::King, "Move illegally captures king. Move: from: {}, to: {}, kind: {:?}, promtion: {}", mv.from, mv.to, mv.kind, mv.is_promotion());
 
                 (piece.color, piece.kind, mv.to)
             })

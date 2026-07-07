@@ -1,4 +1,8 @@
-use crate::bitboard::{Bitboard, Square};
+use crate::{
+    bitboard::{Bitboard, Square},
+    board::Board,
+    types::{COLORS, PIECE_TYPES},
+};
 
 // -------------------------
 // File masks
@@ -168,4 +172,13 @@ pub fn print_bitboard(bb: Bitboard) {
 
     println!("  +-----------------+");
     println!("    a b c d e f g h");
+}
+
+pub fn print_all_bitboards(board: &Board) {
+    for color in COLORS {
+        for piece in PIECE_TYPES {
+            println!("{:?} - {:?}", color, piece);
+            print_bitboard(board.pieces(color, piece));
+        }
+    }
 }

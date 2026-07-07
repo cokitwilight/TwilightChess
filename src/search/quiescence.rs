@@ -216,13 +216,13 @@ impl Engine {
                 board.undo_move(undo);
                 continue;
             }
+
             context.repetition_history.push(parent_hash);
 
             let score = -self.quiescence(board, context, depth - 1, -beta, -alpha, ply + 1);
 
-            context.repetition_history.pop();
-
             board.undo_move(undo);
+            context.repetition_history.pop();
 
             if score > best_score {
                 best_score = score;

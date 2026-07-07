@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use crate::bitboard::print_all_bitboards;
 use crate::board::{Board, Move};
 use crate::search::engine::{Engine, SearchContext, SearchResult, SearchStats};
 use crate::search::negamax::{CHECKMATE_SCORE, NEG_INF, POS_INF};
@@ -27,6 +28,9 @@ impl Engine {
             if ctx.should_stop() {
                 break;
             }
+            // println!("\n-----------------------");
+            // print_all_bitboards(board);
+            // println!("-----------------------\n");
 
             let start = Instant::now();
             let result = self.search_root(board, ctx, best_result.best_move, depth);

@@ -125,7 +125,7 @@ impl Engine {
         let side_to_move = board.side_to_move();
 
         if moves.is_empty() {
-            if in_check {
+            if board.in_check(side_to_move) {
                 return -CHECKMATE_SCORE + ply as i32;
             } else {
                 return 0; // Stalemate
