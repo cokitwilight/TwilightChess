@@ -110,6 +110,9 @@ pub struct SearchStats {
     pub null_moves: u64,
     pub null_cutoffs: u64,
 
+    pub delta_prunes: u64,
+    pub see_prunes: u64,
+
     pub repetition_returns: u64,
     pub fifty_returns: u64,
 }
@@ -140,6 +143,11 @@ impl SearchStats {
             "Null Moves: {}. Null Prunes: {}",
             self.null_moves.to_formatted_string(&Locale::en),
             self.null_cutoffs.to_formatted_string(&Locale::en)
+        );
+        println!(
+            "Delta Prunes: {}. SEE Prunes: {}",
+            self.delta_prunes.to_formatted_string(&Locale::en),
+            self.see_prunes.to_formatted_string(&Locale::en)
         );
     }
     pub fn print_tts(&self) {

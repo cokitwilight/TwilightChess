@@ -1,13 +1,17 @@
 use crate::{
-    board::{Board, Move},
+    board::{Board, Move, MoveType},
     eval::eval::evaluation_for_turn,
+    moves::see::see,
     search::{
         Engine,
         engine::SearchContext,
         negamax::{CHECKMATE_SCORE, NEG_INF},
         tt::{TTEntry, TTFlag},
     },
+    types::PieceType,
 };
+
+const DELTA_MARGIN: i32 = 200; // safe defualt for now
 
 impl Engine {
     pub fn quiescence(
@@ -76,6 +80,7 @@ impl Engine {
         let in_check = board.in_check(board.side_to_move());
 
         let mut best_score = NEG_INF;
+        let mut stand_pat = NEG_INF;
         let mut best_move: Option<Move> = None;
 
         let mut raw_moves = if in_check {
@@ -123,7 +128,7 @@ impl Engine {
 
             evasions
         } else {
-            let stand_pat = evaluation_for_turn(board);
+            stand_pat = evaluation_for_turn(board);
             best_score = stand_pat;
 
             if stand_pat >= beta {
@@ -159,6 +164,7 @@ impl Engine {
                 return stand_pat;
             }
             board.all_pseudo_capture_moves()
+            // includes promotions and quiet promotions
         };
 
         // do move ordering here
@@ -174,11 +180,32 @@ impl Engine {
                 tt_best_move,
             );
         } else {
+            // only tt and see ordering
             self.q_order_moves(board, &mut raw_moves, tt_best_move);
         }
 
         for mv in raw_moves.iter() {
             // add see pruning and delta pruning here
+            let can_prune = !in_check
+                && board.phase > 8
+                && mv.promotion.is_none()
+                && alpha.abs() > CHECKMATE_SCORE - 1000;
+
+            if can_prune {
+                let captured_value = match mv.kind {
+                    MoveType::EnPassant => PieceType::Pawn.value(),
+
+                    _ => board.piece_at(mv.to).map(|p| p.kind.value()).unwrap_or(0),
+                };
+                if stand_pat + captured_value + DELTA_MARGIN < alpha {
+                    continue;
+                }
+
+                if see(board, *mv) <= -500 {
+                    // less agressive pruning since see doesn't check legality yet
+                    continue;
+                }
+            }
 
             let parent_hash = board.hash();
 
