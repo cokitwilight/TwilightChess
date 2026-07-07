@@ -110,7 +110,7 @@ impl Engine {
             }
 
             let undo = board.make_move(*mv);
-            let eval = -self.negamax(board, ctx, depth - 1, -beta, -alpha, 1);
+            let eval = -self.negamax(board, ctx, depth - 1, -beta, -alpha, 1, true);
             board.undo_move(undo);
 
             if eval > best_eval {

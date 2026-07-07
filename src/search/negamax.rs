@@ -1,5 +1,5 @@
 use crate::{
-    board::{Board, Move, MoveType},
+    board::{Board, Move, MoveType, null_move::null_move_reduction},
     search::{
         engine::{Engine, SearchContext},
         lmr::lmr_reduction,
@@ -24,6 +24,7 @@ impl Engine {
         mut alpha: i32,
         mut beta: i32,
         ply: usize,
+        allow_null_move: bool,
     ) -> i32 {
         context.stats.nodes += 1;
 
@@ -49,6 +50,8 @@ impl Engine {
 
         let original_alpha = alpha;
         // let original_beta = beta;
+
+        let in_check = board.in_check(board.side_to_move());
 
         let mut tt_best_move: Option<Move> = None;
 
@@ -84,12 +87,45 @@ impl Engine {
                 }
             }
         }
+
+        // null move here
+        // 4 is a placeholder for now
+        // use phase for now might not be viable though
+        if allow_null_move
+            && !in_check
+            && depth >= 4
+            && board.phase > 8
+            && beta < CHECKMATE_SCORE - 1000
+        {
+            context.stats.null_moves += 1;
+            let reduction = null_move_reduction(depth);
+
+            let undo = board.make_null_move();
+
+            let score = -self.negamax(
+                board,
+                context,
+                depth - 1 - reduction,
+                -beta,
+                -beta + 1,
+                ply + 1,
+                false,
+            );
+
+            board.undo_null_move(undo);
+
+            if score >= beta {
+                context.stats.null_cutoffs += 1;
+                return beta;
+            }
+        }
+
         let mut moves = board.all_pseudo_moves();
 
         let side_to_move = board.side_to_move();
 
         if moves.is_empty() {
-            if board.in_check(side_to_move) {
+            if in_check {
                 return -CHECKMATE_SCORE + ply as i32;
             } else {
                 return 0; // Stalemate
@@ -129,8 +165,6 @@ impl Engine {
 
             let gives_check = board.in_check(side_to_move.opposite());
 
-            let reduction = 0;
-
             let reduction = if (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
                 && !currently_in_check
                 && !gives_check
@@ -152,15 +186,16 @@ impl Engine {
                     -alpha - 1,
                     -alpha,
                     ply + 1,
+                    true,
                 );
 
                 if eval > alpha {
                     context.stats.lmr_researched += 1;
                     // this move might improve alpha, research it at full depth
-                    eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1);
+                    eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1, true);
                 }
             } else {
-                eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1);
+                eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1, true);
             }
 
             board.undo_move(undo);

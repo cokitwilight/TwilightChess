@@ -107,6 +107,9 @@ pub struct SearchStats {
     pub lmr_nodes: u64,
     pub lmr_researched: u64,
 
+    pub null_moves: u64,
+    pub null_cutoffs: u64,
+
     pub repetition_returns: u64,
     pub fifty_returns: u64,
 }
@@ -132,6 +135,11 @@ impl SearchStats {
             "Lmr Nodes: {}. Researched Nodes: {}",
             self.lmr_nodes.to_formatted_string(&Locale::en),
             self.lmr_researched.to_formatted_string(&Locale::en)
+        );
+        println!(
+            "Null Moves: {}. Null Prunes: {}",
+            self.null_moves.to_formatted_string(&Locale::en),
+            self.null_cutoffs.to_formatted_string(&Locale::en)
         );
     }
     pub fn print_tts(&self) {
