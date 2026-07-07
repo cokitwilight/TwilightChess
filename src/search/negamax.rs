@@ -5,6 +5,7 @@ use crate::{
     eval::eval::evaluation_for_turn,
     search::{
         engine::{Engine, SearchContext},
+        lmr::lmr_reduction,
         tt::{TTEntry, TTFlag},
     },
 };
@@ -32,11 +33,13 @@ impl Engine {
         // ADD DRAWING LOGIC HERE
 
         if Engine::repetition_in_search(context, board.hash(), board.halfmove_clock() as usize) {
+            context.stats.repetition_returns += 1;
             return 0;
         }
 
         if board.halfmove_clock() >= 100 {
             // 50 move rule
+            context.stats.fifty_returns += 1;
             return 0;
         }
 
@@ -114,22 +117,54 @@ impl Engine {
         for (move_index, mv) in moves.iter().enumerate() {
             // TODO: move index for lmr
 
-            // let gives_check = board.in_check();
-
             let parent_hash = board.hash;
-            let in_check = board.in_check(board.side_to_move());
+            let currently_in_check = board.in_check(side_to_move);
 
             let undo = board.make_move(*mv);
-            let illegal = board.in_check(side_to_move);
 
-            if illegal {
+            if board.in_check(side_to_move) {
+                // illegal move
                 board.undo_move(undo);
                 continue;
             }
-            context.repetition_history.push(parent_hash);
-            // add history here
 
-            let eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1);
+            context.repetition_history.push(parent_hash); // only store if valid move
+
+            let gives_check = board.in_check(side_to_move.opposite());
+
+            let reduction = 0;
+
+            let reduction = if (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
+                && !currently_in_check
+                && !gives_check
+            {
+                lmr_reduction(depth, move_index)
+            } else {
+                0
+            };
+
+            let mut eval: i32;
+
+            if reduction > 0 {
+                context.stats.lmr_nodes += 1;
+                // null window search
+                eval = -self.negamax(
+                    board,
+                    context,
+                    depth - 1 - reduction,
+                    -alpha - 1,
+                    -alpha,
+                    ply + 1,
+                );
+
+                if eval > alpha {
+                    context.stats.lmr_researched += 1;
+                    // this move might improve alpha, research it at full depth
+                    eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1);
+                }
+            } else {
+                eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1);
+            }
 
             board.undo_move(undo);
             context.repetition_history.pop();

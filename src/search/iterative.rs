@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use crate::board::{Board, Move};
 use crate::search::engine::{Engine, SearchContext, SearchResult, SearchStats};
-use crate::search::negamax::{NEG_INF, POS_INF};
+use crate::search::negamax::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 
 // for debug printing
 use thousands::Separable;
@@ -35,12 +35,13 @@ impl Engine {
             total_time += elapsed.as_secs_f64();
             ctx.stats.print_all(depth);
             println!(
-                "Time Elapsed: {:.3}. NPS: {}",
+                "Eval: {}. Time Elapsed: {:.3}. NPS: {}",
+                result.eval,
                 elapsed.as_secs_f64(),
                 format!("{:.2}", nodes_p_sec).separate_with_commas()
             );
 
-            if ctx.should_stop() && result.best_move.is_none() {
+            if ctx.should_stop() {
                 break;
             }
 
@@ -51,7 +52,8 @@ impl Engine {
         let total_nps = (ctx.stats.nodes + ctx.stats.qnodes) as f64 / total_time;
 
         println!(
-            "\nTotal Time: {:.3}. Total NPS: {}\n",
+            "\nFinal Eval: {}. Total Time: {:.3}. Total NPS: {}\n",
+            best_result.eval,
             total_time,
             format!("{:.2}", total_nps).separate_with_commas()
         );
@@ -67,12 +69,30 @@ impl Engine {
         previous_best_move: Option<Move>,
         depth: usize,
     ) -> SearchResult {
+        let mut alpha = NEG_INF + 1;
+        let beta = POS_INF - 1;
+
         let mut best_eval = i32::MIN;
         let mut best_move = None;
 
         let mut legal_moves = board.all_legal_moves();
 
-        let tt_best_move = self.tt.get(board.hash).and_then(|entry| entry.best_move);
+        if legal_moves.is_empty() {
+            let eval = if board.in_check(board.side_to_move()) {
+                -CHECKMATE_SCORE
+            } else {
+                0
+            };
+            return SearchResult {
+                best_move: None,
+                eval,
+                depth_reached: depth,
+                stats: ctx.stats.clone(),
+                pv: Vec::new(),
+            };
+        }
+
+        let tt_best_move = self.tt.get(board.hash()).and_then(|entry| entry.best_move);
 
         self.order_moves(
             board,
@@ -90,12 +110,16 @@ impl Engine {
             }
 
             let undo = board.make_move(*mv);
-            let eval = -self.negamax(board, ctx, depth - 1, NEG_INF + 1, POS_INF - 1, 1);
+            let eval = -self.negamax(board, ctx, depth - 1, -beta, -alpha, 1);
             board.undo_move(undo);
 
             if eval > best_eval {
                 best_eval = eval;
                 best_move = Some(*mv);
+            }
+
+            if eval > alpha {
+                alpha = eval;
             }
         }
 

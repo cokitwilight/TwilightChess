@@ -23,18 +23,18 @@ The move generator, board representation, GUI, Zobrist hashing, and game-end det
 ## In Progress
 
 - [ ] Insufficient Material Stalemate
-- [ ] Static Evaluation
-- [ ] Negamax Search with Alpha Beta pruning
-- [ ] Quiescence Search
-- [ ] Transposition Tables for regualar and quiescence search
-- [ ] Killer Moves Heuristic
-- [ ] History Heuristics
+- [x] Static Evaluation
+- [x] Negamax Search with Alpha Beta pruning
+- [x] Quiescence Search
+- [x] Transposition Tables for regualar and quiescence search
+- [x] Killer Moves Heuristic
+- [x] History Heuristics
 - [ ] SEE(Static Exchange Evaluation)
-- [ ] Iterative Deepening
+- [x] Iterative Deepening
 - [ ] Aspiration Windows
 - [ ] Delta Pruning
 - [ ] Simple Opening Book
-- [ ] Gui with Player vs Bot
+- [x] Gui with Player vs Bot
 
 ## Planned Features
 

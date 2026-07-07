@@ -104,6 +104,9 @@ pub struct SearchStats {
     pub tt: TableStats,
     pub qtt: TableStats,
 
+    pub lmr_nodes: u64,
+    pub lmr_researched: u64,
+
     pub repetition_returns: u64,
     pub fifty_returns: u64,
 }
@@ -112,6 +115,7 @@ impl SearchStats {
     pub fn print_all(&self, number: usize) {
         println!("{}. Stats:", number);
         self.print_nodes();
+        self.print_pruning_heuristics();
         self.print_returns();
         self.print_tts();
         print!("\n");
@@ -121,6 +125,13 @@ impl SearchStats {
             "Nodes: {}. Qnodes: {}",
             self.nodes.to_formatted_string(&Locale::en),
             self.qnodes.to_formatted_string(&Locale::en)
+        );
+    }
+    pub fn print_pruning_heuristics(&self) {
+        println!(
+            "Lmr Nodes: {}. Researched Nodes: {}",
+            self.lmr_nodes.to_formatted_string(&Locale::en),
+            self.lmr_researched.to_formatted_string(&Locale::en)
         );
     }
     pub fn print_tts(&self) {

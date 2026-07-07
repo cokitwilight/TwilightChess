@@ -62,7 +62,7 @@ impl Engine {
             if hash == board_hash {
                 count += 1;
 
-                if count >= 2 {
+                if count >= 1 {
                     return true;
                 }
             }

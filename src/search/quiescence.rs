@@ -22,9 +22,11 @@ impl Engine {
         context.stats.qnodes += 1;
 
         if Engine::repetition_in_search(context, board.hash(), board.halfmove_clock() as usize) {
+            context.stats.repetition_returns += 1;
             return 0;
         }
         if board.halfmove_clock() >= 100 {
+            context.stats.fifty_returns += 1;
             return 0;
         }
 
@@ -77,7 +79,7 @@ impl Engine {
         let mut best_move: Option<Move> = None;
 
         let mut raw_moves = if in_check {
-            let evasions = board.all_legal_moves();
+            let evasions = board.all_pseudo_moves();
 
             if evasions.is_empty() {
                 let score = -CHECKMATE_SCORE + ply as i32;
@@ -156,7 +158,7 @@ impl Engine {
                 );
                 return stand_pat;
             }
-            board.all_legal_capture_moves()
+            board.all_pseudo_capture_moves()
         };
 
         // do move ordering here
@@ -176,6 +178,12 @@ impl Engine {
             let parent_hash = board.hash();
 
             let undo = board.make_move(*mv);
+
+            if board.in_check(side_to_move) {
+                // illegal move
+                board.undo_move(undo);
+                continue;
+            }
             context.repetition_history.push(parent_hash);
 
             let score = -self.quiescence(board, context, depth - 1, -beta, -alpha, ply + 1);
