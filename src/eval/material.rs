@@ -1,5 +1,5 @@
 use crate::board::Board;
-use crate::types::{COLORS, Color, PIECE_TYPES, PieceType};
+use crate::types::{COLORS, Color, PIECE_TYPES};
 
 // FOR DEBUGGING
 pub fn calculate_material(board: &Board) -> i32 {

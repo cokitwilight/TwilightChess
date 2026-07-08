@@ -67,7 +67,7 @@ impl Engine {
             tt_best_move = entry.best_move;
 
             if entry.depth >= depth {
-                context.stats.tt.usable_hits += 1;
+                context.stats.tt.usable += 1;
 
                 match entry.flag {
                     TTFlag::Exact => {
@@ -97,7 +97,7 @@ impl Engine {
             && board.phase > 8
             && beta < CHECKMATE_SCORE - 1000
         {
-            context.stats.null_moves += 1;
+            context.stats.null_attempts += 1;
             let reduction = null_move_reduction(depth);
 
             let undo = board.make_null_move();
@@ -122,15 +122,9 @@ impl Engine {
 
         let mut moves = board.all_pseudo_moves();
 
-        let side_to_move = board.side_to_move();
+        let mut legal_moves = 0;
 
-        if moves.is_empty() {
-            if board.in_check(side_to_move) {
-                return -CHECKMATE_SCORE + ply as i32;
-            } else {
-                return 0; // Stalemate
-            }
-        }
+        let side_to_move = board.side_to_move();
 
         self.order_moves(
             board,
@@ -148,20 +142,26 @@ impl Engine {
         let mut did_cutoff = false;
 
         for (move_index, mv) in moves.iter().enumerate() {
-            // TODO: move index for lmr
-
-            let parent_hash = board.hash;
             let currently_in_check = board.in_check(side_to_move);
 
             let undo = board.make_move(*mv);
 
+            let child_hash = board.hash();
+
             if board.in_check(side_to_move) {
                 // illegal move
+                context.stats.illegal_moves += 1;
                 board.undo_move(undo);
                 continue;
             }
+            // for stats debugging
+            let was_killer = context.killer_moves.contains(ply, *mv);
+            let history_score = self.history.get(side_to_move, mv.from, mv.to);
 
-            context.repetition_history.push(parent_hash); // only store if valid move
+            context.stats.moves_searched += 1;
+            legal_moves += 1;
+
+            context.repetition_history.push(child_hash); // only store if valid move
 
             let gives_check = board.in_check(side_to_move.opposite());
 
@@ -177,7 +177,7 @@ impl Engine {
             let mut eval: i32;
 
             if reduction > 0 {
-                context.stats.lmr_nodes += 1;
+                context.stats.lmr_attempts += 1;
                 // null window search
                 eval = -self.negamax(
                     board,
@@ -198,8 +198,9 @@ impl Engine {
                 eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1, true);
             }
 
-            board.undo_move(undo);
             context.repetition_history.pop();
+
+            board.undo_move(undo);
 
             if eval > max_eval {
                 max_eval = eval;
@@ -209,14 +210,31 @@ impl Engine {
             alpha = alpha.max(eval);
 
             if alpha >= beta {
-                // ADD KILLER MOVE AND HISTORY HEURISTIC HERE
+                context.stats.beta_cutoffs += 1;
                 did_cutoff = true;
-                if mv.kind == MoveType::Normal || mv.kind == MoveType::Castle {
-                    // quiet move
+
+                let is_quiet = (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
+                    && mv.promotion.is_none();
+
+                if is_quiet {
+                    if was_killer {
+                        context.stats.killer_cutoffs += 1;
+                    } else if history_score > 0 {
+                        context.stats.history_cutoffs += 1;
+                    }
+
                     self.history.add_bonus(side_to_move, mv.from, mv.to, depth);
                     context.killer_moves.add(ply, *mv);
                 }
                 break;
+            }
+        }
+
+        if legal_moves == 0 {
+            if board.in_check(side_to_move) {
+                return -CHECKMATE_SCORE + ply as i32;
+            } else {
+                return 0; // Stalemate
             }
         }
 
@@ -230,6 +248,7 @@ impl Engine {
             TTFlag::Exact
         };
 
+        context.stats.tt.stores += 1;
         self.tt.insert(
             board.hash,
             TTEntry {
@@ -244,132 +263,3 @@ impl Engine {
         max_eval
     }
 }
-
-// pub fn negamax(
-//         &mut self,
-//         board: &mut Board,
-//         depth: usize,
-//         mut alpha: i32,
-//         mut beta: i32,
-//         search_history: &mut Vec<u64>,
-//         ply: usize,
-//     ) -> i32 {
-//         self.nodes += 1;
-
-//         // if self.is_repetition_in_search(search_history, board.hash) {
-//         //     self.repetition_returns += 1;
-//         //     return 0;
-//         // }
-
-//         // if board.is_fifty_move_draw() {
-//         //     self.fifty_returns += 1;
-//         //     return 0;
-//         // }
-
-//         if depth == 0 {
-//             return 0;
-//             // return self.quiescence(board, alpha, beta, MAX_Q_DEPTH, search_history, ply);
-//         }
-
-//         let mut moves = board.all_legal_moves();
-
-//         if moves.is_empty() {
-//             if board.in_check() {
-//                 return -CHECKMATE_SCORE + ply as i32;
-//             } else {
-//                 return 0;
-//             }
-//         }
-
-//         let side_to_move = board.get_turn();
-
-//         self.order_moves(board, &mut moves, side_to_move, ply, None, tt_best_move);
-
-//         let mut max_eval = NEG_INF;
-//         let mut best_move: Option<Move> = None;
-
-//         // println!("Line 787: negamax");
-
-//         for (move_index, mv) in moves.iter().enumerate() {
-//             let parent_hash = board.hash;
-
-//             let in_check = board.in_check();
-
-//             let undo = board.make_move(*mv);
-//             search_history.push(parent_hash);
-
-//             let quiet = Engine::is_quiet_move(*mv);
-
-//             let gives_check = board.in_check();
-
-//             // let reduction = 0; // compare with regular
-
-//             let reduction = if quiet && !in_check && !gives_check {
-//                 Self::lmr_reduction(depth, move_index)
-//             } else {
-//                 0
-//             };
-
-//             let mut eval;
-
-//             if reduction > 0 {
-//                 // Reduced null-window search.
-//                 eval = -self.negamax(
-//                     board,
-//                     depth - 1 - reduction,
-//                     -alpha - 1,
-//                     -alpha,
-//                     search_history,
-//                     ply + 1,
-//                 );
-
-//                 // If the reduced search says this move may improve alpha,
-//                 // re-search it at full depth with a full window.
-//                 if eval > alpha {
-//                     eval = -self.negamax(board, depth - 1, -beta, -alpha, search_history, ply + 1);
-//                 }
-//             } else {
-//                 // Normal full-depth full-window search.
-//                 eval = -self.negamax(board, depth - 1, -beta, -alpha, search_history, ply + 1);
-//             }
-
-//             search_history.pop();
-//             board.undo_move(undo);
-
-//             if eval > max_eval {
-//                 max_eval = eval;
-//                 best_move = Some(*mv);
-//             }
-
-//             alpha = alpha.max(eval);
-
-//             if alpha >= beta {
-//                 if Engine::is_quiet_move(*mv) {
-//                     self.store_killer_move(ply, *mv);
-//                     self.add_history_bonus(side_to_move, *mv, depth);
-//                 }
-//                 break;
-//             }
-//         }
-
-//         let flag = if max_eval <= original_alpha {
-//             TTFlag::UpperBound
-//         } else if max_eval >= original_beta {
-//             TTFlag::LowerBound
-//         } else {
-//             TTFlag::Exact
-//         };
-
-//         self.tt.insert(
-//             board.hash,
-//             TTEntry {
-//                 hash: board.hash,
-//                 depth,
-//                 eval: max_eval,
-//                 best_move,
-//                 flag,
-//             },
-//         );
-
-//         max_eval
-//     }

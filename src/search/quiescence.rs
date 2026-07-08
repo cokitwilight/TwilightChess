@@ -1,7 +1,7 @@
 use crate::{
     board::{Board, Move, MoveType},
     eval::eval::evaluation_for_turn,
-    moves::see::see,
+    moves::{legal, see::see},
     search::{
         Engine,
         engine::SearchContext,
@@ -53,7 +53,7 @@ impl Engine {
             tt_best_move = entry.best_move;
 
             if entry.depth >= depth {
-                context.stats.qtt.usable_hits += 1;
+                context.stats.qtt.usable += 1;
 
                 match entry.flag {
                     TTFlag::Exact => {
@@ -84,10 +84,11 @@ impl Engine {
         let mut best_move: Option<Move> = None;
 
         let mut raw_moves = if in_check {
-            let evasions = board.all_pseudo_moves();
+            let evasions = board.all_legal_moves();
 
             if evasions.is_empty() {
                 let score = -CHECKMATE_SCORE + ply as i32;
+                context.stats.qtt.stores += 1;
                 self.qtt.insert(
                     hash,
                     TTEntry {
@@ -113,6 +114,7 @@ impl Engine {
                     TTFlag::Exact
                 };
 
+                context.stats.qtt.stores += 1;
                 self.qtt.insert(
                     hash,
                     TTEntry {
@@ -132,6 +134,8 @@ impl Engine {
             best_score = stand_pat;
 
             if stand_pat >= beta {
+                context.stats.stand_pat_cutoffs += 1;
+                context.stats.qtt.stores += 1;
                 self.qtt.insert(
                     hash,
                     TTEntry {
@@ -151,6 +155,7 @@ impl Engine {
             }
 
             if depth == 0 {
+                context.stats.qtt.stores += 1;
                 self.qtt.insert(
                     hash,
                     TTEntry {
@@ -198,31 +203,37 @@ impl Engine {
                     _ => board.piece_at(mv.to).map(|p| p.kind.value()).unwrap_or(0),
                 };
                 if stand_pat + captured_value + DELTA_MARGIN < alpha {
+                    context.stats.delta_prunes += 1;
                     continue;
                 }
 
                 if see(board, *mv) <= -500 {
+                    context.stats.see_prunes += 1;
                     // less agressive pruning since see doesn't check legality yet
                     continue;
                 }
             }
 
-            let parent_hash = board.hash();
-
             let undo = board.make_move(*mv);
+
+            let child_hash = board.hash();
 
             if board.in_check(side_to_move) {
                 // illegal move
+                context.stats.qillegal_moves += 1;
                 board.undo_move(undo);
                 continue;
             }
 
-            context.repetition_history.push(parent_hash);
+            context.repetition_history.push(child_hash);
+
+            context.stats.qmoves_searched += 1;
 
             let score = -self.quiescence(board, context, depth - 1, -beta, -alpha, ply + 1);
 
-            board.undo_move(undo);
             context.repetition_history.pop();
+
+            board.undo_move(undo);
 
             if score > best_score {
                 best_score = score;
@@ -234,6 +245,7 @@ impl Engine {
             }
 
             if score >= beta {
+                context.stats.qtt.stores += 1;
                 self.qtt.insert(
                     hash,
                     TTEntry {
@@ -255,6 +267,8 @@ impl Engine {
         } else {
             TTFlag::Exact
         };
+
+        context.stats.qtt.stores += 1;
         self.qtt.insert(
             hash,
             TTEntry {

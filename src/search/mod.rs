@@ -6,6 +6,7 @@ mod lmr;
 mod negamax;
 mod ordering;
 mod quiescence;
+pub mod stats;
 mod tt;
 
 pub use engine::{Engine, SearchLimits, SearchResult};

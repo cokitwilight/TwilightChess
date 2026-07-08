@@ -1,30 +1,31 @@
-use crate::{
-    bitboard::{
-        Bitboard, FILE_MASKS, RANK_2, RANK_3, RANK_6, RANK_7, RANK_MASKS, Square, bit, file_of,
-        pawn_attacks, pop_lsb, rank_of,
-    },
-    board::Board,
-    types::{Color, PieceType},
+use crate::bitboard::{
+    Bitboard, FILE_MASKS, RANK_2, RANK_3, RANK_6, RANK_7, Square, bit, file_of, pawn_attacks,
+    pop_lsb, rank_of,
 };
+use crate::board::Board;
+use crate::types::{Color, PieceType};
 
-pub fn pawn_eval(board: &Board, phase: i32) -> i32 {
-    pawn_eval_raw(board, Color::White, phase) - pawn_eval_raw(board, Color::Black, phase)
+use crate::eval::eval::EvalInfo;
+
+pub fn pawn_eval(board: &Board, info: &EvalInfo) -> i32 {
+    pawn_eval_raw(board, Color::White, info) - pawn_eval_raw(board, Color::Black, info)
 }
 
-pub fn pawn_eval_raw(board: &Board, color: Color, phase: i32) -> i32 {
+pub fn pawn_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
 
     let pawns = board.pieces(color, PieceType::Pawn);
 
-    score += stacked_pawns_bonus(board, color, pawns, phase);
-    score += passed_pawn_bonus(board, color, pawns, phase);
-    score += pawn_storm_bonus(board, color, pawns, phase);
-    score += pawn_chain(board, color, pawns, phase);
+    score += stacked_pawns_bonus(board, color, pawns, info);
+    score += passed_pawn_bonus(board, color, pawns, info);
+    score += pawn_storm_bonus(board, color, pawns, info);
+    score += pawn_chain(board, color, pawns, info);
+    score += isolated_pawns_bonus(board, color, pawns, info);
 
     score
 }
 
-fn stacked_pawns_bonus(board: &Board, color: Color, pawns: Bitboard, phase: i32) -> i32 {
+fn stacked_pawns_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
     if pawns == 0 {
         return 0;
     }
@@ -44,7 +45,28 @@ fn stacked_pawns_bonus(board: &Board, color: Color, pawns: Bitboard, phase: i32)
     score
 }
 
-fn passed_pawn_bonus(board: &Board, color: Color, pawns: Bitboard, phase: i32) -> i32 {
+fn isolated_pawns_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+    let mut isolated_pawns = pawns;
+
+    let mut pawn_copy = pawns;
+
+    while let Some(sq) = pop_lsb(&mut pawn_copy) {
+        let mut adjacent_files = 0u64;
+
+        let file = file_of(sq) as usize;
+
+        if file != 0 {
+            adjacent_files |= FILE_MASKS[file - 1];
+        }
+        if file != 7 {
+            adjacent_files |= FILE_MASKS[file + 1];
+        }
+        isolated_pawns &= !adjacent_files;
+    }
+    return -15 * isolated_pawns.count_ones() as i32;
+}
+
+fn passed_pawn_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
     if pawns == 0 {
         return 0;
     }
@@ -56,9 +78,41 @@ fn passed_pawn_bonus(board: &Board, color: Color, pawns: Bitboard, phase: i32) -
     let mut pawns = pawns;
 
     while let Some(sq) = pop_lsb(&mut pawns) {
-        if enemy_pawns & passed_pawn_mask(sq, color) != 0 {
+        let pawn_mask = passed_pawn_mask(sq, color);
+        if enemy_pawns & pawn_mask != 0 {
             continue;
         }
+        let mut bonus = 0;
+
+        let current_mask = bit(sq);
+
+        let mut forward_mask = current_mask;
+
+        match color {
+            Color::White => {
+                forward_mask = forward_mask << 8;
+                forward_mask |= forward_mask << 8;
+                forward_mask |= forward_mask << 16;
+            }
+            Color::Black => {
+                forward_mask = forward_mask >> 8;
+                forward_mask |= forward_mask >> 8;
+                forward_mask |= forward_mask >> 16;
+            }
+        }
+
+        let is_protected = current_mask & info.all_attacks(color) != 0;
+
+        if is_protected {
+            bonus += 10;
+            if current_mask & info.attacks(color, PieceType::Pawn) != 0 {
+                bonus += 20;
+            }
+        }
+
+        let protected_squares = (forward_mask & info.all_attacks(color)).count_ones() as i32;
+
+        bonus += 5 * protected_squares;
 
         let rank = rank_of(sq);
 
@@ -74,26 +128,26 @@ fn passed_pawn_bonus(board: &Board, color: Color, pawns: Bitboard, phase: i32) -
         }
 
         if relative_rank == 4 {
-            score += 10;
+            score += 10 + bonus;
         } else if relative_rank == 5 {
-            score += 30;
+            score += 30 + bonus;
         } else {
-            score += 60;
+            score += 60 + bonus;
         }
     }
 
-    if phase < 12 {
+    if info.phase() < 12 {
         score *= 2;
     }
 
     score
 }
 
-fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, phase: i32) -> i32 {
+fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
     if pawns == 0 {
         return 0;
     }
-    if phase > 20 {
+    if info.phase() > 20 {
         return 0;
     }
 
@@ -126,7 +180,7 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, phase: i32) ->
     score
 }
 
-fn pawn_chain(board: &Board, color: Color, pawns: Bitboard, phase: i32) -> i32 {
+fn pawn_chain(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
     if pawns == 0 {
         return 0;
     }

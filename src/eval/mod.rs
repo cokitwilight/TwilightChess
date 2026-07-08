@@ -1,11 +1,11 @@
 pub mod eval;
-mod king;
-mod knight;
+pub mod king;
+pub mod knight;
 pub mod material;
-mod mobility;
-mod pawn;
+pub mod mobility;
+pub mod pawn;
 pub mod phase;
 pub mod pst;
-mod queen;
-mod rook;
-mod sliders;
+pub mod queen;
+pub mod rook;
+pub mod sliders;

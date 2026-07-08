@@ -1,132 +1,50 @@
-use eframe::epaint::color;
-use eframe::wgpu::wgc::pipeline::ImplicitLayoutError::Pipeline;
-
-use crate::bitboard::attacks::{all_knight_attacks, pawn_attacks};
-use crate::bitboard::rays::{all_bishop_attacks, all_queen_attacks, all_rook_attacks};
 use crate::bitboard::{
-    Bitboard, NOT_FILE_A, NOT_FILE_H, Square, bit, file_mask, file_of, king_attacks, pop_lsb,
-    rank_of, square,
+    Bitboard, NOT_FILE_A, NOT_FILE_H, Square, bit, file_mask, file_of, pop_lsb, rank_of, square,
 };
 use crate::board::Board;
-use crate::eval::phase;
+use crate::eval::eval::{EvalInfo, KING_DANGER_TABLE};
 use crate::types::{Color, PieceType};
 
-pub fn king_eval(board: &Board, phase: i32) -> i32 {
-    king_eval_raw(board, Color::White, phase) - king_eval_raw(board, Color::Black, phase)
+pub fn king_eval(board: &Board, info: &EvalInfo) -> i32 {
+    king_eval_raw(board, Color::White, info) - king_eval_raw(board, Color::Black, info)
 }
 
-pub fn king_eval_raw(board: &Board, color: Color, phase: i32) -> i32 {
+pub fn king_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
 
     let Some(king_sq) = pop_lsb(&mut board.pieces(color, PieceType::King)) else {
         panic!("No king in board.pieces in king_eval_raw!");
     };
 
-    score += king_ring_safety(board, color, king_sq, phase);
-    score += pawn_shield_score(board, color, king_sq, phase);
-    score += open_file_bonus(board, color, king_sq, phase);
-    score += open_diagonal_bonus(board, color, king_sq, phase);
+    // score += king_ring_safety(board, color, info);
+    score += pawn_shield_score(board, color, king_sq, info);
+    score += open_file_bonus(board, color, king_sq, info);
+    score += open_diagonal_bonus(board, color, king_sq, info);
+    score += escape_score_bonus(board, color, info);
 
     score
 }
 
-fn king_ring_safety(board: &Board, color: Color, king_sq: Square, phase: i32) -> i32 {
-    let attacking_color = color.opposite();
-    let mut ring = king_attacks(king_sq); // get the squares surrounding the king
-    let occupancy = board.all_occupancy();
+fn king_ring_safety(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
 
-    let Some(enemy_king_sq) = pop_lsb(&mut board.pieces(attacking_color, PieceType::King)) else {
-        panic!("No king in king ring safety!");
-    };
+    const MAX_DANGER: i32 = 100;
 
-    let pawn_attack = pawn_attacks(
-        board.pieces(attacking_color, PieceType::Pawn),
-        attacking_color,
-    );
-    let knight_attacks = all_knight_attacks(board.pieces(attacking_color, PieceType::Knight));
-    let king_attacks = king_attacks(enemy_king_sq);
-    let bishop_attacks =
-        all_bishop_attacks(board.pieces(attacking_color, PieceType::Bishop), occupancy);
-    let rook_attacks = all_rook_attacks(board.pieces(attacking_color, PieceType::Rook), occupancy);
-    let queen_attacks =
-        all_queen_attacks(board.pieces(attacking_color, PieceType::Queen), occupancy);
+    let danger = info.king_attack_weight(color).clamp(0, MAX_DANGER);
 
-    let pawn_defenders = pawn_attacks(board.pieces(color, PieceType::Pawn), color);
-    let knight_defenders = all_knight_attacks(board.pieces(color, PieceType::Knight));
-    let bishop_defenders = all_bishop_attacks(board.pieces(color, PieceType::Bishop), occupancy);
-    let rook_defenders = all_rook_attacks(board.pieces(color, PieceType::Rook), occupancy);
-    let queen_defenders = all_queen_attacks(board.pieces(color, PieceType::Queen), occupancy);
+    let penalty = KING_DANGER_TABLE[danger as usize];
 
-    let mut attacker_count = 0;
-    let mut defender_count = 1; // by default, the king is considered a defender of its own ring
-
-    while let Some(ring_sq) = pop_lsb(&mut ring) {
-        let sq_bb = bit(ring_sq);
-        if pawn_attack & sq_bb != 0 {
-            score -= 10; // penalize if the square is attacked by a pawn specifically
-            attacker_count += 1;
-        }
-        if knight_attacks & sq_bb != 0 {
-            score -= 3; // penalize if the square is attacked by a knight specifically
-            attacker_count += 1;
-        }
-        if king_attacks & sq_bb != 0 {
-            attacker_count += 1;
-        }
-        if bishop_attacks & sq_bb != 0 {
-            attacker_count += 1;
-        }
-        if rook_attacks & sq_bb != 0 {
-            attacker_count += 1;
-        }
-        if queen_attacks & sq_bb != 0 {
-            attacker_count += 1;
-        }
-
-        if pawn_defenders & sq_bb != 0 {
-            score += 5; // reward if the square is defended by a pawn specifically
-            defender_count += 1;
-        }
-        if knight_defenders & sq_bb != 0 {
-            defender_count += 1;
-        }
-        if bishop_defenders & sq_bb != 0 {
-            defender_count += 1;
-        }
-        if rook_defenders & sq_bb != 0 {
-            defender_count += 1;
-        }
-        if queen_defenders & sq_bb != 0 {
-            score -= 5; // prefer a more aggressive queen vs defending the king
-            defender_count += 1;
-        }
-
-        if attacker_count > defender_count {
-            score -= 10 * (attacker_count - defender_count) as i32; // penalize if attackers outnumber defenders
-        }
-
-        if defender_count <= 1 {
-            score -= 3; // penalize if the king is left with no defenders
-        }
-
-        if defender_count > attacker_count {
-            score += 3; // slightly reward if defenders outnumber attackers. This will most likely be true for most squares so keep that in mind
-        }
-
-        attacker_count = 0;
-        defender_count = 1; // reset for the next square
-    }
+    score -= penalty;
 
     score
 }
 
-fn pawn_shield_score(board: &Board, color: Color, king_sq: Square, phase: i32) -> i32 {
-    if phase < 10 {
+fn pawn_shield_score(board: &Board, color: Color, king_sq: Square, info: &EvalInfo) -> i32 {
+    if info.phase() < 10 {
         return 0; // no pawn shield evaluation in the endgame
     }
 
-    if phase > 20 {
+    if info.phase() > 20 {
         match color {
             Color::White => {
                 if king_sq == 4 {
@@ -172,8 +90,8 @@ fn pawn_shield_score(board: &Board, color: Color, king_sq: Square, phase: i32) -
     score
 }
 
-fn open_file_bonus(board: &Board, color: Color, king_sq: Square, phase: i32) -> i32 {
-    if phase < 10 {
+fn open_file_bonus(board: &Board, color: Color, king_sq: Square, info: &EvalInfo) -> i32 {
+    if info.phase() < 10 {
         return 0; // ignore in endgames
     }
 
@@ -206,8 +124,8 @@ fn open_file_bonus(board: &Board, color: Color, king_sq: Square, phase: i32) -> 
     score
 }
 
-fn open_diagonal_bonus(board: &Board, color: Color, king_sq: Square, phase: i32) -> i32 {
-    if phase < 10 {
+fn open_diagonal_bonus(board: &Board, color: Color, king_sq: Square, info: &EvalInfo) -> i32 {
+    if info.phase() < 10 {
         return 0;
     }
 
@@ -217,8 +135,6 @@ fn open_diagonal_bonus(board: &Board, color: Color, king_sq: Square, phase: i32)
 
     let enemy_sliders = board.pieces(color.opposite(), PieceType::Bishop)
         | board.pieces(color.opposite(), PieceType::Queen);
-
-    let friendly_pawns = board.pieces(color, PieceType::Pawn);
 
     for (df, dr) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
         let mut file = file_of(king_sq) as i8 + df;
@@ -250,17 +166,27 @@ fn open_diagonal_bonus(board: &Board, color: Color, king_sq: Square, phase: i32)
     score
 }
 
-// TODO: Do this later
-// fn escape_score_bonus(board: &Board, color: Color, king_sq: Square, phase: i32) -> i32 {
-//     if phase < 10 {
-//         return 0;
-//     }
+fn escape_score_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+    if info.phase() < 10 {
+        return 0;
+    }
 
-//     let all_attacks = all_attacks(board, color.opposite());  // this might be too expensive for the value it adds
+    let all_attacks = info.all_attacks(color.opposite());
 
-//     let king_ring = king_attacks(king_sq);
+    let friends = board.occupancy_of(color);
 
-// }
+    let king_ring = info.king_ring(color); // this includes the king itself
+
+    let escape_squares = (king_ring & all_attacks & !friends).count_ones() as i32;
+
+    if escape_squares == 0 {
+        return -30;
+    } else if escape_squares <= 2 {
+        return -10;
+    } else {
+        return 15;
+    }
+}
 
 fn generate_king_shield(color: Color, sq: Square) -> Bitboard {
     let b = bit(sq);

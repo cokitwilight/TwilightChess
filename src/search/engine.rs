@@ -1,8 +1,7 @@
 use crate::board::{Board, Move};
+use crate::search::stats::SearchStats;
 use crate::search::tt::TTEntry;
 use crate::search::{HistoryTable, KillerTable, TranspositionTable};
-
-use num_format::{Locale, ToFormattedString};
 
 #[derive(Clone, Debug)]
 pub struct Engine {
@@ -10,9 +9,7 @@ pub struct Engine {
     pub qtt: TranspositionTable<TTEntry>,
     // pub opening_book: OpeningBook,
     // Evaluator can be used for dynamic pst values or different evaluation values(favor aggressive play, favor defensive play, etc)
-    //pub evaluator: Evaluator,
     pub history: HistoryTable,
-    // pub killer_moves: KillerTable,
     // Later for options, such as search depth, time limit, elo rating, etc.
     // pub options: EngineOptions,
 }
@@ -92,101 +89,6 @@ impl SearchContext {
         }
 
         false
-    }
-}
-
-// used across searches to store information about the search, such as the best move found, the evaluation score, and the principal variation.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct SearchStats {
-    pub nodes: u64,
-    pub qnodes: u64,
-
-    pub tt: TableStats,
-    pub qtt: TableStats,
-
-    pub lmr_nodes: u64,
-    pub lmr_researched: u64,
-
-    pub null_moves: u64,
-    pub null_cutoffs: u64,
-
-    pub delta_prunes: u64,
-    pub see_prunes: u64,
-
-    pub repetition_returns: u64,
-    pub fifty_returns: u64,
-}
-
-impl SearchStats {
-    pub fn print_all(&self, number: usize) {
-        println!("{}. Stats:", number);
-        self.print_nodes();
-        self.print_pruning_heuristics();
-        self.print_returns();
-        self.print_tts();
-        print!("\n");
-    }
-    pub fn print_nodes(&self) {
-        println!(
-            "Nodes: {}. Qnodes: {}",
-            self.nodes.to_formatted_string(&Locale::en),
-            self.qnodes.to_formatted_string(&Locale::en)
-        );
-    }
-    pub fn print_pruning_heuristics(&self) {
-        println!(
-            "Lmr Nodes: {}. Researched Nodes: {}",
-            self.lmr_nodes.to_formatted_string(&Locale::en),
-            self.lmr_researched.to_formatted_string(&Locale::en)
-        );
-        println!(
-            "Null Moves: {}. Null Prunes: {}",
-            self.null_moves.to_formatted_string(&Locale::en),
-            self.null_cutoffs.to_formatted_string(&Locale::en)
-        );
-        println!(
-            "Delta Prunes: {}. SEE Prunes: {}",
-            self.delta_prunes.to_formatted_string(&Locale::en),
-            self.see_prunes.to_formatted_string(&Locale::en)
-        );
-    }
-    pub fn print_tts(&self) {
-        println!("Negamax Transposition Table:");
-        self.tt.print_stats();
-        println!("Quiescence Transposition Table:");
-        self.qtt.print_stats();
-    }
-    pub fn print_returns(&self) {
-        println!(
-            "Repetition Returns: {}. Fifty Returns: {}",
-            self.repetition_returns.to_formatted_string(&Locale::en),
-            self.fifty_returns.to_formatted_string(&Locale::en)
-        );
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TableStats {
-    pub probes: u64,
-    pub hits: u64,
-    pub usable_hits: u64,
-    pub exact_returns: u64,
-    pub bound_cutoffs: u64,
-}
-
-impl TableStats {
-    pub fn print_stats(&self) {
-        println!("Probes: {}", self.probes.to_formatted_string(&Locale::en));
-        println!(
-            "Hits: {}. Usable Hits: {}",
-            self.hits.to_formatted_string(&Locale::en),
-            self.usable_hits.to_formatted_string(&Locale::en)
-        );
-        println!(
-            "Exact Returns: {}. Bound cutoffs: {}",
-            self.exact_returns.to_formatted_string(&Locale::en),
-            self.bound_cutoffs.to_formatted_string(&Locale::en)
-        );
     }
 }
 

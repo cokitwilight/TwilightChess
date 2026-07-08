@@ -1,71 +1,66 @@
-use crate::{
-    bitboard::{
-        Bitboard, FILE_A, FILE_H, RANK_3, RANK_6,
-        attacks::all_knight_attacks,
-        king_attacks, knight_attacks, pop_lsb,
-        rays::{all_bishop_attacks, all_queen_attacks, all_rook_attacks},
-    },
-    board::Board,
-    types::{Color, PieceType},
+use crate::bitboard::{
+    Bitboard, FILE_A, FILE_H, RANK_1, RANK_3, RANK_6, RANK_8, knight_attacks, pop_lsb,
 };
 
-pub fn mobility_score(board: &Board, phase: i32) -> i32 {
-    mobility_score_raw(board, Color::White, phase) - mobility_score_raw(board, Color::Black, phase)
+use crate::board::Board;
+use crate::eval::eval::EvalInfo;
+use crate::types::{Color, PieceType};
+
+pub fn mobility_score(board: &Board, info: &EvalInfo) -> i32 {
+    mobility_score_raw(board, Color::White, info) - mobility_score_raw(board, Color::Black, info)
 }
 
-pub fn mobility_score_raw(board: &Board, color: Color, phase: i32) -> i32 {
+pub fn mobility_score_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     // check every move and subtract how many valid moves there are
     let mut score = 0;
 
-    let friends = board.occupancy_of(color);
+    score += development_penalty(board, color, info);
+    score += available_moves(board, color, info);
+    score += move_pressure(board, color, info);
+    score += hanging_pieces(board, color, info);
 
-    score += pawn_moves_bitboard(board, color).count_ones() as i32;
+    score
+}
 
-    let occupied = board.all_occupancy();
-
-    let pawn_attacks = pawn_capture_bitboard(board, color.opposite());
-    let knight_and_bishop_attacks =
-        all_knight_attacks(board.pieces(color.opposite(), PieceType::Knight))
-            | all_bishop_attacks(board.pieces(color.opposite(), PieceType::Bishop), occupied);
-
-    let rook_attacks = all_rook_attacks(board.pieces(color.opposite(), PieceType::Rook), occupied);
-
-    let queen_attacks =
-        all_queen_attacks(board.pieces(color.opposite(), PieceType::Queen), occupied);
-
-    let available_knight_moves =
-        all_knight_attacks(board.pieces(color, PieceType::Knight)) & !pawn_attacks & !friends;
-
-    let available_bishop_moves =
-        all_bishop_attacks(board.pieces(color, PieceType::Bishop), occupied)
-            & !pawn_attacks
-            & !friends;
-
-    let available_rook_moves = all_rook_attacks(board.pieces(color, PieceType::Rook), occupied)
-        & !(pawn_attacks | knight_and_bishop_attacks | friends);
-
-    let available_queen_moves = all_queen_attacks(board.pieces(color, PieceType::Queen), occupied)
-        & !(pawn_attacks | knight_and_bishop_attacks | rook_attacks | friends);
-
-    let Some(king_sq) = pop_lsb(&mut board.pieces(color, PieceType::King)) else {
-        panic!("No king in king bit board in mobility score!");
+pub fn development_penalty(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+    let starting_rank = match color {
+        Color::White => RANK_1,
+        Color::Black => RANK_8,
     };
 
-    let safe_king_squares = (king_attacks(king_sq)
-        & !(pawn_attacks | knight_and_bishop_attacks | rook_attacks | queen_attacks | friends))
-        .count_ones() as i32;
+    let non_developed_pieces = ((board.occupancy_of(color) & starting_rank)
+        & !(board.pieces(color, PieceType::King) | board.pieces(color, PieceType::Rook)))
+    .count_ones() as i32;
 
-    if safe_king_squares <= 1 {
-        score -= 20;
-    } else if safe_king_squares <= 4 {
-        score += 5;
-    } else {
-        if phase <= 10 {
-            score += 15;
-        } else {
-            score -= 5; // king is too open in middle game
-        }
-    }
+    let bonus = if info.phase() < 16 { -6 } else { -4 };
+
+    return non_developed_pieces * bonus;
+}
+
+pub fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+    let mut score = 0;
+
+    let enemy_color = color.opposite();
+
+    let friends = board.occupancy_of(color);
+
+    score += pawn_moves_bitboard(board, color).count_ones() as i32; // only includes single/double pawn pushes
+
+    let pawn_attacks = info.attacks(enemy_color, PieceType::Pawn);
+    let knight_and_bishop_attacks =
+        info.attacks(enemy_color, PieceType::Knight) | info.attacks(enemy_color, PieceType::Bishop);
+
+    let rook_attacks = info.attacks(enemy_color, PieceType::Rook);
+
+    let available_knight_moves = info.attacks(color, PieceType::Knight) & !pawn_attacks & !friends;
+
+    let available_bishop_moves = info.attacks(color, PieceType::Bishop) & !pawn_attacks & !friends;
+
+    let available_rook_moves = info.attacks(color, PieceType::Rook)
+        & !(pawn_attacks | knight_and_bishop_attacks | friends);
+
+    let available_queen_moves = info.attacks(color, PieceType::Queen)
+        & !(pawn_attacks | knight_and_bishop_attacks | rook_attacks | friends);
 
     score += available_knight_moves.count_ones() as i32 * 4;
     score += available_bishop_moves.count_ones() as i32 * 3;
@@ -73,6 +68,27 @@ pub fn mobility_score_raw(board: &Board, color: Color, phase: i32) -> i32 {
     score += available_queen_moves.count_ones() as i32 * 2;
 
     score
+}
+
+// this might not be best file for this function
+pub fn move_pressure(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+    let multiple_attacked = info.attacked_by_two(color.opposite()).count_ones() as i32; // already includes occupancy check
+
+    if multiple_attacked > 3 {
+        return multiple_attacked * -15;
+    } else if multiple_attacked >= 1 {
+        return -10;
+    } else {
+        return 0;
+    }
+}
+
+pub fn hanging_pieces(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+    let occupancy = board.occupancy_of(color) & !board.pieces(color, PieceType::King);
+
+    let hanging = occupancy & info.all_attacks(color.opposite()) & !info.all_attacks(color);
+
+    return -10 * hanging.count_ones() as i32;
 }
 
 // since not all pawn moves are captures. Ignore en passant for now as it might be too expensive/complicated
@@ -98,37 +114,5 @@ fn pawn_moves_bitboard(board: &Board, color: Color) -> Bitboard {
         }
     }
 
-    moves
-}
-
-fn pawn_capture_bitboard(board: &Board, color: Color) -> Bitboard {
-    // includes friendly pieces since they are counted as defended
-    let pawns = board.pieces(color, PieceType::Pawn);
-
-    let mut moves = 0u64;
-
-    match color {
-        Color::White => {
-            moves |= (pawns & !FILE_A) << 7;
-
-            moves |= (pawns & !FILE_H) << 9;
-        }
-        Color::Black => {
-            moves |= (pawns & !FILE_A) >> 9;
-
-            moves |= (pawns & !FILE_H) >> 7;
-        }
-    }
-    moves
-}
-
-fn knight_capture_biboard(board: &Board, color: Color) -> Bitboard {
-    let mut knights = board.pieces(color, PieceType::Knight);
-
-    let mut moves = 0u64;
-
-    while let Some(sq) = pop_lsb(&mut knights) {
-        moves |= knight_attacks(sq);
-    }
     moves
 }

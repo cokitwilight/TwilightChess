@@ -1,17 +1,16 @@
-use crate::{
-    bitboard::{
-        Bitboard, FILE_A, FILE_B, FILE_C, FILE_D, FILE_E, FILE_F, FILE_G, FILE_H, FILE_MASKS,
-        RANK_1, RANK_2, RANK_7, RANK_8, bit, file_of, pop_lsb, rank_of, square,
-    },
-    board::{self, Board},
-    types::{Color, PieceType},
+use crate::bitboard::{
+    Bitboard, FILE_A, FILE_B, FILE_C, FILE_D, FILE_E, FILE_F, FILE_G, FILE_H, FILE_MASKS, RANK_1,
+    RANK_2, RANK_7, RANK_8, Square, bit, file_of, pop_lsb, rank_of, square,
 };
+use crate::board::Board;
+use crate::eval::eval::EvalInfo;
+use crate::types::{Color, PieceType};
 
-pub fn sliders_eval(board: &Board, phase: i32) -> i32 {
-    sliders_eval_raw(board, Color::White, phase) - sliders_eval_raw(board, Color::Black, phase)
+pub fn sliders_eval(board: &Board, info: &EvalInfo) -> i32 {
+    sliders_eval_raw(board, Color::White, info) - sliders_eval_raw(board, Color::Black, info)
 }
 
-pub fn sliders_eval_raw(board: &Board, color: Color, phase: i32) -> i32 {
+pub fn sliders_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
 
     let diagonal_sliders =
@@ -20,21 +19,38 @@ pub fn sliders_eval_raw(board: &Board, color: Color, phase: i32) -> i32 {
         board.pieces(color, PieceType::Rook) | board.pieces(color, PieceType::Queen);
 
     // diagonals
-    score += connected_diagonals_bonus(board, color, diagonal_sliders, phase);
-    score += open_diagonal_bonus(board, color, diagonal_sliders, phase);
+    score += connected_diagonals_bonus(board, color, diagonal_sliders, info);
+    score += open_diagonal_bonus(board, color, diagonal_sliders, info);
+    score += bishop_pair_bonus(board, color);
 
     // straights
-    score += connected_file_bonus(board, color, straight_sliders, phase);
-    score += rook_on_the_seventh(board, color, phase);
-    score += straights_on_open_file(board, color, straight_sliders, phase);
+    score += connected_file_bonus(board, color, straight_sliders, info);
+    score += rook_on_the_seventh(board, color, info);
+    score += straights_on_open_file(board, color, straight_sliders, info);
 
     score
 }
 
-fn connected_diagonals_bonus(board: &Board, color: Color, sliders: Bitboard, phase: i32) -> i32 {
+fn bishop_pair_bonus(board: &Board, color: Color) -> i32 {
+    let bishops = board.pieces(color, PieceType::Bishop).count_ones();
+    if bishops >= 2 {
+        return 20;
+    } else {
+        return 0;
+    }
+}
+
+fn connected_diagonals_bonus(
+    board: &Board,
+    color: Color,
+    sliders: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     if sliders == 0 {
         return 0;
     }
+
+    // avoid adding a large bonus if the connected diagonal deosn't actually see anything
 
     let mut score = 0;
 
@@ -55,9 +71,45 @@ fn connected_diagonals_bonus(board: &Board, color: Color, sliders: Bitboard, pha
 
                 if ray_mask & occupied != 0 {
                     if ray_mask & sliders != 0 {
-                        score += 30;
+                        let full_ray_mask = ray_bitboard(ray_sq, *df, *dr);
+
+                        let ray_length = full_ray_mask.count_ones();
+
+                        let enemy_pawns = (full_ray_mask
+                            & board.pieces(color.opposite(), PieceType::Pawn))
+                        .count_ones() as i32;
+                        let enemy_pieces = (full_ray_mask
+                            & (board.occupancy_of(color.opposite())
+                                & !board.pieces(color.opposite(), PieceType::Pawn)))
+                        .count_ones() as i32;
+
+                        let sees_king_ring = full_ray_mask & info.king_ring(color.opposite()) != 0;
+
+                        if enemy_pawns >= 3 {
+                            score -= 30;
+                        }
+
+                        if sees_king_ring && enemy_pawns <= 2 {
+                            score += 30;
+                        } else if sees_king_ring {
+                            score += 10;
+                        }
+
+                        if ray_length >= 7 {
+                            // longest possible for black and white square bishops
+                            score += 30 + (enemy_pieces - enemy_pawns) * 5;
+                        } else if score >= 5 {
+                            // second longest
+                            score += 5 + (enemy_pieces - enemy_pawns) * 5;
+                        } else {
+                            // doubled in the wrong direction
+                            score -= 20 + (enemy_pawns - enemy_pieces) * 5;
+                        }
+
+                        score += 20;
                         sliders &= !ray_mask; // dont double count pieces
                     }
+
                     break;
                 }
 
@@ -70,7 +122,7 @@ fn connected_diagonals_bonus(board: &Board, color: Color, sliders: Bitboard, pha
     score
 }
 
-fn open_diagonal_bonus(board: &Board, color: Color, sliders: Bitboard, phase: i32) -> i32 {
+fn open_diagonal_bonus(board: &Board, color: Color, sliders: Bitboard, info: &EvalInfo) -> i32 {
     if sliders == 0 {
         return 0;
     }
@@ -115,7 +167,7 @@ fn open_diagonal_bonus(board: &Board, color: Color, sliders: Bitboard, phase: i3
     score
 }
 
-fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, phase: i32) -> i32 {
+fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, info: &EvalInfo) -> i32 {
     if sliders == 0 {
         return 0;
     }
@@ -128,6 +180,8 @@ fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, phase: i
 
     let directions = &[(0, 1), (0, -1)];
 
+    let enemy_king_square = info.king_square(color.opposite());
+
     while let Some(sq) = pop_lsb(&mut sliders) {
         for (df, dr) in directions {
             let file = file_of(sq) as i8;
@@ -139,9 +193,39 @@ fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, phase: i
 
                 if ray_mask & occupied != 0 {
                     if ray_mask & sliders != 0 {
-                        score += 30;
-                        sliders &= !ray_mask; // dont double count pieces
+                        let file_mask = FILE_MASKS[file as usize];
+
+                        let enemy_pawns = (file_mask
+                            & board.pieces(color.opposite(), PieceType::Pawn))
+                        .count_ones() as i32;
+                        let enemy_pieces = file_mask
+                            & (board.occupancy_of(color.opposite())
+                                & !board.pieces(color.opposite(), PieceType::Pawn));
+
+                        let defended_pieces =
+                            (enemy_pieces & info.all_attacks(color)).count_ones() as i32;
+
+                        let undefended_pieces = (enemy_pieces & !info.all_attacks(color.opposite()))
+                            .count_ones() as i32;
+
+                        let sees_king_ring = file_mask & info.king_ring(color.opposite()) != 0;
+
+                        if enemy_pawns >= 1 {
+                            // not open file
+                            score -= 10;
+                        }
+
+                        if sees_king_ring && enemy_pawns == 0 {
+                            score += 60;
+                        } else if sees_king_ring {
+                            score += 10;
+                        }
+                        score += 5 * (defended_pieces - undefended_pieces);
+
+                        score += 20; // general bonus for a doubles rook/queen
+                        sliders &= !ray_mask; // removes the detected slider so the bonus isn't double counted
                     }
+
                     break;
                 }
                 rank += dr;
@@ -152,11 +236,11 @@ fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, phase: i
     score
 }
 
-fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, phase: i32) -> i32 {
+fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, info: &EvalInfo) -> i32 {
     if sliders == 0 {
         return 0;
     }
-    if phase < 10 {
+    if info.phase() < 10 {
         return 0;
     }
     let open_files = open_file_mask(
@@ -168,7 +252,7 @@ fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, phase:
     return open_straights * 15;
 }
 
-fn rook_on_the_seventh(board: &Board, color: Color, phase: i32) -> i32 {
+fn rook_on_the_seventh(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
 
     let enemy_color = color.opposite();
@@ -238,4 +322,26 @@ fn open_file_mask(pawns: Bitboard) -> Bitboard {
     }
 
     open_files
+}
+
+fn ray_bitboard(sq: Square, df: i8, dr: i8) -> Bitboard {
+    let mut final_mask = bit(sq);
+
+    let directions = [(df, dr), (-df, -dr)];
+
+    for (df, dr) in directions {
+        let mut file = file_of(sq) as i8 + df;
+        let mut rank = rank_of(sq) as i8 + dr;
+        while (0..8).contains(&file) && (0..8).contains(&rank) {
+            let ray_sq = square(file as u8, rank as u8);
+            let ray_mask = bit(ray_sq);
+
+            final_mask |= ray_mask;
+
+            file += df;
+            rank += dr;
+        }
+    }
+
+    final_mask
 }

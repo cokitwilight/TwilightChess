@@ -1,24 +1,28 @@
-use crate::{
-    bitboard::{Bitboard, Square, bit, file_of, pop_lsb, rank_of},
-    board::Board,
-    types::{Color, PieceType},
-};
+use crate::bitboard::{Bitboard, Square, bit, file_of, pop_lsb, rank_of};
+use crate::board::Board;
+use crate::eval::eval::EvalInfo;
+use crate::types::{Color, PieceType};
 
-pub fn knight_eval(board: &Board, phase: i32) -> i32 {
-    knight_eval_raw(board, Color::White, phase) - knight_eval_raw(board, Color::Black, phase)
+pub fn knight_eval(board: &Board, info: &EvalInfo) -> i32 {
+    knight_eval_raw(board, Color::White, info) - knight_eval_raw(board, Color::Black, info)
 }
 
-pub fn knight_eval_raw(board: &Board, color: Color, phase: i32) -> i32 {
+pub fn knight_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
 
     let knights = board.pieces(color, PieceType::Knight);
 
-    score += knight_outpost_bonus(board, color, knights, phase);
+    score += knight_outpost_bonus(board, color, knights, info);
 
     score
 }
 
-pub fn knight_outpost_bonus(board: &Board, color: Color, knights: Bitboard, phase: i32) -> i32 {
+pub fn knight_outpost_bonus(
+    board: &Board,
+    color: Color,
+    knights: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     let mut score = 0;
 
     let friendly_pawns = board.pieces(color, PieceType::Pawn);
