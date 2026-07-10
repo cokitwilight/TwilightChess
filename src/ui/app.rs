@@ -40,13 +40,6 @@ pub enum AppMode {
     PlayerVsBot { human: Color },
 }
 
-// pub struct BotController {
-//     pub color: Color,
-//     pub thinking: bool,
-//     pub tx: Option<std::sync::mpsc::Sender<BotRequest>>,
-//     pub rx: Option<std::sync::mpsc::Receiver<BotResult>>,
-// }
-
 #[derive(Clone, Debug)]
 struct PendingPromotion {
     to: Square,

@@ -210,8 +210,6 @@ fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
 
     let directions = &[(0, 1), (0, -1)];
 
-    let enemy_king_square = info.king_square(color.opposite());
-
     while let Some(sq) = pop_lsb(&mut sliders) {
         for (df, dr) in directions {
             let file = file_of(sq) as i8;

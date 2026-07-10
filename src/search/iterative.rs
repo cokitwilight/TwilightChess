@@ -251,7 +251,7 @@ impl Engine {
         let mut best_move = None;
         let mut best_pv = Vec::new();
 
-        let mut all_moves = board.all_pseudo_moves();
+        let mut all_moves = board.all_legal_moves(); // this returns mostly legal moves except for pawn and king legality(TODO)
 
         let mut legal_moves = 0; // counter of legal moves since pseudo moves might not flag checkmate
 

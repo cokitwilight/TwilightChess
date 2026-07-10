@@ -120,7 +120,7 @@ impl Engine {
             }
         }
 
-        let mut moves = board.all_pseudo_moves();
+        let mut moves = board.all_legal_moves();
 
         let mut legal_moves = 0;
 

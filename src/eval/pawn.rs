@@ -187,11 +187,10 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
     // - not on the king files,
     // - defended by at least one friendly piece,
     // - and not attacked by an enemy pawn.
-    let mut aggressive_pawns = pawns
-        & enemy_half
-        & !king_file_mask
-        & info.all_attacks(color)
-        & !info.attacks(color.opposite(), PieceType::Pawn);
+    let aggressive_pawns =
+        pawns & enemy_half & !king_file_mask & !info.attacks(color.opposite(), PieceType::Pawn);
+
+    let defended_pawns = aggressive_pawns & info.all_attacks(color);
 
     // TODO: Maybe phalanx and non isolated pawns?
     // while let Some(sq) = pop_lsb(&mut aggressive_pawns) {
@@ -223,7 +222,20 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
         _ => unreachable!("Somehow more than 8 pawns in pawn_storm_bonus"),
     };
 
-    score += bonus;
+    let defended_bonus = match defended_pawns.count_ones() {
+        0 => 0,
+        1 => 16,
+        2 => 32,
+        3 => 52,
+        4 => 72,
+        5 => 150,
+        6 => 190,
+        7 => 250,
+        8 => 300,
+        _ => unreachable!("Somehow more than 8 pawns in pawn_storm_bonus"),
+    };
+
+    score += bonus + defended_bonus;
 
     if info.phase() < 10 {
         // don't aggressively add since passsed pawns already counts this

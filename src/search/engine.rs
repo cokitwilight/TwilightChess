@@ -17,8 +17,8 @@ pub struct Engine {
 impl Engine {
     pub fn new() -> Self {
         Self {
-            tt: TranspositionTable::new(64),  // 64 MB
-            qtt: TranspositionTable::new(16), // 16 MB
+            tt: TranspositionTable::new(128), // 64 MB
+            qtt: TranspositionTable::new(64), // 16 MB
             history: HistoryTable::new(),
             // killer_moves: KillerTable::default(),
         }

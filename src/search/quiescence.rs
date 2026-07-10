@@ -168,7 +168,7 @@ impl Engine {
                 );
                 return stand_pat;
             }
-            board.all_pseudo_capture_moves()
+            board.all_legal_capture_moves()
             // includes promotions and quiet promotions
         };
 

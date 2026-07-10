@@ -1,6 +1,7 @@
 pub mod attacks;
 pub mod bitboard;
 pub mod lookup;
+pub mod pins;
 pub mod rays;
 pub mod utils;
 
