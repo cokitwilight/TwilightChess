@@ -1,6 +1,4 @@
-use crate::bitboard::{
-    Bitboard, FILE_A, FILE_H, RANK_1, RANK_3, RANK_6, RANK_8, RANK_MASKS, knight_attacks, pop_lsb,
-};
+use crate::bitboard::{Bitboard, RANK_1, RANK_3, RANK_6, RANK_8, RANK_MASKS};
 
 use crate::board::Board;
 use crate::eval::eval::EvalInfo;
@@ -46,7 +44,12 @@ fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
     let friends = board.occupancy_of(color);
 
-    score += pawn_moves_bitboard(board, color).count_ones() as i32; // only includes single/double pawn pushes
+    let pawn_moves = pawn_moves_bitboard(board, color).count_ones() as i32;
+
+    // encourage pawn mobility in endgame
+    let bonus = if info.phase() < 12 { 4 } else { 1 };
+
+    score += pawn_moves * bonus;
 
     let pawn_attacks = info.attacks(enemy_color, PieceType::Pawn);
     let knight_and_bishop_attacks =
@@ -118,7 +121,7 @@ fn space_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let available_space =
         space_mask & !info.all_attacks(color.opposite()) & !board.occupancy_of(color.opposite());
 
-    return available_space.count_ones() as i32 * 2;
+    return available_space.count_ones() as i32 * 3;
 }
 
 // since not all pawn moves are captures. Ignore en passant for now as it might be too expensive/complicated

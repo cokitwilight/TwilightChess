@@ -12,7 +12,7 @@ use crate::ui::bot_thread::{BotSearchRequest, BotSearchResponse};
 
 use eframe::egui;
 
-const DEFAULT_BOT_DEPTH: usize = 8; // for now
+const DEFAULT_BOT_DEPTH: usize = 10; // for now
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {
@@ -733,6 +733,7 @@ impl ChessApp {
         }
 
         let Some(best_move) = result.best_move else {
+            // panic!("No Best Move in apply_bot_search_response!");
             self.clear_selection();
             return;
         };

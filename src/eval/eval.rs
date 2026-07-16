@@ -246,7 +246,7 @@ pub fn lazy_eval(board: &Board) -> i32 {
     let mg_pst = board.mg_pst();
     let eg_pst = board.eg_pst();
 
-    let mut pst_eval = (mg_pst * phase + eg_pst * eg_phase) / MAX_PHASE;
+    let pst_eval = (mg_pst * phase + eg_pst * eg_phase) / MAX_PHASE;
     pst_eval + board.material()
 }
 

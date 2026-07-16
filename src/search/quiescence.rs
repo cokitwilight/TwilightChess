@@ -142,6 +142,7 @@ impl Engine {
 
             // later you can make evaluation from turn add onto lazy eval since they technically recomputed certain things
             stand_pat = evaluation_for_turn(board);
+
             best_score = stand_pat;
 
             if stand_pat >= beta {

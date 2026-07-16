@@ -29,6 +29,9 @@ pub struct SearchStats {
     pub lmr_attempts: u64,
     pub lmr_researched: u64,
 
+    pub rfp_attempts: u64,
+    pub rfp_cutoffs: u64,
+
     pub null_attempts: u64,
     pub null_cutoffs: u64,
 
@@ -255,8 +258,9 @@ impl SearchStats {
         let has_lmr = self.lmr_attempts > 0 || self.lmr_researched > 0;
         let has_null = self.null_attempts > 0 || self.null_cutoffs > 0;
         let has_q_prunes = self.delta_prunes > 0 || self.see_prunes > 0;
+        let has_rfp_prunes = self.rfp_attempts > 0 || self.rfp_cutoffs > 0;
 
-        if !has_lmr && !has_null && !has_q_prunes {
+        if !has_lmr && !has_null && !has_q_prunes && !has_rfp_prunes {
             return;
         }
 
@@ -317,6 +321,18 @@ impl SearchStats {
                 "  {:<22} {:>14}",
                 "Total q prunes:",
                 Self::fmt(total_q_prunes)
+            );
+        }
+        if has_rfp_prunes {
+            println!(
+                "  {:<22} {:>14}",
+                "RFP attempts:",
+                Self::fmt(self.rfp_attempts)
+            );
+            println!(
+                "  {:<22} {:>14}",
+                "RFP cutoffs:",
+                Self::fmt(self.rfp_cutoffs)
             );
         }
     }
@@ -387,6 +403,9 @@ impl Sub for SearchStats {
 
             lmr_attempts: self.lmr_attempts.saturating_sub(rhs.lmr_attempts),
             lmr_researched: self.lmr_researched.saturating_sub(rhs.lmr_researched),
+
+            rfp_attempts: self.rfp_attempts.saturating_sub(rhs.rfp_attempts),
+            rfp_cutoffs: self.rfp_cutoffs.saturating_sub(rhs.rfp_cutoffs),
 
             null_attempts: self.null_attempts.saturating_sub(rhs.null_attempts),
             null_cutoffs: self.null_cutoffs.saturating_sub(rhs.null_cutoffs),

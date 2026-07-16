@@ -218,30 +218,6 @@ impl Engine {
         beta: i32,
     ) -> SearchResult {
         ctx.stats.nodes += 1;
-        if Engine::repetition_in_search(ctx, board.hash(), board.halfmove_clock() as usize)
-            || board.halfmove_clock() >= 100
-        {}
-        if Engine::repetition_in_search(ctx, board.hash(), board.halfmove_clock() as usize) {
-            ctx.stats.repetition_returns += 1;
-            return SearchResult {
-                best_move: None,
-                eval: 0,
-                depth_reached: depth,
-                stats: ctx.stats.clone(),
-                pv: Vec::new(),
-            };
-        }
-
-        if board.halfmove_clock() >= 100 {
-            ctx.stats.fifty_returns += 1;
-            return SearchResult {
-                best_move: None,
-                eval: 0,
-                depth_reached: depth,
-                stats: ctx.stats.clone(),
-                pv: Vec::new(),
-            };
-        }
 
         let original_alpha = alpha;
         let root_hash = board.hash();
@@ -279,10 +255,10 @@ impl Engine {
 
             let child_hash = board.hash();
 
-            if board.in_check(side_to_move) {
-                board.undo_move(undo);
-                continue;
-            }
+            // if board.in_check(side_to_move) {
+            //     board.undo_move(undo);
+            //     continue;
+            // }
             legal_moves += 1;
 
             ctx.repetition_history.push(child_hash);

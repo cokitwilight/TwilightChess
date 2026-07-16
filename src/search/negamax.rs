@@ -1,5 +1,6 @@
 use crate::{
     board::{Board, Move, MoveType, null_move::null_move_reduction},
+    eval::eval::evaluation_for_turn,
     search::{
         engine::{Engine, SearchContext},
         lmr::lmr_reduction,
@@ -12,7 +13,9 @@ pub const CHECKMATE_SCORE: i32 = 100000;
 pub const NEG_INF: i32 = -1_000_000_000;
 pub const POS_INF: i32 = 1_000_000_000;
 
-pub const MAX_Q_DEPTH: usize = 8;
+pub const MAX_Q_DEPTH: usize = 4;
+
+pub const RFP_MAX_DEPTH: usize = 4;
 
 impl Engine {
     // Implementation for negamax function
@@ -44,7 +47,6 @@ impl Engine {
         // add insufficient material check here
 
         if depth == 0 {
-            // Placeholder for quiescence search or evaluation function
             return self.quiescence(board, context, MAX_Q_DEPTH, alpha, beta, ply);
         }
 
@@ -88,9 +90,30 @@ impl Engine {
             }
         }
 
+        // reverse futility pruning
+        if !in_check
+            && beta == alpha + 1
+            && depth <= RFP_MAX_DEPTH
+            && beta.abs() < CHECKMATE_SCORE - 1000
+            && ply > 0
+            && board.phase() >= 6
+        {
+            context.stats.rfp_attempts += 1;
+
+            let margin = 80 * depth as i32;
+            // dynamic RFP margin
+
+            let static_eval = evaluation_for_turn(board);
+
+            if static_eval - margin >= beta {
+                context.stats.rfp_cutoffs += 1;
+                return beta;
+            }
+        }
+
         // null move here
         // 4 is a placeholder for now
-        // use phase for now might not be viable though
+        // use phase for now. Might not be viable though
         if allow_null_move
             && !in_check
             && depth >= 4
@@ -147,13 +170,6 @@ impl Engine {
             let undo = board.make_move(*mv);
 
             let child_hash = board.hash();
-
-            // if board.in_check(side_to_move) {
-            //     // illegal move
-            //     context.stats.illegal_moves += 1;
-            //     board.undo_move(undo);
-            //     continue;
-            // }
 
             // for stats debugging
             let was_killer = context.killer_moves.contains(ply, *mv);

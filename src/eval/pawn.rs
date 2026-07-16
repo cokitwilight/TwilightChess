@@ -294,6 +294,10 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
         return 0;
     }
 
+    if info.phase() < 12 {
+        return 0;
+    }
+
     let mut score = 0;
 
     let starting_mask = match color {
@@ -328,23 +332,26 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
     // Friendly pawns that are:
     // - in the enemy half of the board,
     // - not on the king files,
-    // - defended by at least one friendly piece,
-    // - and not attacked by an enemy pawn.
-    let aggressive_pawns =
-        pawns & enemy_half & !king_file_mask & !info.attacks(color.opposite(), PieceType::Pawn);
+    // - not attacked by an enemy pawn,
+    // - and not hanging(not defended while being attacked)
+    let aggressive_pawns = pawns
+        & enemy_half
+        & !king_file_mask
+        & !info.attacks(color.opposite(), PieceType::Pawn)
+        & !(info.all_attacks(color.opposite()) & !info.all_attacks(color));
 
     let defended_pawns = aggressive_pawns & info.all_attacks(color);
 
     let bonus = match aggressive_pawns.count_ones() {
         0 => -10,
-        1 => 6,
-        2 => 8,
-        3 => 16,
-        4 => 32,
-        5 => 72,
-        6 => 102,
-        7 => 150,
-        8 => 220,
+        1 => 20,
+        2 => 35,
+        3 => 60,
+        4 => 92,
+        5 => 140,
+        6 => 180,
+        7 => 220,
+        8 => 320,
         _ => unreachable!("Somehow more than 8 pawns in pawn_storm_bonus"),
     };
 
