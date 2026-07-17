@@ -2,7 +2,7 @@ use crate::bitboard::{
     Bitboard, NOT_FILE_A, NOT_FILE_H, Square, bit, file_mask, file_of, pop_lsb, rank_of, square,
 };
 use crate::board::Board;
-use crate::eval::eval::{EvalInfo, KING_DANGER_TABLE};
+use crate::eval::eval::EvalInfo;
 use crate::types::{Color, PieceType};
 
 pub fn king_eval(board: &Board, info: &EvalInfo) -> i32 {
@@ -25,7 +25,7 @@ pub fn king_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     score
 }
 
-fn king_ring_safety(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+fn king_ring_safety(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
 
     // TODO: Add a king danger table
@@ -134,7 +134,7 @@ fn open_file_bonus(board: &Board, color: Color, king_sq: Square, info: &EvalInfo
 
     let mut score = 0;
 
-    let mut king_file = file_of(king_sq);
+    let king_file = file_of(king_sq);
 
     let enemy_sliders = board.pieces(color.opposite(), PieceType::Rook)
         | board.pieces(color.opposite(), PieceType::Queen);

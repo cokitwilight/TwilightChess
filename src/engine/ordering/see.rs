@@ -1,13 +1,11 @@
 use std::cmp::max;
 
-use crate::{
-    bitboard::{
-        Bitboard, Square, bishop_attacks, bit, file_of, king_attacks, knight_attacks,
-        pawn_attacks_from_square, pop_lsb, rank_of, rook_attacks, square,
-    },
-    board::{Board, Move, MoveType},
-    types::{Color, PieceType},
+use crate::bitboard::{
+    Bitboard, Square, bishop_attacks, bit, file_of, king_attacks, knight_attacks,
+    pawn_attacks_from_square, pop_lsb, rank_of, rook_attacks, square,
 };
+use crate::board::{Board, Move, MoveType};
+use crate::types::{Color, PieceType};
 
 pub fn see(board: &Board, mv: Move) -> i32 {
     let moving_piece = board

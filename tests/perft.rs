@@ -1,4 +1,4 @@
-use chess_final::board::{Board, Move, MoveList};
+use chess_final::board::{Board, MoveList};
 use chess_final::moves::all_legal_moves;
 
 use std::time::Instant;

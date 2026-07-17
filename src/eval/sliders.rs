@@ -41,7 +41,7 @@ fn bishop_pair_bonus(board: &Board, color: Color) -> i32 {
     }
 }
 
-fn bishop_blocked_by_pawns_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+fn bishop_blocked_by_pawns_bonus(board: &Board, color: Color, _info: &EvalInfo) -> i32 {
     let black_bishop = BLACK_SQUARES & board.pieces(color, PieceType::Bishop);
     let white_bishop = WHITE_SQUARES & board.pieces(color, PieceType::Bishop);
 
@@ -236,7 +236,7 @@ fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
     let directions = &[(0, 1), (0, -1)];
 
     while let Some(sq) = pop_lsb(&mut sliders) {
-        for (df, dr) in directions {
+        for (_df, dr) in directions {
             let file = file_of(sq) as i8;
             let mut rank = rank_of(sq) as i8 + dr;
 
@@ -305,7 +305,7 @@ fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, info: 
     return open_straights * 15;
 }
 
-fn rook_on_the_seventh(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo) -> i32 {
     let mut score = 0;
 
     let enemy_color = color.opposite();

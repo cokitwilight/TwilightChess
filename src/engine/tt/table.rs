@@ -1,23 +1,6 @@
-use crate::board::Move;
-use std::collections::HashMap;
-
 use std::mem::size_of;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TTFlag {
-    Exact,
-    LowerBound,
-    UpperBound,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct TTEntry {
-    pub hash: u64,
-    pub depth: usize,
-    pub eval: i32,
-    pub best_move: Option<Move>,
-    pub flag: TTFlag,
-}
+use crate::engine::tt::TTEntry;
 
 pub trait TTReplace {
     fn depth(&self) -> usize;

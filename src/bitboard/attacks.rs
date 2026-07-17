@@ -2,10 +2,7 @@ use crate::bitboard::rays::{all_bishop_attacks, all_queen_attacks, all_rook_atta
 use crate::board::Board;
 use crate::types::{Color, PieceType};
 
-use crate::bitboard::{
-    Bitboard, NOT_FILE_A, NOT_FILE_H, Square, attack_tables, attacks, bishop_attacks, pop_lsb,
-    queen_attacks, rook_attacks,
-};
+use crate::bitboard::{Bitboard, NOT_FILE_A, NOT_FILE_H, Square, attack_tables, pop_lsb};
 
 #[inline]
 pub fn knight_attacks(sq: Square) -> Bitboard {

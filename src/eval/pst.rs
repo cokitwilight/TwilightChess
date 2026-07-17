@@ -1,7 +1,7 @@
 use crate::bitboard::{Square, mirror_square_vertical, pop_lsb};
 use crate::board::Board;
 use crate::eval::phase::MAX_PHASE;
-use crate::types::{COLORS, Color, PIECE_TYPES, PieceType};
+use crate::types::{Color, PIECE_TYPES, PieceType};
 
 const ALL_PSTS: [[i32; 64]; 12] = [
     [

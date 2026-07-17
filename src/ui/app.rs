@@ -4,15 +4,15 @@ use std::thread;
 use crate::bitboard::{Square, square_to_algebraic};
 use crate::board::{Move, MoveList};
 use crate::bot::Bot;
+use crate::engine::{Engine, SearchLimits};
 use crate::game::{Game, GameState};
-use crate::search::{Engine, SearchLimits};
 use crate::types::{Color, PieceType};
 use crate::ui::board_view::{BoardAction, PromotionPicker, draw_board_sized};
 use crate::ui::bot_thread::{BotSearchRequest, BotSearchResponse};
 
 use eframe::egui;
 
-const DEFAULT_BOT_DEPTH: usize = 10; // for now
+const DEFAULT_BOT_DEPTH: usize = 8; // for now
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {

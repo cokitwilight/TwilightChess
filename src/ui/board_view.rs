@@ -421,6 +421,7 @@ fn piece_to_unicode(piece: Piece) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 fn piece_color(color: Color) -> egui::Color32 {
     match color {
         Color::White => BOARD_COLORS.white_piece,

@@ -1,6 +1,5 @@
 use crate::bitboard::{
-    Bitboard, FILE_A, FILE_H, RANK_1, RANK_3, RANK_6, RANK_8, Square, bit, pawn_attacks, pop_lsb,
-    rank_of,
+    FILE_A, FILE_H, RANK_1, RANK_3, RANK_6, RANK_8, Square, bit, pop_lsb, rank_of,
 };
 use crate::board::{Board, Move, MoveList, MoveType};
 use crate::moves::MoveGenInfo;

@@ -6,7 +6,6 @@ use crate::board::{
     BLACK_KINGSIDE, BLACK_QUEENSIDE, Board, Move, MoveList, MoveType, WHITE_KINGSIDE,
     WHITE_QUEENSIDE,
 };
-use crate::moves::MoveGenInfo;
 use crate::types::{Color, PieceType};
 
 pub fn pseudo_king_moves(board: &Board, color: Color, moves: &mut MoveList) {

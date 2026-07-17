@@ -4,7 +4,7 @@ use crate::board::{Board, MoveList};
 use crate::moves::king::{pseudo_king_capture_moves, pseudo_king_moves};
 use crate::moves::knight::{legal_knight_capture_moves, legal_knight_moves};
 use crate::moves::pawn::{legal_pawn_capture_moves, legal_pawn_moves};
-use crate::moves::pseudo::{all_pseudo_capture_moves, all_pseudo_moves, all_pseudo_moves_at};
+use crate::moves::pseudo::all_pseudo_moves_at;
 use crate::moves::sliders::{
     legal_bishop_capture_moves, legal_bishop_moves, legal_queen_capture_moves, legal_queen_moves,
     legal_rook_capture_moves, legal_rook_moves,

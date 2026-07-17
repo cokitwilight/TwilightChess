@@ -1,12 +1,10 @@
+#![allow(dead_code)]
+
 use crate::board::Board;
 use crate::eval::phase::MAX_PHASE;
 use crate::eval::{
-    eval::{EvalInfo, evaluation, evaluation_for_turn},
-    king::king_eval,
-    knight::knight_eval,
-    mobility::mobility_score,
-    pawn::pawn_eval,
-    sliders::sliders_eval,
+    eval::EvalInfo, king::king_eval, knight::knight_eval, mobility::mobility_score,
+    pawn::pawn_eval, sliders::sliders_eval,
 };
 use crate::types::Color;
 
@@ -69,6 +67,7 @@ pub fn evaluation_breakdown(board: &Board) -> EvalBreakdown {
 #[cfg(test)]
 mod eval_tests {
     use crate::eval::pawn::print_pawn_eval;
+    use crate::eval::{eval::evaluation, evaluation_for_turn};
 
     use super::*;
 

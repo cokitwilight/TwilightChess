@@ -76,7 +76,7 @@ fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 }
 
 // this might not be best file for this function
-fn move_pressure(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+fn move_pressure(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let multiple_attacked = info.attacked_by_two(color.opposite()).count_ones() as i32; // already includes occupancy check
 
     if multiple_attacked > 3 {

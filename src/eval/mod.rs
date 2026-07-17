@@ -9,3 +9,5 @@ pub mod pst;
 pub mod queen;
 pub mod rook;
 pub mod sliders;
+
+pub use eval::{evaluation_for_turn, lazy_eval_for_turn};

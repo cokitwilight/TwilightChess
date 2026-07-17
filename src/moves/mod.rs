@@ -3,7 +3,6 @@ pub mod knight;
 pub mod legal;
 pub mod pawn;
 pub mod pseudo;
-pub mod see;
 pub mod sliders;
 
 pub use legal::{MoveGenInfo, all_legal_moves, all_legal_moves_at};

@@ -1,11 +1,10 @@
 use std::time::Instant;
 
-use crate::bitboard::print_all_bitboards;
 use crate::board::{Board, Move, MoveType};
-use crate::search::engine::{Engine, SearchContext, SearchResult};
-use crate::search::negamax::{CHECKMATE_SCORE, NEG_INF, POS_INF};
-use crate::search::stats::{SearchStats, fmt_nps, median_f64};
-use crate::search::tt::{TTEntry, TTFlag};
+use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
+use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
+use crate::engine::tt::{TTEntry, TTFlag};
+use crate::engine::{Engine, SearchContext, SearchResult};
 
 // for debug printing
 use thousands::Separable;
@@ -31,7 +30,7 @@ impl Engine {
         const ASPIRATION_START: i32 = 25;
         const ASPIRATION_MAX: i32 = 800;
         const MATE_MARGIN: i32 = 1000;
-        const MAX_ASPIRATION_RESEARCHES: usize = 8;
+        const _MAX_ASPIRATION_RESEARCHES: usize = 8; // use later if needed
 
         'depth_loop: for depth in 1..=ctx.limits.max_depth {
             if ctx.should_stop() {
@@ -341,15 +340,5 @@ impl Engine {
             stats: ctx.stats.clone(),
             pv: best_pv, // TODO: Implement principal variation
         }
-    }
-}
-
-pub fn adjusted_depth_for_phase(base_depth: usize, phase: i32) -> usize {
-    if phase <= 6 {
-        base_depth + 2
-    } else if phase <= 12 {
-        base_depth + 1
-    } else {
-        base_depth
     }
 }

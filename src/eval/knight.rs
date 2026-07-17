@@ -25,8 +25,9 @@ pub fn knight_outpost_bonus(
 ) -> i32 {
     let mut score = 0;
 
-    let friendly_pawns = board.pieces(color, PieceType::Pawn);
-    let enemy_pawns = board.pieces(color.opposite(), PieceType::Pawn);
+    let enemy = color.opposite();
+
+    let enemy_pawns = board.pieces(enemy, PieceType::Pawn);
 
     let mut knights = knights;
 
@@ -48,16 +49,29 @@ pub fn knight_outpost_bonus(
         }
 
         let outpost_mask = calculate_outpost_mask(knight_sq, color);
-        let pawn_mask = calculate_pawn_mask(knight_sq, color);
 
         if enemy_pawns & outpost_mask == 0 {
+            let knight_bb = bit(knight_sq);
             // no adjacent pawns can attack the knight
-            if friendly_pawns & pawn_mask != 0 {
+            let defended = knight_bb & info.attacks(enemy, PieceType::Pawn) != 0;
+
+            let attacked = knight_bb
+                & (info.attacks(enemy, PieceType::Knight) | info.attacks(enemy, PieceType::Bishop))
+                != 0;
+
+            if defended {
                 // friendly pawn defending knight
-                score += 40;
+                score += 50;
             } else {
-                score += 10;
+                score += 20;
             }
+
+            if attacked {
+                score -= 20;
+            } else {
+                score += 50;
+            }
+            // TODO: Later add more detail like how valuable the knight outpost is
         }
     }
 
@@ -89,32 +103,6 @@ fn calculate_outpost_mask(sq: Square, color: Color) -> Bitboard {
             mask = mask >> 8;
             mask |= mask >> 8;
             mask |= mask >> 16;
-        }
-    }
-
-    mask
-}
-
-fn calculate_pawn_mask(sq: Square, color: Color) -> Bitboard {
-    let file = file_of(sq);
-    let mut mask = 0u64;
-
-    if file != 0 {
-        // knight not on the outer left file
-        mask |= bit(sq - 1);
-    }
-
-    if file != 7 {
-        // knight not on the outer right file
-        mask |= bit(sq + 1);
-    }
-
-    match color {
-        Color::White => {
-            mask = mask >> 8;
-        }
-        Color::Black => {
-            mask = mask << 8;
         }
     }
 

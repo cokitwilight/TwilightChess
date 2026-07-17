@@ -1,5 +1,5 @@
+use crate::engine::{Engine, SearchLimits};
 use crate::game::{Game, GameState};
-use crate::search::engine::{Engine, SearchLimits};
 use crate::types::Color;
 
 pub struct Bot {

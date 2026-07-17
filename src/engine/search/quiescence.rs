@@ -1,15 +1,11 @@
-use crate::{
-    board::{Board, Move, MoveType},
-    eval::eval::{evaluation_for_turn, lazy_eval_for_turn},
-    moves::{legal, see::see},
-    search::{
-        Engine,
-        engine::SearchContext,
-        negamax::{CHECKMATE_SCORE, NEG_INF},
-        tt::{TTEntry, TTFlag},
-    },
-    types::PieceType,
-};
+use crate::board::{Board, Move, MoveType};
+use crate::engine::Engine;
+use crate::engine::SearchContext;
+use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
+// use crate::engine::ordering::see;
+use crate::engine::tt::{TTEntry, TTFlag};
+use crate::eval::{evaluation_for_turn, lazy_eval_for_turn};
+use crate::types::PieceType;
 
 const DELTA_MARGIN: i32 = 200; // safe defualt for now
 

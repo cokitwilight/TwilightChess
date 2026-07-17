@@ -1,5 +1,5 @@
 use crate::board::Board;
-use crate::search::engine::{Engine, SearchLimits, SearchResult};
+use crate::engine::{Engine, SearchLimits, SearchResult};
 
 pub struct BotSearchRequest {
     pub board: Board,

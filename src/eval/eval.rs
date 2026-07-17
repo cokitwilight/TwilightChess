@@ -2,7 +2,7 @@ use crate::bitboard::{
     Bitboard, Square, bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square,
     pop_lsb, queen_attacks, rook_attacks,
 };
-use crate::board::{self, Board};
+use crate::board::Board;
 use crate::eval::{
     king::king_eval, knight::knight_eval, mobility::mobility_score, pawn::pawn_eval,
     phase::MAX_PHASE, sliders::sliders_eval,
@@ -214,10 +214,7 @@ pub fn evaluation(board: &Board) -> i32 {
     let mg_pst = board.mg_pst();
     let eg_pst = board.eg_pst();
 
-    let mut pst_eval = (mg_pst * phase + eg_pst * eg_phase) / MAX_PHASE;
-
-    // for testing pst values
-    // pst_eval /= 2;
+    let pst_eval = (mg_pst * phase + eg_pst * eg_phase) / MAX_PHASE;
 
     total_eval += board.material();
     total_eval += pst_eval;

@@ -1,9 +1,8 @@
 use crate::bitboard::{
     Bitboard, FILE_MASKS, RANK_2, RANK_3, RANK_6, RANK_7, RANK_MASKS, Square, bit, file_of,
-    pawn_attacks, pop_lsb, rank_of,
+    pop_lsb, rank_of,
 };
 use crate::board::Board;
-use crate::moves::MoveGenInfo;
 use crate::types::{Color, PieceType};
 
 use crate::eval::eval::{CENTER_SQUARES, EvalInfo};
@@ -17,7 +16,7 @@ pub fn pawn_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
     let pawns = board.pieces(color, PieceType::Pawn);
 
-    score += stacked_pawns_bonus(pawns);
+    score += stacked_pawns_bonus(board, color, pawns, info);
     score += center_pawns_bonus(board, color, pawns, info);
     score += pawn_tempo_bonus(board, color, pawns, info);
     score += passed_pawn_bonus(board, color, pawns, info);
@@ -44,8 +43,8 @@ pub fn print_pawn_eval(board: &Board) {
 
     print_pawn_eval_row(
         "Stacked pawns",
-        stacked_pawns_bonus(w_pawns),
-        stacked_pawns_bonus(b_pawns),
+        stacked_pawns_bonus(board, Color::White, w_pawns, info),
+        stacked_pawns_bonus(board, Color::White, b_pawns, info),
     );
     print_pawn_eval_row(
         "Center pawns",
@@ -96,7 +95,7 @@ fn print_pawn_eval_row(name: &str, white: i32, black: i32) {
     );
 }
 
-fn center_pawns_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+fn center_pawns_bonus(_board: &Board, _color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
     if pawns == 0 {
         return 0;
     }
@@ -118,7 +117,7 @@ fn center_pawns_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalI
     score
 }
 
-fn stacked_pawns_bonus(pawns: Bitboard) -> i32 {
+fn stacked_pawns_bonus(_board: &Board, _color: Color, pawns: Bitboard, _info: &EvalInfo) -> i32 {
     if pawns == 0 {
         return 0;
     }
@@ -138,7 +137,7 @@ fn stacked_pawns_bonus(pawns: Bitboard) -> i32 {
     score
 }
 
-fn isolated_pawns_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+fn isolated_pawns_bonus(_board: &Board, _color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
     let mut isolated_pawns = pawns;
 
     let mut pawn_copy = pawns;
@@ -166,7 +165,7 @@ fn isolated_pawns_bonus(board: &Board, color: Color, pawns: Bitboard, info: &Eva
     return penalty * isolated_pawns.count_ones() as i32;
 }
 
-fn backwards_pawn_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+fn backwards_pawn_bonus(_board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
     let mut score = 0;
     let mut backwards_pawns = pawns & !info.attacks(color, PieceType::Pawn);
 
@@ -378,7 +377,7 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
     score
 }
 
-fn pawn_tempo_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+fn pawn_tempo_bonus(board: &Board, color: Color, _pawns: Bitboard, info: &EvalInfo) -> i32 {
     let pawn_attacks = (board.occupancy_of(color.opposite())
         & !board.pieces(color.opposite(), PieceType::Pawn))
         & info.attacks(color, PieceType::Pawn)
@@ -389,7 +388,7 @@ fn pawn_tempo_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
     if pawn_attacks == 0 { 0 } else { 10 }
 }
 
-fn pawn_chain(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+fn pawn_chain(_board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
     if pawns == 0 {
         return 0;
     }

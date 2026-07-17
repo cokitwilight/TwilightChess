@@ -1,7 +1,7 @@
 use crate::board::{Board, Move, MoveList, MoveType};
-use crate::moves::see::{self, see};
-use crate::search::Engine;
-use crate::search::engine::SearchContext;
+use crate::engine::Engine;
+use crate::engine::SearchContext;
+use crate::engine::ordering::see;
 use crate::types::{Color, PieceType};
 
 impl Engine {
@@ -95,7 +95,8 @@ impl Engine {
     }
 }
 
-fn mvv_lva_score(board: &Board, mv: Move, side_to_move: Color) -> i32 {
+#[allow(dead_code)]
+fn mvv_lva_score(board: &Board, mv: Move) -> i32 {
     let attacker = board
         .piece_at(mv.from)
         .expect("move_order_score called with no attacker on mv.from")
@@ -142,6 +143,7 @@ fn promotion_score(piece: PieceType) -> i32 {
     }
 }
 
+#[allow(dead_code)]
 fn mvv_lva_piece_value(piece: PieceType) -> i32 {
     match piece {
         PieceType::Pawn => 100,

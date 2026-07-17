@@ -1,8 +1,6 @@
 use std::sync::OnceLock;
 
-use crate::bitboard::{
-    Bitboard, FILE_A, FILE_H, NOT_FILE_A, NOT_FILE_AB, NOT_FILE_GH, NOT_FILE_H, Square,
-};
+use crate::bitboard::{Bitboard, NOT_FILE_A, NOT_FILE_AB, NOT_FILE_GH, NOT_FILE_H, Square};
 
 pub struct AttackTables {
     pub knight: [Bitboard; 64],

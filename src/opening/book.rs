@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
-use rand::Rng;
 use rand::RngExt;
 
 use crate::bitboard::{Square, file_of, rank_of};
 use crate::board::{Board, Move, STARTPOS_FEN};
-use crate::search::Engine;
+use crate::engine::Engine;
 use crate::types::PieceType;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,7 +1,7 @@
 use crate::bitboard::{Square, bit, file_of, print_all_bitboards, rank_of, square};
 use crate::board::{
     BLACK_KINGSIDE, BLACK_QUEENSIDE, Board, Move, MoveType, UndoMove, WHITE_KINGSIDE,
-    WHITE_QUEENSIDE, piece,
+    WHITE_QUEENSIDE,
 };
 use crate::eval::pst::{eg_pst_bonus_at, mg_pst_bonus_at};
 use crate::types::{COLORS, Color, PieceType};

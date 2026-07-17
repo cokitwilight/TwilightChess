@@ -1,7 +1,6 @@
 use crate::bitboard::Square;
 use crate::board::{Board, Move, MoveList, STARTPOS_FEN};
 use crate::game::GameState;
-use crate::moves::all_legal_moves;
 
 pub struct Game {
     pub board: Board,
@@ -17,7 +16,7 @@ pub enum MoveError {
 
 impl Game {
     pub fn new() -> Self {
-        let board = Board::from_fen("r5k1/p4Npp/5R2/2pr4/3n4/P5R1/2P3PP/2K5 w - - 0 1").unwrap();
+        let board = Board::from_fen(STARTPOS_FEN).unwrap();
         let state = GameState::Ongoing;
         let repetition_history: Vec<u64> = Vec::new();
 

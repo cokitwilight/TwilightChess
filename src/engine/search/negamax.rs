@@ -1,21 +1,10 @@
-use crate::{
-    board::{Board, Move, MoveType, null_move::null_move_reduction},
-    eval::eval::evaluation_for_turn,
-    search::{
-        engine::{Engine, SearchContext},
-        lmr::lmr_reduction,
-        tt::{TTEntry, TTFlag},
-    },
-};
-
-pub const CHECKMATE_SCORE: i32 = 100000;
-
-pub const NEG_INF: i32 = -1_000_000_000;
-pub const POS_INF: i32 = 1_000_000_000;
-
-pub const MAX_Q_DEPTH: usize = 4;
-
-pub const RFP_MAX_DEPTH: usize = 4;
+use crate::board::{Board, Move, MoveType, null_move_reduction};
+use crate::engine::Engine;
+use crate::engine::SearchContext;
+use crate::engine::config::{CHECKMATE_SCORE, MAX_Q_DEPTH, NEG_INF, RFP_MAX_DEPTH};
+use crate::engine::pruning::lmr_reduction;
+use crate::engine::tt::{TTEntry, TTFlag};
+use crate::eval::evaluation_for_turn;
 
 impl Engine {
     // Implementation for negamax function

@@ -1,6 +1,6 @@
 use crate::bitboard::{
     Bitboard, Square, bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square,
-    queen_attacks, rook_attacks, square_to_algebraic,
+    rook_attacks, square_to_algebraic,
 };
 use crate::board::MoveList;
 use crate::eval::phase::MAX_PHASE;
@@ -570,9 +570,6 @@ mod tests {
         rank * 8 + file
     }
 
-    fn a1() -> Square {
-        sq(0, 0)
-    }
     fn d5() -> Square {
         sq(3, 4)
     }

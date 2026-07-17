@@ -11,5 +11,6 @@ pub mod zobrist;
 pub use board::Board;
 pub use fen::{BLACK_KINGSIDE, BLACK_QUEENSIDE, STARTPOS_FEN, WHITE_KINGSIDE, WHITE_QUEENSIDE};
 pub use mv::{Move, MoveList, MoveType};
+pub use null_move::null_move_reduction;
 pub use undo_move::UndoMove;
 pub use zobrist::{Zobrist, zobrist};

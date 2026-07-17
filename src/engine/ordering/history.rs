@@ -1,6 +1,5 @@
 use crate::bitboard::Square;
-use crate::search::Engine;
-use crate::search::engine::SearchContext;
+use crate::engine::{Engine, SearchContext};
 use crate::types::Color;
 
 #[derive(Clone, Copy, Debug)]
