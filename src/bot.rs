@@ -1,3 +1,4 @@
+use crate::engine::configs::EngineConfig;
 use crate::engine::{Engine, SearchLimits};
 use crate::game::{Game, GameState};
 use crate::types::Color;
@@ -14,7 +15,7 @@ impl Bot {
         Self {
             color,
             limits,
-            engine: Some(Engine::new()),
+            engine: Some(Engine::new(EngineConfig::default())),
             thinking: false,
         }
     }

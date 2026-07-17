@@ -27,10 +27,12 @@ impl Engine {
         let mut total_nodes: u64 = 0;
         let mut nps_samples: Vec<f64> = Vec::new();
 
-        const ASPIRATION_START: i32 = 25;
-        const ASPIRATION_MAX: i32 = 800;
-        const MATE_MARGIN: i32 = 1000;
-        const _MAX_ASPIRATION_RESEARCHES: usize = 8; // use later if needed
+        let aspiration_start = self.config.search.aspiration.initial_window;
+        let window_growth = self.config.search.aspiration.growth_factor;
+        let aspiration_max = self.config.search.aspiration.max_window;
+        let mate_margin = self.config.search.aspiration.mate_margin;
+
+        // const _MAX_ASPIRATION_RESEARCHES: usize = 8; // use later if needed
 
         'depth_loop: for depth in 1..=ctx.limits.max_depth {
             if ctx.should_stop() {
@@ -44,17 +46,18 @@ impl Engine {
             let full_beta = POS_INF - 1;
 
             debug_assert!(
-                CHECKMATE_SCORE + MATE_MARGIN < full_beta,
+                CHECKMATE_SCORE + mate_margin < full_beta,
                 "POS_INF must be much larger than CHECKMATE_SCORE"
             );
 
             let previous_eval = best_result.eval;
 
-            let previous_is_mate_score = previous_eval.abs() >= CHECKMATE_SCORE - MATE_MARGIN;
+            let previous_is_mate_score = previous_eval.abs() >= CHECKMATE_SCORE - mate_margin;
 
-            let use_aspiration = depth > 1 && !previous_is_mate_score;
+            let use_aspiration =
+                depth > 1 && !previous_is_mate_score && self.config.search.aspiration.enabled;
 
-            let mut window = ASPIRATION_START;
+            let mut window = aspiration_start;
 
             let mut alpha = if use_aspiration {
                 previous_eval.saturating_sub(window).max(full_alpha)
@@ -76,7 +79,7 @@ impl Engine {
                     break 'depth_loop;
                 }
 
-                let result_is_mate_score = result.eval.abs() >= CHECKMATE_SCORE - MATE_MARGIN;
+                let result_is_mate_score = result.eval.abs() >= CHECKMATE_SCORE - mate_margin;
 
                 // Exact score.
                 if result.eval > alpha && result.eval < beta {
@@ -98,13 +101,13 @@ impl Engine {
                 }
 
                 // Avoid infinite widening if something behaves unexpectedly.
-                if window >= ASPIRATION_MAX {
+                if window >= aspiration_max {
                     alpha = full_alpha;
                     beta = full_beta;
                     continue;
                 }
 
-                window = window.saturating_mul(2).min(ASPIRATION_MAX);
+                window = window.saturating_mul(window_growth).min(aspiration_max);
 
                 if result.eval <= alpha {
                     ctx.stats.aspiration_w_fail_low += 1;
@@ -113,7 +116,7 @@ impl Engine {
                     alpha = result.eval.saturating_sub(window).max(full_alpha);
 
                     // Optional: keep beta near previous expectation unless window is maxed.
-                    if window >= ASPIRATION_MAX {
+                    if window >= aspiration_max {
                         beta = full_beta;
                     }
 
@@ -127,7 +130,7 @@ impl Engine {
                     beta = result.eval.saturating_add(window).min(full_beta);
 
                     // Optional: keep alpha near previous expectation unless window is maxed.
-                    if window >= ASPIRATION_MAX {
+                    if window >= aspiration_max {
                         alpha = full_alpha;
                     }
 

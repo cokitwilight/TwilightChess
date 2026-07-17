@@ -1,4 +1,5 @@
-pub mod config;
+pub mod config; // CHANGE NAME LATER TO BE LESS CONFUSING
+pub mod configs;
 pub mod engine;
 pub mod ordering;
 pub mod pruning;

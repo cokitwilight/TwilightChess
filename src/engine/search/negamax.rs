@@ -1,7 +1,7 @@
 use crate::board::{Board, Move, MoveType, null_move_reduction};
 use crate::engine::Engine;
 use crate::engine::SearchContext;
-use crate::engine::config::{CHECKMATE_SCORE, MAX_Q_DEPTH, NEG_INF, RFP_MAX_DEPTH};
+use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, RFP_MAX_DEPTH};
 use crate::engine::pruning::lmr_reduction;
 use crate::engine::tt::{TTEntry, TTFlag};
 use crate::eval::evaluation_for_turn;
@@ -36,7 +36,7 @@ impl Engine {
         // add insufficient material check here
 
         if depth == 0 {
-            return self.quiescence(board, context, MAX_Q_DEPTH, alpha, beta, ply);
+            return self.quiescence(board, context, context.limits.max_q_depth, alpha, beta, ply);
         }
 
         let original_alpha = alpha;
@@ -103,10 +103,15 @@ impl Engine {
         // null move here
         // 4 is a placeholder for now
         // use phase for now. Might not be viable though
+        let null_enabled = self.config.search.null_move.enabled;
+        let min_null_depth = self.config.search.null_move.minimum_depth;
+        let min_null_phase = self.config.search.null_move.minimum_phase;
+
         if allow_null_move
+            && null_enabled
             && !in_check
-            && depth >= 4
-            && board.phase > 8
+            && depth >= min_null_depth
+            && board.phase >= min_null_phase
             && beta < CHECKMATE_SCORE - 1000
         {
             context.stats.null_attempts += 1;
