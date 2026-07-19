@@ -36,10 +36,10 @@ impl SearchContext {
             }
         }
 
-        if let Some(time_limit_ms) = self.limits.soft_time_limit_ms {
-            if self.start_time.elapsed().as_millis() >= time_limit_ms as u128 {
-                return true;
-            }
+        if let Some(time_limit_ms) = self.limits.soft_time_limit_ms
+            && self.start_time.elapsed().as_millis() >= time_limit_ms as u128
+        {
+            return true;
         }
 
         false

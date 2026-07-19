@@ -31,10 +31,7 @@ pub fn evaluation_breakdown(board: &Board) -> EvalBreakdown {
     let mg_pst = board.mg_pst();
     let eg_pst = board.eg_pst();
 
-    let mut pst = (mg_pst * phase + eg_pst * eg_phase) / MAX_PHASE;
-    // for debugging pst
-
-    pst /= 2;
+    let pst = (mg_pst * phase + eg_pst * eg_phase) / MAX_PHASE;
 
     let material = board.material();
     let mobility = mobility_score(board, &eval_info);

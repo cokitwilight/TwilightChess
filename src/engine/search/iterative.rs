@@ -298,7 +298,7 @@ impl Engine {
                 best_move,
                 eval: best_eval,
                 depth_reached: depth,
-                stats: ctx.stats.clone(),
+                stats: ctx.stats,
                 pv: best_pv,
             };
         }
@@ -340,7 +340,7 @@ impl Engine {
             best_move,
             eval: best_eval,
             depth_reached: depth,
-            stats: ctx.stats.clone(),
+            stats: ctx.stats,
             pv: best_pv, // TODO: Implement principal variation
         }
     }
