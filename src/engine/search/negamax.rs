@@ -1,7 +1,7 @@
 use crate::board::{Board, Move, MoveType, null_move_reduction};
 use crate::engine::Engine;
 use crate::engine::SearchContext;
-use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, RFP_MAX_DEPTH};
+use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::pruning::lmr_reduction;
 use crate::engine::tt::{TTEntry, TTFlag};
 use crate::eval::evaluation_for_turn;
@@ -81,15 +81,16 @@ impl Engine {
 
         // reverse futility pruning
         if !in_check
+            && self.config.search.rfp.enabled
             && beta == alpha + 1
-            && depth <= RFP_MAX_DEPTH
             && beta.abs() < CHECKMATE_SCORE - 1000
             && ply > 0
-            && board.phase() >= 6
+            && board.phase() >= self.config.search.rfp.min_phase
+            && depth <= self.config.search.rfp.max_depth
         {
             context.stats.rfp_attempts += 1;
 
-            let margin = 80 * depth as i32;
+            let margin = self.config.search.rfp.margin_factor * depth as i32;
             // dynamic RFP margin
 
             let static_eval = evaluation_for_turn(board);
@@ -179,6 +180,7 @@ impl Engine {
             let reduction = if (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
                 && !currently_in_check
                 && !gives_check
+                && self.config.search.lmr.enabled
             {
                 lmr_reduction(depth, move_index)
             } else {

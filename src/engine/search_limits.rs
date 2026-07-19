@@ -3,7 +3,8 @@ pub struct SearchLimits {
     pub max_depth: usize,
     pub max_q_depth: usize,
     pub max_nodes: Option<u64>,
-    pub time_limit_ms: Option<u64>,
+    pub soft_time_limit_ms: Option<u64>,
+    pub hard_time_limit_ms: Option<u64>,
 }
 
 impl SearchLimits {
@@ -12,7 +13,8 @@ impl SearchLimits {
             max_depth,
             max_q_depth,
             max_nodes: None,
-            time_limit_ms: None,
+            soft_time_limit_ms: None,
+            hard_time_limit_ms: None,
         }
     }
 
@@ -21,7 +23,8 @@ impl SearchLimits {
             max_depth,
             max_q_depth,
             max_nodes: None,
-            time_limit_ms: Some(time_limit_ms),
+            soft_time_limit_ms: Some(time_limit_ms),
+            hard_time_limit_ms: Some(time_limit_ms + 100),
         }
     }
 }

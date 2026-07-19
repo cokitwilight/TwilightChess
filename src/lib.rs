@@ -7,5 +7,6 @@ pub mod eval;
 pub mod game;
 pub mod moves;
 pub mod opening;
+pub mod tournament;
 pub mod types;
 pub mod ui;

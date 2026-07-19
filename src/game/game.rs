@@ -6,6 +6,7 @@ pub struct Game {
     pub board: Board,
     pub state: GameState,
     pub repetition_history: Vec<u64>,
+    pub move_history: Vec<Move>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,11 +20,13 @@ impl Game {
         let board = Board::from_fen(STARTPOS_FEN).unwrap();
         let state = GameState::Ongoing;
         let repetition_history: Vec<u64> = Vec::new();
+        let move_history: Vec<Move> = Vec::new();
 
         Self {
             board,
             state,
             repetition_history,
+            move_history,
         }
     }
     pub fn game_state(&mut self) -> GameState {
@@ -69,6 +72,8 @@ impl Game {
         };
 
         self.board.make_move(legal_mv);
+
+        self.move_history.push(legal_mv);
 
         self.repetition_history.push(self.board.hash());
 

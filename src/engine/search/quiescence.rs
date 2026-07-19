@@ -3,6 +3,7 @@ use crate::engine::Engine;
 use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 // use crate::engine::ordering::see;
+use crate::engine::ordering::see;
 use crate::engine::tt::{TTEntry, TTFlag};
 use crate::eval::{evaluation_for_turn, lazy_eval_for_turn};
 use crate::types::PieceType;
@@ -216,11 +217,13 @@ impl Engine {
                 }
 
                 // For now this is too expensive relative to node cutoffs(since its not legal the margin is too large)
-                // if see(board, *mv) <= -500 {
-                //     context.stats.see_prunes += 1;
-                //     // less agressive pruning since see doesn't check legality yet
-                //     continue;
-                // }
+                if self.config.search.see.enabled
+                    && see(board, *mv) <= self.config.search.see.margin
+                {
+                    context.stats.see_prunes += 1;
+                    // less agressive pruning since see doesn't check legality yet
+                    continue;
+                }
             }
 
             let undo = board.make_move(*mv);
