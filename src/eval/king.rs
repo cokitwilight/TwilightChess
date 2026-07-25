@@ -1,5 +1,5 @@
 use crate::bitboard::{
-    Bitboard, NOT_FILE_A, NOT_FILE_H, Square, bit, file_mask, file_of, pop_lsb, rank_of, square,
+    bit, file_mask, file_of, pop_lsb, rank_of, square, Bitboard, Square, NOT_FILE_A, NOT_FILE_H,
 };
 use crate::board::Board;
 use crate::eval::eval::EvalInfo;
@@ -28,7 +28,7 @@ pub fn king_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 fn king_ring_safety(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
 
-    // TODO: Add a king danger table
+    // TODO: Add a king danger table instead of score(probably add this to all functions and then create one function that scores king danger)
 
     let enemy = color.opposite();
 
@@ -58,6 +58,7 @@ fn king_ring_safety(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
         _ => 150,
     };
 
+    // TODO: Add a different score for different pieces(aka a queen attacking alone is useless but queen + bishop + rook is much worse)
     let attack_penalty = match num_attacks {
         0 => -20,
         1 => 5,

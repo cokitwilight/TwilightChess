@@ -1,19 +1,19 @@
 use crate::bitboard::{
-    Bitboard, Square, bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square,
-    pop_lsb, queen_attacks, rook_attacks,
+    bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square, pop_lsb,
+    queen_attacks, rook_attacks, Bitboard, Square,
 };
 use crate::board::Board;
 use crate::eval::{
     king::king_eval, knight::knight_eval, mobility::mobility_score, pawn::pawn_eval,
     phase::MAX_PHASE, sliders::sliders_eval,
 };
-use crate::types::{COLORS, Color, PIECE_TYPES, PieceType};
+use crate::types::{Color, PieceType, COLORS, PIECE_TYPES};
 
 pub const CENTER_SQUARES: Bitboard = 0x0000_3C3C_3C3C_0000;
 
 pub const BLACK_SQUARES: Bitboard = 0xAA55_AA55_AA55_AA55;
 
-pub const WHITE_SQUARES: Bitboard = BLACK_SQUARES << 1;
+pub const WHITE_SQUARES: Bitboard = !BLACK_SQUARES;
 
 const KING_ATTACK_WEIGHTS: [i32; 6] = [
     0,  // Pawn, handled separately

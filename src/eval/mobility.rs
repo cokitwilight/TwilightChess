@@ -1,4 +1,4 @@
-use crate::bitboard::{Bitboard, RANK_1, RANK_3, RANK_6, RANK_8, RANK_MASKS};
+use crate::bitboard::{Bitboard, FILE_A, FILE_H, RANK_1, RANK_3, RANK_6, RANK_8, RANK_MASKS};
 
 use crate::board::Board;
 use crate::eval::eval::EvalInfo;
@@ -28,11 +28,19 @@ fn development_penalty(board: &Board, color: Color, info: &EvalInfo) -> i32 {
         Color::Black => RANK_8,
     };
 
-    let non_developed_pieces = ((board.occupancy_of(color) & starting_rank)
+    let mut non_developed_pieces = ((board.occupancy_of(color) & starting_rank)
         & !(board.pieces(color, PieceType::King) | board.pieces(color, PieceType::Rook)))
     .count_ones() as i32;
 
-    let bonus = if info.phase() < 16 { -6 } else { -4 };
+    let starting_rooks = (board.pieces(color, PieceType::Rook) & starting_rank & (FILE_A | FILE_H))
+        .count_ones() as i32;
+
+    // since it might be likely that the rook will have moved by then(and rooks are more common to be on the starting rank)
+    if starting_rooks != 0 && info.phase() > 16 {
+        non_developed_pieces += starting_rooks;
+    }
+
+    let bonus = if info.phase() < 16 { -8 } else { -6 };
 
     return non_developed_pieces * bonus;
 }

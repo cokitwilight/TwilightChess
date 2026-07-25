@@ -1,7 +1,7 @@
-use crate::bitboard::{Square, mirror_square_vertical, pop_lsb};
+use crate::bitboard::{mirror_square_vertical, pop_lsb, Square};
 use crate::board::Board;
 use crate::eval::phase::MAX_PHASE;
-use crate::types::{Color, PIECE_TYPES, PieceType};
+use crate::types::{Color, PieceType, PIECE_TYPES};
 
 const ALL_PSTS: [[i32; 64]; 12] = [
     [
@@ -36,7 +36,7 @@ const ALL_PSTS: [[i32; 64]; 12] = [
     ],
     [
         // KING PST
-        20, 30, 10, 0, 0, 10, 30, 20, 20, 20, 0, 0, 0, 0, 20, 20, -10, -20, -20, -20, -20, -20, -20,
+        20, 45, 10, 0, 0, 10, 45, 20, 20, 20, 0, 0, 0, 0, 20, 20, -10, -20, -20, -20, -20, -20, -20,
         -10, -20, -30, -30, -40, -40, -30, -30, -20, -30, -40, -40, -50, -50, -40, -40, -30, -30,
         -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40,
         -50, -50, -40, -40, -30,
