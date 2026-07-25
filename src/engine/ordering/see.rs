@@ -276,9 +276,7 @@ pub fn see(board: &Board, mv: Move) -> i32 {
     for i in (1..gains.len()).rev() {
         value = max(0, gains[i] - value);
     }
-    let see_score = gains[0] - value;
-
-    see_score
+    gains[0] - value
 }
 
 fn attackers_to_occ(

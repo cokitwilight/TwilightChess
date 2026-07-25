@@ -113,7 +113,7 @@ fn generate_black_pawn_attacks(sq: Square) -> Bitboard {
 // **** BETWEEN[sq][sq] ****
 // *************************
 
-pub const BETWEEN: [[Bitboard; 64]; 64] = build_between_table();
+pub static BETWEEN: [[Bitboard; 64]; 64] = build_between_table();
 
 pub const fn bit(sq: Square) -> Bitboard {
     1u64 << sq

@@ -37,7 +37,7 @@ impl Board {
             self.piece_at(mv.to).map(|piece| {
                 debug_assert_ne!(piece.color, us, "Tried to capture own piece");
                 if piece.kind == PieceType::King {
-                    print_all_bitboards(&self);
+                    // print_all_bitboards(&self);
                     panic!("Move illegally captures king. Move: from: {}, to: {}, kind: {:?}, promtion: {}", mv.from, mv.to, mv.kind, mv.is_promotion());
                 }
                 // debug_assert_ne!(piece.kind, PieceType::King, "Move illegally captures king. Move: from: {}, to: {}, kind: {:?}, promtion: {}", mv.from, mv.to, mv.kind, mv.is_promotion());

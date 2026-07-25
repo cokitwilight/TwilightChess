@@ -30,10 +30,10 @@ impl SearchContext {
             return true;
         }
 
-        if let Some(max_nodes) = self.limits.max_nodes {
-            if self.stats.nodes >= max_nodes {
-                return true;
-            }
+        if let Some(max_nodes) = self.limits.max_nodes
+            && self.stats.nodes >= max_nodes
+        {
+            return true;
         }
 
         if let Some(time_limit_ms) = self.limits.soft_time_limit_ms

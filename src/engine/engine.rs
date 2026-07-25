@@ -22,7 +22,7 @@ impl Engine {
             qtt: TranspositionTable::new(config.qtt_size), // IN MB
             history: HistoryTable::new(),
             opening_book: build_opening_book(),
-            config: config,
+            config,
         }
     }
 }

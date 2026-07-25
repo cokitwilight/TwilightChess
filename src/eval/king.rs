@@ -218,11 +218,11 @@ fn escape_score_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let escape_squares = (king_ring & all_attacks & !friends).count_ones() as i32;
 
     if escape_squares == 0 {
-        return -30;
+        -30
     } else if escape_squares <= 2 {
-        return -10;
+        -10
     } else {
-        return 15;
+        15
     }
 }
 

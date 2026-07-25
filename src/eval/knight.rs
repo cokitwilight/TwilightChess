@@ -95,12 +95,12 @@ fn calculate_outpost_mask(sq: Square, color: Color) -> Bitboard {
 
     match color {
         Color::White => {
-            mask = mask << 8;
+            mask <<= 8;
             mask |= mask << 8;
             mask |= mask << 16;
         }
         Color::Black => {
-            mask = mask >> 8;
+            mask >>= 8;
             mask |= mask >> 8;
             mask |= mask >> 16;
         }
