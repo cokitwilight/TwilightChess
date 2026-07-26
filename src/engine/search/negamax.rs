@@ -244,7 +244,7 @@ impl Engine {
         }
 
         if legal_moves == 0 {
-            if board.in_check(side_to_move) {
+            if in_check {
                 return -CHECKMATE_SCORE + ply as i32;
             } else {
                 return 0; // Stalemate

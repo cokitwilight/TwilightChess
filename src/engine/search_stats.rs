@@ -42,6 +42,7 @@ pub struct SearchStats {
 
     pub repetition_returns: u64,
     pub fifty_returns: u64,
+    pub insufficient_returns: u64,
 }
 
 impl SearchStats {
@@ -340,7 +341,8 @@ impl SearchStats {
     }
 
     pub fn print_returns(&self) {
-        let has_returns = self.repetition_returns > 0 || self.fifty_returns > 0;
+        let has_returns =
+            self.repetition_returns > 0 || self.fifty_returns > 0 || self.insufficient_returns > 0;
 
         if !has_returns {
             return;
@@ -356,6 +358,12 @@ impl SearchStats {
             "  {:<22} {:>14}",
             "Fifty move:",
             Self::fmt(self.fifty_returns)
+        );
+
+        println!(
+            "  {:<22} {:>14}",
+            "Insufficient:",
+            Self::fmt(self.insufficient_returns)
         );
     }
 
@@ -419,6 +427,9 @@ impl Sub for SearchStats {
                 .repetition_returns
                 .saturating_sub(rhs.repetition_returns),
             fifty_returns: self.fifty_returns.saturating_sub(rhs.fifty_returns),
+            insufficient_returns: self
+                .insufficient_returns
+                .saturating_sub(rhs.insufficient_returns),
         }
     }
 }

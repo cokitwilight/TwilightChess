@@ -1,5 +1,6 @@
 use crate::bitboard::Square;
 use crate::board::{Board, Move, MoveList, STARTPOS_FEN};
+use crate::engine::search::search::is_insufficient_material;
 use crate::game::GameState;
 
 pub struct Game {
@@ -43,6 +44,8 @@ impl Game {
             }
         } else if self.board.halfmove_clock >= 100 {
             GameState::DrawByFiftyMoveRule
+        } else if is_insufficient_material(&self.board) {
+            GameState::DrawByInsufficientMaterial
         } else {
             GameState::Ongoing
         }

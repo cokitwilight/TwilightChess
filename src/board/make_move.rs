@@ -1,4 +1,4 @@
-use crate::bitboard::{Square, bit, file_of, print_all_bitboards, rank_of, square};
+use crate::bitboard::{Square, bit, file_of, rank_of, square};
 use crate::board::{
     BLACK_KINGSIDE, BLACK_QUEENSIDE, Board, Move, MoveType, UndoMove, WHITE_KINGSIDE,
     WHITE_QUEENSIDE,

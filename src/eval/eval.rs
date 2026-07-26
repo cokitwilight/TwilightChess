@@ -1,15 +1,17 @@
 use crate::bitboard::{
-    bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square, pop_lsb,
-    queen_attacks, rook_attacks, Bitboard, Square,
+    Bitboard, Square, bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square,
+    pop_lsb, queen_attacks, rook_attacks,
 };
 use crate::board::Board;
 use crate::eval::{
     king::king_eval, knight::knight_eval, mobility::mobility_score, pawn::pawn_eval,
     phase::MAX_PHASE, sliders::sliders_eval,
 };
-use crate::types::{Color, PieceType, COLORS, PIECE_TYPES};
+use crate::types::{COLORS, Color, PIECE_TYPES, PieceType};
 
 pub const CENTER_SQUARES: Bitboard = 0x0000_3C3C_3C3C_0000;
+
+pub const CENTER_4: Bitboard = 0x0000_0018_1800_0000;
 
 pub const BLACK_SQUARES: Bitboard = 0xAA55_AA55_AA55_AA55;
 
@@ -17,10 +19,10 @@ pub const WHITE_SQUARES: Bitboard = !BLACK_SQUARES;
 
 const KING_ATTACK_WEIGHTS: [i32; 6] = [
     0,  // Pawn, handled separately
-    20, // Knight
-    20, // Bishop
-    40, // Rook
-    80, // Queen
+    10, // Knight
+    9,  // Bishop
+    12, // Rook
+    20, // Queen
     0,  // King
 ];
 
@@ -159,9 +161,9 @@ impl EvalInfo {
                 }
 
                 if piece == PieceType::Pawn {
-                    danger += hits * 8;
+                    danger += hits * 6;
                 } else {
-                    danger += KING_ATTACK_WEIGHTS[piece.idx()] + hits * 5;
+                    danger += KING_ATTACK_WEIGHTS[piece.idx()] + hits * 4;
                 }
             }
 
@@ -238,12 +240,13 @@ pub fn evaluation(board: &Board) -> i32 {
 
 pub fn lazy_eval(board: &Board) -> i32 {
     let phase = board.phase();
-    let eg_phase = MAX_PHASE - phase;
 
-    let mg_pst = board.mg_pst();
-    let eg_pst = board.eg_pst();
+    let pst_eval = if phase > 12 {
+        board.mg_pst()
+    } else {
+        board.eg_pst()
+    };
 
-    let pst_eval = (mg_pst * phase + eg_pst * eg_phase) / MAX_PHASE;
     pst_eval + board.material()
 }
 

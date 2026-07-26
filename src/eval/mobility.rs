@@ -42,7 +42,7 @@ fn development_penalty(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
     let bonus = if info.phase() < 16 { -8 } else { -6 };
 
-    return non_developed_pieces * bonus;
+    non_developed_pieces * bonus
 }
 
 fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> i32 {
@@ -55,7 +55,7 @@ fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let pawn_moves = pawn_moves_bitboard(board, color).count_ones() as i32;
 
     // encourage pawn mobility in endgame
-    let bonus = if info.phase() < 12 { 4 } else { 1 };
+    let bonus = if info.phase() < 12 { 6 } else { 2 };
 
     score += pawn_moves * bonus;
 
@@ -88,11 +88,11 @@ fn move_pressure(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let multiple_attacked = info.attacked_by_two(color.opposite()).count_ones() as i32; // already includes occupancy check
 
     if multiple_attacked > 3 {
-        return multiple_attacked * -15;
+        multiple_attacked * -15
     } else if multiple_attacked >= 1 {
-        return -10;
+        -10
     } else {
-        return 0;
+        0
     }
 }
 
@@ -106,7 +106,7 @@ fn move_aggression(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
     let num_pieces = (enemy_half & board.occupancy_of(color)).count_ones() as i32;
 
-    return num_attacks + (num_pieces * 4);
+    num_attacks + (num_pieces * 4)
 }
 
 fn hanging_pieces(board: &Board, color: Color, info: &EvalInfo) -> i32 {
@@ -114,7 +114,7 @@ fn hanging_pieces(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
     let hanging = occupancy & info.all_attacks(color.opposite()) & !info.all_attacks(color);
 
-    return -10 * hanging.count_ones() as i32;
+    -10 * hanging.count_ones() as i32
 }
 
 fn space_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
@@ -129,7 +129,7 @@ fn space_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let available_space =
         space_mask & !info.all_attacks(color.opposite()) & !board.occupancy_of(color.opposite());
 
-    return available_space.count_ones() as i32 * 3;
+    available_space.count_ones() as i32 * 3
 }
 
 // since not all pawn moves are captures. Ignore en passant for now as it might be too expensive/complicated

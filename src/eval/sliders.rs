@@ -302,7 +302,7 @@ fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, info: 
 
     let open_straights = (open_files & sliders).count_ones() as i32;
 
-    return open_straights * 15;
+    open_straights * 15
 }
 
 fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo) -> i32 {

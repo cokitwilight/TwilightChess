@@ -72,28 +72,36 @@ mod eval_tests {
     fn print_eval_breakdowns_for_fens() {
         let positions = [
             (
-                "Startpos",
-                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                "Equal Material. More attackers pointed at black.",
+                "r2qr1k1/ppp2ppp/1bn5/5N2/8/2B3Q1/PPP2PPP/R4RK1 b - - 0 1",
             ),
             (
-                "White up a pawn",
-                "rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+                "Eq Mat. Pawn Storm + Isolated for white",
+                "r1bqkbnr/3ppppp/8/1p6/pPp5/5P1P/3PPPPP/R1BQKBNR w KQkq - 0 1",
             ),
-            (
-                "Kiwipete",
-                "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
-            ),
-            (
-                "Open king-ish position",
-                "rnbq1rk1/ppp2ppp/4pn2/3p4/1b1P4/2NBPN2/PP3PPP/R1BQ1RK1 w - - 0 7",
-            ),
-            ("Endgame", "8/8/3k4/8/3K4/8/4P3/8 w - - 0 1"),
-            // 1. Multiple attackers around enemy king
-            (
-                "KingAttack_3Plus_WhiteAttacksBlackKing",
-                "r4rk1/pp3ppp/2n1bn2/3p2NQ/3P4/3BPN2/PP3PPP/R4RK1 w - - 0 1", //"White Qh5, Bd3, and Ng5 all attack squares around Kg8, especially h7/f7.",
-            ),
-            // 2. Late middlegame with multiple passed pawns
+            // (
+            //     "Startpos",
+            //     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            // ),
+            // (
+            //     "White up a pawn",
+            //     "rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+            // ),
+            // (
+            //     "Kiwipete",
+            //     "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            // ),
+            // (
+            //     "Open king-ish position",
+            //     "rnbq1rk1/ppp2ppp/4pn2/3p4/1b1P4/2NBPN2/PP3PPP/R1BQ1RK1 w - - 0 7",
+            // ),
+            // ("Endgame", "8/8/3k4/8/3K4/8/4P3/8 w - - 0 1"),
+            // // 1. Multiple attackers around enemy king
+            // (
+            //     "KingAttack_3Plus_WhiteAttacksBlackKing",
+            //     "r4rk1/pp3ppp/2n1bn2/3p2NQ/3P4/3BPN2/PP3PPP/R4RK1 w - - 0 1", //"White Qh5, Bd3, and Ng5 all attack squares around Kg8, especially h7/f7.",
+            // ),
+            // // 2. Late middlegame with multiple passed pawns
             (
                 "LateMG_WhiteTwoPassedPawns",
                 "2r2rk1/6pp/2P1P3/3p4/p6P/2N2N2/PP3PP1/2R2RK1 w - - 0 1",
@@ -121,35 +129,37 @@ mod eval_tests {
                 "6k1/p4p2/8/8/8/1B4K1/8/8 w - - 0 1",
                 //"White bishop b3 x-rays Kg8 through the f7 pawn.",
             ),
-            (
-                "BishopXray_BlockedNoXray",
-                "6k1/5p2/8/3p4/8/1B4K1/8/8 w - - 0 1",
-                //"Same bishop/king geometry, but d5 blocks the diagonal before f7/Kg8.",
-            ),
-            // 5. Rook x-ray to king vs no rook x-ray, same file
-            (
-                "RookXray_SameFile_ToBlackKing",
-                "4k3/p3p3/8/8/8/8/P7/4R1K1 w - - 0 1",
-                //"White rook e1 x-rays Ke8 through the e7 pawn.",
-            ),
-            (
-                "RookXray_SameFile_BlockedNoXray",
-                "4k3/4p3/8/4p3/8/8/P7/4R1K1 w - - 0 1",
-                //"Rook and king are still on the e-file, but e5 blocks before the e7 pawn/king.",
-            ),
-            (
-                "Test Position 1.",
-                "r1b2k2/pp2p2Q/2p1p1p1/3q1rN1/8/2P5/P1P2PPP/R1B2RK1 w - - 0 1",
-            ),
-            (
-                "Test Position 2.",
-                "8/k7/2Q5/pp6/4p3/2p1P1q1/P5Np/7K w - - 0 1",
-            ),
+            // (
+            //     "BishopXray_BlockedNoXray",
+            //     "6k1/5p2/8/3p4/8/1B4K1/8/8 w - - 0 1",
+            //     //"Same bishop/king geometry, but d5 blocks the diagonal before f7/Kg8.",
+            // ),
+            // // 5. Rook x-ray to king vs no rook x-ray, same file
+            // (
+            //     "RookXray_SameFile_ToBlackKing",
+            //     "4k3/p3p3/8/8/8/8/P7/4R1K1 w - - 0 1",
+            //     //"White rook e1 x-rays Ke8 through the e7 pawn.",
+            // ),
+            // (
+            //     "RookXray_SameFile_BlockedNoXray",
+            //     "4k3/4p3/8/4p3/8/8/P7/4R1K1 w - - 0 1",
+            //     //"Rook and king are still on the e-file, but e5 blocks before the e7 pawn/king.",
+            // ),
+            // (
+            //     "Test Position 1.",
+            //     "r1b2k2/pp2p2Q/2p1p1p1/3q1rN1/8/2P5/P1P2PPP/R1B2RK1 w - - 0 1",
+            // ),
+            // (
+            //     "Test Position 2.",
+            //     "8/k7/2Q5/pp6/4p3/2p1P1q1/P5Np/7K w - - 0 1",
+            // ),
         ];
 
         for (name, fen) in positions {
             let board = Board::from_fen(fen).expect("valid FEN");
             let b = evaluation_breakdown(&board);
+
+            let eval_info = EvalInfo::calculate(&board);
 
             println!();
             println!("==============================");
@@ -165,11 +175,23 @@ mod eval_tests {
             println!("{:<16} {:>8}", "Knights", b.knights);
             println!("{:<16} {:>8}", "Sliders", b.sliders);
             println!("{:<16} {:>8}", "King", b.king);
+            println!(
+                "{:<16} {:>8}",
+                "W Attack Weight",
+                eval_info.king_attack_weight(Color::White)
+            );
+            println!(
+                "{:<16} {:>8}",
+                "B Attack Weight",
+                eval_info.king_attack_weight(Color::Black)
+            );
             println!("------------------------------");
             println!("{:<16} {:>8}", "Total", b.total);
             println!("{:<16} {:>8}", "STM total", b.side_to_move_total);
 
             print_pawn_eval(&board);
+
+            println!("------------------------------");
 
             assert_eq!(
                 b.total,

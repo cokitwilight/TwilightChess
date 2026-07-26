@@ -1,12 +1,13 @@
 use crate::bitboard::{
-    bit, file_mask, file_of, pop_lsb, rank_of, square, Bitboard, Square, NOT_FILE_A, NOT_FILE_H,
+    Bitboard, NOT_FILE_A, NOT_FILE_H, Square, bit, file_mask, file_of, pop_lsb, rank_of, square,
 };
 use crate::board::Board;
-use crate::eval::eval::EvalInfo;
+use crate::eval::eval::{EvalInfo, KING_DANGER_TABLE, MAX_DANGER};
 use crate::types::{Color, PieceType};
 
 pub fn king_eval(board: &Board, info: &EvalInfo) -> i32 {
-    king_eval_raw(board, Color::White, info) - king_eval_raw(board, Color::Black, info)
+    king_eval_danger_raw(board, Color::White, info)
+        - king_eval_danger_raw(board, Color::Black, info)
 }
 
 pub fn king_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
@@ -23,6 +24,22 @@ pub fn king_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     score += escape_score_bonus(board, color, info);
 
     score
+}
+
+pub fn king_eval_danger_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+    let mut danger = 0;
+
+    let Some(king_sq) = pop_lsb(&mut board.pieces(color, PieceType::King)) else {
+        panic!("No king in board.pieces in king_eval_raw!");
+    };
+
+    danger += info.king_attack_weight(color);
+    danger += pawn_shield_danger_score(board, color, king_sq, info);
+    danger += open_file_danger_bonus(board, color, king_sq, info);
+    danger += open_diagonal_danger_bonus(board, color, king_sq, info);
+    danger += escape_score_danger_bonus(board, color, info);
+
+    -KING_DANGER_TABLE[danger.clamp(0, MAX_DANGER as i32) as usize]
 }
 
 fn king_ring_safety(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
@@ -128,6 +145,57 @@ fn pawn_shield_score(board: &Board, color: Color, king_sq: Square, info: &EvalIn
     score
 }
 
+fn pawn_shield_danger_score(board: &Board, color: Color, king_sq: Square, info: &EvalInfo) -> i32 {
+    if info.phase() < 10 {
+        return 0; // no pawn shield evaluation in the endgame
+    }
+
+    if info.phase() > 20 {
+        match color {
+            Color::White => {
+                if king_sq == 4 {
+                    return 0; // dont give a bonus if king hasn't castled in opening
+                }
+            }
+            Color::Black => {
+                if king_sq == 60 {
+                    return 0;
+                }
+            }
+        }
+    }
+    let mut danger = 0;
+
+    let pawns = board.pieces(color, PieceType::Pawn);
+
+    let first_row_shield = generate_king_shield(color, king_sq);
+
+    let mut total_pawn_shield = 0;
+
+    let pawn_count = (pawns & first_row_shield).count_ones() as i32;
+
+    total_pawn_shield += pawn_count;
+
+    danger -= pawn_count * 2;
+
+    let second_row_shield = generate_king_shield_two_forward(color, king_sq);
+
+    let second_pawn_count = (pawns & second_row_shield).count_ones() as i32;
+
+    total_pawn_shield += second_pawn_count;
+
+    danger -= second_pawn_count;
+
+    if total_pawn_shield >= 3 {
+        danger -= 8;
+    } else if total_pawn_shield == 0 {
+        danger += 8;
+    } else {
+        danger += 1;
+    }
+    danger
+}
+
 fn open_file_bonus(board: &Board, color: Color, king_sq: Square, info: &EvalInfo) -> i32 {
     if info.phase() < 10 {
         return 0; // ignore in endgames
@@ -160,6 +228,40 @@ fn open_file_bonus(board: &Board, color: Color, king_sq: Square, info: &EvalInfo
     }
 
     score
+}
+
+fn open_file_danger_bonus(board: &Board, color: Color, king_sq: Square, info: &EvalInfo) -> i32 {
+    if info.phase() < 10 {
+        return 0; // ignore in endgames
+    }
+
+    let mut danger = 0;
+
+    let king_file = file_of(king_sq);
+
+    let enemy_sliders = board.pieces(color.opposite(), PieceType::Rook)
+        | board.pieces(color.opposite(), PieceType::Queen);
+
+    let friendly_pawns = board.pieces(color, PieceType::Pawn);
+
+    for (offset, penalty) in [(-1, 1), (0, 2), (1, 1)] {
+        let file = king_file as i8 + offset;
+
+        if !(0..=7).contains(&file) {
+            continue;
+        }
+
+        let file_bb = file_mask(file as u8);
+
+        if file_bb & friendly_pawns == 0 {
+            danger += penalty;
+        }
+        if file_bb & enemy_sliders != 0 {
+            danger += 7;
+        }
+    }
+
+    danger
 }
 
 fn open_diagonal_bonus(board: &Board, color: Color, king_sq: Square, info: &EvalInfo) -> i32 {
@@ -204,6 +306,53 @@ fn open_diagonal_bonus(board: &Board, color: Color, king_sq: Square, info: &Eval
     score
 }
 
+fn open_diagonal_danger_bonus(
+    board: &Board,
+    color: Color,
+    king_sq: Square,
+    info: &EvalInfo,
+) -> i32 {
+    if info.phase() < 10 {
+        return 0;
+    }
+
+    let mut danger = 0;
+
+    let occupied = board.all_occupancy();
+
+    let enemy_sliders = board.pieces(color.opposite(), PieceType::Bishop)
+        | board.pieces(color.opposite(), PieceType::Queen);
+
+    for (df, dr) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
+        let mut file = file_of(king_sq) as i8 + df;
+        let mut rank = rank_of(king_sq) as i8 + dr;
+
+        let mut open_diagonal = true;
+
+        while (0..8).contains(&file) && (0..8).contains(&rank) {
+            let to = square(file as u8, rank as u8);
+            let to_mask = bit(to);
+
+            if occupied & to_mask != 0 {
+                open_diagonal = false;
+                if to_mask & enemy_sliders != 0 {
+                    // break when you meet a bishop/queen else keep checking for potention weakness
+                    danger += 7;
+                    break;
+                }
+            }
+
+            file += df;
+            rank += dr;
+        }
+        if open_diagonal {
+            danger += 6;
+        }
+    }
+
+    danger
+}
+
 fn escape_score_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     if info.phase() < 10 {
         return 0;
@@ -223,6 +372,28 @@ fn escape_score_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
         -10
     } else {
         15
+    }
+}
+
+fn escape_score_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+    if info.phase() < 10 {
+        return 0;
+    }
+
+    let all_attacks = info.all_attacks(color.opposite());
+
+    let friends = board.occupancy_of(color);
+
+    let king_ring = info.king_ring(color); // this includes the king itself
+
+    let escape_squares = (king_ring & all_attacks & !friends).count_ones() as i32;
+
+    if escape_squares == 0 {
+        12
+    } else if escape_squares <= 2 {
+        3
+    } else {
+        -5
     }
 }
 

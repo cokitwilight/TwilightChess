@@ -1,20 +1,20 @@
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 
-use crate::bitboard::{square_to_algebraic, Square};
+use crate::bitboard::{Square, square_to_algebraic};
 use crate::board::{Move, MoveList};
 use crate::bot::Bot;
 use crate::engine::configs::EngineConfig;
 use crate::engine::{Engine, SearchLimits};
 use crate::game::{Game, GameState};
 use crate::types::{Color, PieceType};
-use crate::ui::board_view::{draw_board_sized, BoardAction, PromotionPicker};
+use crate::ui::board_view::{BoardAction, PromotionPicker, draw_board_sized};
 use crate::ui::bot_thread::{BotSearchRequest, BotSearchResponse};
 
 use eframe::egui;
 
-const DEFAULT_BOT_DEPTH: usize = 8;
-const DEFAULT_Q_BOT_DEPTH: usize = 6;
+const DEFAULT_BOT_DEPTH: usize = 10;
+const DEFAULT_Q_BOT_DEPTH: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {

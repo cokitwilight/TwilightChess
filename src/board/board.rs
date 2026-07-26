@@ -3,6 +3,7 @@ use crate::bitboard::{
     rook_attacks, square_to_algebraic,
 };
 use crate::board::MoveList;
+use crate::engine::search::search::is_insufficient_material;
 use crate::eval::phase::MAX_PHASE;
 use crate::game::GameState;
 use crate::moves::legal::{all_legal_capture_moves, all_legal_moves_at};
@@ -265,9 +266,9 @@ impl Board {
             return GameState::DrawByFiftyMoveRule;
         }
 
-        // if self.insufficient_material() {
-        //     return GameState::DrawByInsufficientMaterial;
-        // }
+        if is_insufficient_material(&self) {
+            return GameState::DrawByInsufficientMaterial;
+        }
 
         GameState::Ongoing
     }
