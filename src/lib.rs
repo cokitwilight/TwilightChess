@@ -9,4 +9,5 @@ pub mod moves;
 pub mod opening;
 pub mod tournament;
 pub mod types;
+pub mod uci;
 pub mod ui;

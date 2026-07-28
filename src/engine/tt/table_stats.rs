@@ -1,4 +1,4 @@
-use std::ops::Sub;
+use std::ops::{AddAssign, Sub};
 
 use num_format::{Locale, ToFormattedString};
 
@@ -88,5 +88,16 @@ impl Sub for TableStats {
             bound_cutoffs: self.bound_cutoffs.saturating_sub(rhs.bound_cutoffs),
             stores: self.stores.saturating_sub(rhs.stores),
         }
+    }
+}
+
+impl AddAssign for TableStats {
+    fn add_assign(&mut self, rhs: Self) {
+        self.probes += rhs.probes;
+        self.hits += rhs.hits;
+        self.usable += rhs.usable;
+        self.exact_returns += rhs.exact_returns;
+        self.bound_cutoffs += rhs.bound_cutoffs;
+        self.stores += rhs.stores;
     }
 }

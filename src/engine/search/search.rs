@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::board::Board;
 use crate::engine::{Engine, SearchContext, SearchLimits, SearchResult};
 use crate::eval::eval::{BLACK_SQUARES, WHITE_SQUARES};
@@ -13,6 +15,8 @@ impl Engine {
         // CHECK IF CLONING HERE IS OK FOR REPETITION HISTORY, OR IF WE SHOULD PASS A REFERENCE
         let mut context = SearchContext::new(limits, repetition_history.clone());
         let mut board = board.clone();
+
+        let start = Instant::now();
 
         if let Some(book_mv) = self.get_book_move(&board) {
             // let piece = board.piece_at(book_mv.from).unwrap();
@@ -33,16 +37,19 @@ impl Engine {
                 depth_reached: 0,
                 stats: context.stats,
                 pv: Vec::new(),
+                elapsed: start.elapsed(),
             };
         }
 
         // iterative deepening here
 
-        let adjusted_depth = adjusted_depth_for_phase(context.limits.max_depth, board.phase());
+        // let adjusted_depth = adjusted_depth_for_phase(context.limits.max_depth, board.phase());
 
-        context.limits.max_depth = adjusted_depth;
+        // context.limits.max_depth = adjusted_depth;
 
         let search_result = self.iterative_deepening(&mut board, &mut context);
+
+        let elapsed = start.elapsed();
 
         SearchResult {
             best_move: search_result.best_move,
@@ -50,6 +57,7 @@ impl Engine {
             depth_reached: search_result.depth_reached,
             stats: context.stats,
             pv: Vec::new(), // TODO: Implement principal variation
+            elapsed,
         }
     }
 }

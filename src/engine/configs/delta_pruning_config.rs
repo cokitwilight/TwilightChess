@@ -1,4 +1,4 @@
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct DeltaPruneConfig {
     pub enabled: bool,
 

@@ -1,4 +1,4 @@
-use std::ops::Sub;
+use std::ops::{AddAssign, Sub};
 
 use num_format::{Locale, ToFormattedString};
 
@@ -431,6 +431,47 @@ impl Sub for SearchStats {
                 .insufficient_returns
                 .saturating_sub(rhs.insufficient_returns),
         }
+    }
+}
+
+impl AddAssign for SearchStats {
+    fn add_assign(&mut self, rhs: SearchStats) {
+        self.nodes += rhs.nodes;
+        self.qnodes += rhs.qnodes;
+
+        self.beta_cutoffs += rhs.beta_cutoffs;
+        self.stand_pat_cutoffs += rhs.stand_pat_cutoffs;
+
+        self.moves_searched += rhs.moves_searched;
+        self.qmoves_searched += rhs.qmoves_searched;
+
+        self.illegal_moves += rhs.illegal_moves;
+        self.qillegal_moves += rhs.qillegal_moves;
+
+        self.aspiration_w_fail_high += rhs.aspiration_w_fail_high;
+        self.aspiration_w_fail_low += rhs.aspiration_w_fail_low;
+
+        self.tt += rhs.tt;
+        self.qtt += rhs.qtt;
+
+        self.killer_cutoffs += rhs.killer_cutoffs;
+        self.history_cutoffs += rhs.history_cutoffs;
+
+        self.lmr_attempts += rhs.lmr_attempts;
+        self.lmr_researched += rhs.lmr_researched;
+
+        self.rfp_attempts += rhs.rfp_attempts;
+        self.rfp_cutoffs += rhs.rfp_cutoffs;
+
+        self.null_attempts += rhs.null_attempts;
+        self.null_cutoffs += rhs.null_cutoffs;
+
+        self.delta_prunes += rhs.delta_prunes;
+        self.see_prunes += rhs.see_prunes;
+
+        self.repetition_returns += rhs.repetition_returns;
+        self.fifty_returns += rhs.fifty_returns;
+        self.insufficient_returns += rhs.insufficient_returns;
     }
 }
 

@@ -2,7 +2,7 @@ use crate::engine::configs::{
     AspirationConfig, DeltaPruneConfig, LMRConfig, NullMoveConfig, RFPConfig, SEEConfig,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct SearchConfig {
     pub aspiration: AspirationConfig,
     pub null_move: NullMoveConfig,

@@ -2,8 +2,8 @@ use crate::board::{Board, Move, MoveType};
 use crate::engine::Engine;
 use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
-// use crate::engine::ordering::see;
 use crate::engine::ordering::see;
+use crate::engine::search::search::is_insufficient_material;
 use crate::engine::tt::{TTEntry, TTFlag};
 use crate::eval::{evaluation_for_turn, lazy_eval_for_turn};
 use crate::types::PieceType;
@@ -32,6 +32,11 @@ impl Engine {
         }
         if board.halfmove_clock() >= 100 {
             context.stats.fifty_returns += 1;
+            return 0;
+        }
+
+        if board.phase() < 8 && is_insufficient_material(&board) {
+            context.stats.insufficient_returns += 1;
             return 0;
         }
 
@@ -229,13 +234,6 @@ impl Engine {
             let undo = board.make_move(*mv);
 
             let child_hash = board.hash();
-
-            // if board.in_check(side_to_move) {
-            //     // illegal move
-            //     context.stats.qillegal_moves += 1;
-            //     board.undo_move(undo);
-            //     continue;
-            // }
 
             context.repetition_history.push(child_hash);
 

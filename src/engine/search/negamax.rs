@@ -3,6 +3,7 @@ use crate::engine::Engine;
 use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::pruning::lmr_reduction;
+use crate::engine::search::search::is_insufficient_material;
 use crate::engine::tt::{TTEntry, TTFlag};
 use crate::eval::evaluation_for_turn;
 
@@ -20,6 +21,10 @@ impl Engine {
     ) -> i32 {
         context.stats.nodes += 1;
 
+        if depth == 0 {
+            return self.quiescence(board, context, context.limits.max_q_depth, alpha, beta, ply);
+        }
+
         // ADD DRAWING LOGIC HERE
 
         if Engine::repetition_in_search(context, board.hash(), board.halfmove_clock() as usize) {
@@ -33,10 +38,9 @@ impl Engine {
             return 0;
         }
 
-        // add insufficient material check here
-
-        if depth == 0 {
-            return self.quiescence(board, context, context.limits.max_q_depth, alpha, beta, ply);
+        if board.phase() < 8 && is_insufficient_material(&board) {
+            context.stats.insufficient_returns += 1;
+            return 0;
         }
 
         let original_alpha = alpha;

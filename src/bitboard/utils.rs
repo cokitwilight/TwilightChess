@@ -86,6 +86,11 @@ pub fn file_of(sq: Square) -> u8 {
     sq % 8
 }
 
+#[inline]
+pub fn file_char(sq: Square) -> char {
+    char::from(b'a' + file_of(sq))
+}
+
 pub fn file_mask(file: u8) -> Bitboard {
     match file {
         0 => FILE_A,
@@ -108,6 +113,11 @@ pub fn rank_of(sq: Square) -> u8 {
 }
 
 #[inline]
+pub fn rank_char(sq: Square) -> char {
+    char::from(b'1' + rank_of(sq))
+}
+
+#[inline]
 pub fn square(file: u8, rank: u8) -> Square {
     debug_assert!(file < 8);
     debug_assert!(rank < 8);
@@ -115,11 +125,8 @@ pub fn square(file: u8, rank: u8) -> Square {
 }
 
 pub fn square_to_algebraic(sq: Square) -> String {
-    let file = file_of(sq);
-    let rank = rank_of(sq);
-
-    let file_char = (b'a' + file) as char;
-    let rank_char = (b'1' + rank) as char;
+    let file_char = file_char(sq);
+    let rank_char = rank_char(sq);
 
     format!("{}{}", file_char, rank_char)
 }

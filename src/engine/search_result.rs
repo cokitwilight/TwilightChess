@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::board::Move;
 use crate::engine::SearchStats;
 
@@ -9,4 +11,5 @@ pub struct SearchResult {
     pub depth_reached: usize,
     pub stats: SearchStats,
     pub pv: Vec<Move>,
+    pub elapsed: Duration,
 }

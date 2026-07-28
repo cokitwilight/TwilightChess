@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
@@ -15,12 +15,14 @@ impl Engine {
         board: &mut Board,
         ctx: &mut SearchContext,
     ) -> SearchResult {
+        let full_start = Instant::now();
         let mut best_result = SearchResult {
             best_move: None,
             eval: 0,
             depth_reached: 0,
             stats: SearchStats::default(),
             pv: Vec::new(),
+            elapsed: full_start.elapsed(),
         };
 
         let mut total_time: f64 = 0.0;
@@ -191,6 +193,7 @@ impl Engine {
 
             best_result = result;
             best_result.depth_reached = depth;
+            best_result.elapsed = full_start.elapsed()
         }
 
         let total_nps = if total_time > 0.0 {
@@ -300,6 +303,7 @@ impl Engine {
                 depth_reached: depth,
                 stats: ctx.stats,
                 pv: best_pv,
+                elapsed: Duration::ZERO,
             };
         }
 
@@ -315,6 +319,7 @@ impl Engine {
                 depth_reached: depth,
                 stats: ctx.stats,
                 pv: best_pv,
+                elapsed: Duration::ZERO,
             };
         }
 
@@ -342,6 +347,7 @@ impl Engine {
             depth_reached: depth,
             stats: ctx.stats,
             pv: best_pv, // TODO: Implement principal variation
+            elapsed: Duration::ZERO,
         }
     }
 }

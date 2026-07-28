@@ -1,8 +1,9 @@
-use crate::engine::configs::SearchConfig;
+use crate::engine::{SearchLimits, configs::SearchConfig};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct EngineConfig {
     pub search: SearchConfig,
+    pub limits: SearchLimits,
     // pub eval: EvaluationConfig,
     pub tt_size: usize, // In MB
     pub qtt_size: usize, // In MB
@@ -14,7 +15,8 @@ impl Default for EngineConfig {
     fn default() -> Self {
         Self {
             search: SearchConfig::default(),
-            tt_size: 64,
+            limits: SearchLimits::depth(8, 6),
+            tt_size: 512,
             qtt_size: 64,
         }
     }

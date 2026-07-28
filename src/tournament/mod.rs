@@ -5,3 +5,6 @@ pub mod opening_suite;
 pub mod players;
 pub mod results;
 pub mod tournament;
+
+pub use players::MatchPlayers;
+pub use results::GameRecord;

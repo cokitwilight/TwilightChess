@@ -1,4 +1,4 @@
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct LMRConfig {
     pub enabled: bool,
     // add different values here
