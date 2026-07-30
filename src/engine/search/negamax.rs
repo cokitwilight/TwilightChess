@@ -4,7 +4,7 @@ use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::pruning::lmr_reduction;
 use crate::engine::search::search::is_insufficient_material;
-use crate::engine::tt::{TTEntry, TTFlag};
+use crate::engine::tt::{TTEntry, TTFlag, TTNodeType};
 use crate::eval::evaluation_for_turn;
 
 impl Engine {
@@ -13,7 +13,7 @@ impl Engine {
         &mut self,
         board: &mut Board,
         context: &mut SearchContext,
-        depth: usize,
+        depth: u16,
         mut alpha: i32,
         mut beta: i32,
         ply: usize,
@@ -53,15 +53,11 @@ impl Engine {
         context.stats.tt.probes += 1;
 
         if let Some(entry) = self.tt.get(board.hash) {
-            debug_assert_eq!(
-                entry.hash, board.hash,
-                "TT hash mismatch: key matched but entry.hash differed. negamax.rs"
-            );
             context.stats.tt.hits += 1;
 
             tt_best_move = entry.best_move;
 
-            if entry.depth >= depth {
+            if entry.depth >= depth && entry.node_type == TTNodeType::Main {
                 context.stats.tt.usable += 1;
 
                 match entry.flag {
@@ -83,42 +79,45 @@ impl Engine {
             }
         }
 
-        // reverse futility pruning
-        if !in_check
+        let mut static_eval: Option<i32> = None;
+
+        let can_rfp = !in_check
             && self.config.search.rfp.enabled
             && beta == alpha + 1
             && beta.abs() < CHECKMATE_SCORE - 1000
             && ply > 0
             && board.phase() >= self.config.search.rfp.min_phase
-            && depth <= self.config.search.rfp.max_depth
-        {
+            && depth <= self.config.search.rfp.max_depth;
+
+        // reverse futility pruning
+        if can_rfp {
             context.stats.rfp_attempts += 1;
 
             let margin = self.config.search.rfp.margin_factor * depth as i32;
             // dynamic RFP margin
 
-            let static_eval = evaluation_for_turn(board);
+            let eval = evaluation_for_turn(board);
 
-            if static_eval - margin >= beta {
+            if eval - margin >= beta {
                 context.stats.rfp_cutoffs += 1;
                 return beta;
+            } else {
+                static_eval = Some(eval);
             }
         }
 
         // null move here
         // 4 is a placeholder for now
         // use phase for now. Might not be viable though
-        let null_enabled = self.config.search.null_move.enabled;
-        let min_null_depth = self.config.search.null_move.minimum_depth;
-        let min_null_phase = self.config.search.null_move.minimum_phase;
 
-        if allow_null_move
-            && null_enabled
+        let can_null_prune = self.config.search.null_move.enabled
+            && allow_null_move
             && !in_check
-            && depth >= min_null_depth
-            && board.phase >= min_null_phase
-            && beta < CHECKMATE_SCORE - 1000
-        {
+            && depth >= self.config.search.null_move.minimum_depth
+            && board.phase >= self.config.search.null_move.minimum_phase
+            && beta < CHECKMATE_SCORE - 1000;
+
+        if can_null_prune {
             context.stats.null_attempts += 1;
             let reduction = null_move_reduction(depth);
 
@@ -164,7 +163,29 @@ impl Engine {
         let mut did_cutoff = false;
 
         for (move_index, mv) in moves.iter().enumerate() {
-            let currently_in_check = board.in_check(side_to_move);
+            let is_quiet = (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
+                && mv.promotion.is_none();
+
+            let can_rfp = move_index != 0
+                && self.config.search.fut.enabled
+                && depth <= self.config.search.fut.max_depth
+                && !in_check
+                && is_quiet
+                && alpha.abs() < CHECKMATE_SCORE - 1000
+                && legal_moves > 0;
+
+            if can_rfp {
+                let margin = depth * self.config.search.fut.margin;
+
+                let eval = match static_eval {
+                    Some(e) => e,
+                    None => evaluation_for_turn(board),
+                };
+
+                if eval + margin as i32 <= alpha {
+                    continue;
+                }
+            }
 
             let undo = board.make_move(*mv);
 
@@ -181,15 +202,12 @@ impl Engine {
 
             let gives_check = board.in_check(side_to_move.opposite());
 
-            let reduction = if (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
-                && !currently_in_check
-                && !gives_check
-                && self.config.search.lmr.enabled
-            {
-                lmr_reduction(depth, move_index)
-            } else {
-                0
-            };
+            let reduction =
+                if is_quiet && !in_check && !gives_check && self.config.search.lmr.enabled {
+                    lmr_reduction(depth, move_index)
+                } else {
+                    0
+                };
 
             let mut eval: i32;
 
@@ -269,11 +287,11 @@ impl Engine {
         self.tt.insert(
             board.hash,
             TTEntry {
-                hash: board.hash,
                 depth,
                 eval: max_eval,
                 best_move,
                 flag,
+                node_type: TTNodeType::Main,
             },
         );
 

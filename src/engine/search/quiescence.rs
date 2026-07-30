@@ -4,7 +4,7 @@ use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::ordering::see;
 use crate::engine::search::search::is_insufficient_material;
-use crate::engine::tt::{TTEntry, TTFlag};
+use crate::engine::tt::{TTEntry, TTFlag, TTNodeType};
 use crate::eval::{evaluation_for_turn, lazy_eval_for_turn};
 use crate::types::PieceType;
 
@@ -17,7 +17,7 @@ impl Engine {
         &mut self,
         board: &mut Board,
         context: &mut SearchContext,
-        depth: usize,
+        depth: u16,
         mut alpha: i32,
         mut beta: i32,
         ply: usize,
@@ -49,16 +49,11 @@ impl Engine {
 
         context.stats.qtt.probes += 1;
 
-        if let Some(entry) = self.qtt.get(hash) {
-            debug_assert_eq!(
-                entry.hash, hash,
-                "QTT hash mismatch: key matched but entry.hash differed"
-            );
-
+        if let Some(entry) = self.tt.get(hash) {
             context.stats.qtt.hits += 1;
             tt_best_move = entry.best_move;
 
-            if entry.depth >= depth {
+            if entry.depth >= depth && entry.node_type == TTNodeType::Quiescence {
                 context.stats.qtt.usable += 1;
 
                 match entry.flag {
@@ -95,14 +90,14 @@ impl Engine {
             if evasions.is_empty() {
                 let score = -CHECKMATE_SCORE + ply as i32;
                 context.stats.qtt.stores += 1;
-                self.qtt.insert(
+                self.tt.insert(
                     hash,
                     TTEntry {
-                        hash,
                         depth,
                         eval: score,
                         best_move: None,
                         flag: TTFlag::Exact,
+                        node_type: TTNodeType::Quiescence,
                     },
                 );
                 return score;
@@ -121,14 +116,14 @@ impl Engine {
                 };
 
                 context.stats.qtt.stores += 1;
-                self.qtt.insert(
+                self.tt.insert(
                     hash,
                     TTEntry {
-                        hash,
                         depth,
                         eval: score,
                         best_move: None,
                         flag,
+                        node_type: TTNodeType::Quiescence,
                     },
                 );
                 return score;
@@ -150,14 +145,14 @@ impl Engine {
             if stand_pat >= beta {
                 context.stats.stand_pat_cutoffs += 1;
                 context.stats.qtt.stores += 1;
-                self.qtt.insert(
+                self.tt.insert(
                     hash,
                     TTEntry {
-                        hash,
                         depth,
                         eval: stand_pat,
                         best_move: None,
                         flag: TTFlag::LowerBound,
+                        node_type: TTNodeType::Quiescence,
                     },
                 );
 
@@ -170,14 +165,14 @@ impl Engine {
 
             if depth == 0 {
                 context.stats.qtt.stores += 1;
-                self.qtt.insert(
+                self.tt.insert(
                     hash,
                     TTEntry {
-                        hash,
                         depth,
                         eval: stand_pat,
                         best_move: None,
                         flag: TTFlag::Exact,
+                        node_type: TTNodeType::Quiescence,
                     },
                 );
                 return stand_pat;
@@ -256,14 +251,14 @@ impl Engine {
 
             if score >= beta {
                 context.stats.qtt.stores += 1;
-                self.qtt.insert(
+                self.tt.insert(
                     hash,
                     TTEntry {
-                        hash,
                         depth,
                         eval: score,
                         best_move,
                         flag: TTFlag::LowerBound,
+                        node_type: TTNodeType::Quiescence,
                     },
                 );
                 return score;
@@ -279,14 +274,14 @@ impl Engine {
         };
 
         context.stats.qtt.stores += 1;
-        self.qtt.insert(
+        self.tt.insert(
             hash,
             TTEntry {
-                hash,
                 depth,
                 eval: best_score,
                 best_move,
                 flag,
+                node_type: TTNodeType::Quiescence,
             },
         );
 

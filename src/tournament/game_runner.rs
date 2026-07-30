@@ -180,17 +180,14 @@ mod tests {
     #[ignore]
     pub fn test_game_2() {
         let players =
-            MatchPlayers::from_depth("white".to_string(), "black".to_string(), 14, 8, 14, 8);
+            MatchPlayers::from_depth("white".to_string(), "black".to_string(), 10, 8, 6, 7);
 
         let game_record = match run_game(STARTPOS_FEN.to_string(), players.clone()) {
             Ok(g) => g,
             Err(msg) => panic!("{msg}"),
         };
 
-        println!(
-            "Result: {:?}\n",
-            game_record.result.expect("No result in test_game_1")
-        );
+        
 
         println!("White Bot -- {}", players.white.name);
         game_record
@@ -233,6 +230,11 @@ mod tests {
 
         println!("");
 
+        println!(
+            "Result: {:?}\n",
+            game_record.result.expect("No result in test_game_1")
+        );
+
         let metadata = PgnMetadata {
             event: "Engine Test".to_string(),
             site: "Local".to_string(),
@@ -245,5 +247,7 @@ mod tests {
         let pgn_text = game_to_pgn(&game_record.game, &metadata).expect("Game Failed");
 
         println!("{pgn_text}");
+
+        println!("");
     }
 }

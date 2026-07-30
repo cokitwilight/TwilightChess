@@ -8,7 +8,7 @@ use crate::engine::SearchStats;
 pub struct SearchResult {
     pub best_move: Option<Move>,
     pub eval: i32,
-    pub depth_reached: usize,
+    pub depth_reached: u16,
     pub stats: SearchStats,
     pub pv: Vec<Move>,
     pub elapsed: Duration,

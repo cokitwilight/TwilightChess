@@ -7,11 +7,17 @@ pub enum TTFlag {
     UpperBound,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TTNodeType {
+    Main,
+    Quiescence,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct TTEntry {
-    pub hash: u64,
-    pub depth: usize,
+    pub depth: u16,
     pub eval: i32,
     pub best_move: Option<Move>,
     pub flag: TTFlag,
+    pub node_type: TTNodeType,
 }

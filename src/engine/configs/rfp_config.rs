@@ -2,7 +2,7 @@
 pub struct RFPConfig {
     pub enabled: bool,
 
-    pub max_depth: usize,
+    pub max_depth: u16,
 
     pub min_phase: i32,
 

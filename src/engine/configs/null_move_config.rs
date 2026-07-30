@@ -2,7 +2,7 @@
 pub struct NullMoveConfig {
     pub enabled: bool,
 
-    pub minimum_depth: usize,
+    pub minimum_depth: u16,
     pub minimum_phase: i32,
     // Add more if needed
 }

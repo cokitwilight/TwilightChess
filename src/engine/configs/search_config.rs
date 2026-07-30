@@ -1,5 +1,6 @@
 use crate::engine::configs::{
-    AspirationConfig, DeltaPruneConfig, LMRConfig, NullMoveConfig, RFPConfig, SEEConfig,
+    AspirationConfig, DeltaPruneConfig, FutilityConfig, LMRConfig, NullMoveConfig, RFPConfig,
+    SEEConfig,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -10,7 +11,7 @@ pub struct SearchConfig {
     pub lmr: LMRConfig,
     pub see: SEEConfig,
     pub rfp: RFPConfig,
-    // etc
+    pub fut: FutilityConfig, // etc
 }
 
 impl Default for SearchConfig {
@@ -22,6 +23,7 @@ impl Default for SearchConfig {
             lmr: LMRConfig::default(),
             see: SEEConfig::default(),
             rfp: RFPConfig::default(),
+            fut: FutilityConfig::default(),
         }
     }
 }

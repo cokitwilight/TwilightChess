@@ -75,7 +75,7 @@ impl SearchStats {
         }
     }
 
-    pub fn print_all(&self, depth: usize, elapsed_secs: f64) {
+    pub fn print_all(&self, depth: u16, elapsed_secs: f64) {
         println!();
         println!("Depth {}", depth);
         println!("────────────────────────────────────────────");
@@ -373,10 +373,10 @@ impl SearchStats {
         }
         println!("Transposition Tables");
 
-        println!("  Negamax TT");
+        println!("Global TT - Negamax");
         self.tt.print_stats_indented("    ");
 
-        println!("  Quiescence TT");
+        println!("Global TT - Quiescence");
         self.qtt.print_stats_indented("    ");
     }
 }

@@ -24,7 +24,7 @@ impl HistoryTable {
         self.table[color as usize][from as usize][to as usize]
     }
 
-    pub fn add_bonus(&mut self, color: Color, from: Square, to: Square, depth: usize) {
+    pub fn add_bonus(&mut self, color: Color, from: Square, to: Square, depth: u16) {
         let bonus = (depth * depth) as i32;
         self.table[color as usize][from as usize][to as usize] += bonus;
     }

@@ -1,14 +1,14 @@
 #[derive(Clone, Copy, Debug)]
 pub struct SearchLimits {
-    pub max_depth: usize,
-    pub max_q_depth: usize,
+    pub max_depth: u16,
+    pub max_q_depth: u16,
     pub max_nodes: Option<u64>,
     pub soft_time_limit_ms: Option<u64>,
     pub hard_time_limit_ms: Option<u64>,
 }
 
 impl SearchLimits {
-    pub fn depth(max_depth: usize, max_q_depth: usize) -> Self {
+    pub fn depth(max_depth: u16, max_q_depth: u16) -> Self {
         Self {
             max_depth,
             max_q_depth,
@@ -18,7 +18,7 @@ impl SearchLimits {
         }
     }
 
-    pub fn depth_and_time(max_depth: usize, max_q_depth: usize, time_limit_ms: u64) -> Self {
+    pub fn depth_and_time(max_depth: u16, max_q_depth: u16, time_limit_ms: u64) -> Self {
         Self {
             max_depth,
             max_q_depth,

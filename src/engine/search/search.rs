@@ -47,6 +47,8 @@ impl Engine {
 
         // context.limits.max_depth = adjusted_depth;
 
+        self.tt.new_search();
+
         let search_result = self.iterative_deepening(&mut board, &mut context);
 
         let elapsed = start.elapsed();

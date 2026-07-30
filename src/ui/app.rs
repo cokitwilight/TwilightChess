@@ -13,8 +13,8 @@ use crate::ui::bot_thread::{BotSearchRequest, BotSearchResponse};
 
 use eframe::egui;
 
-const DEFAULT_BOT_DEPTH: usize = 10;
-const DEFAULT_Q_BOT_DEPTH: usize = 8;
+const DEFAULT_BOT_DEPTH: u16 = 10;
+const DEFAULT_Q_BOT_DEPTH: u16 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {

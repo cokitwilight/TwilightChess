@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
+use crate::engine::tt::entry::TTNodeType;
 use crate::engine::tt::{TTEntry, TTFlag};
 use crate::engine::{Engine, SearchContext, SearchResult};
 
@@ -218,7 +219,7 @@ impl Engine {
         board: &mut Board,
         ctx: &mut SearchContext,
         previous_best_move: Option<Move>,
-        depth: usize,
+        depth: u16,
         mut alpha: i32,
         beta: i32,
     ) -> SearchResult {
@@ -333,11 +334,11 @@ impl Engine {
         self.tt.insert(
             root_hash,
             TTEntry {
-                hash: root_hash,
                 eval: best_eval,
-                depth,
+                depth: depth as u16,
                 flag,
                 best_move,
+                node_type: TTNodeType::Main,
             },
         );
 
