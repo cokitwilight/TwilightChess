@@ -34,6 +34,9 @@ pub struct SearchStats {
     pub rfp_attempts: u64,
     pub rfp_cutoffs: u64,
 
+    pub fut_attempts: u64,
+    pub fut_cutoffs: u64,
+
     pub null_attempts: u64,
     pub null_cutoffs: u64,
 
@@ -262,8 +265,9 @@ impl SearchStats {
         let has_null = self.null_attempts > 0 || self.null_cutoffs > 0;
         let has_q_prunes = self.delta_prunes > 0 || self.see_prunes > 0;
         let has_rfp_prunes = self.rfp_attempts > 0 || self.rfp_cutoffs > 0;
+        let has_fut_prunes = self.fut_attempts > 0 || self.fut_cutoffs > 0;
 
-        if !has_lmr && !has_null && !has_q_prunes && !has_rfp_prunes {
+        if !has_lmr && !has_null && !has_q_prunes && !has_rfp_prunes && !has_fut_prunes {
             return;
         }
 
@@ -336,6 +340,19 @@ impl SearchStats {
                 "  {:<22} {:>14}",
                 "RFP cutoffs:",
                 Self::fmt(self.rfp_cutoffs)
+            );
+        }
+
+        if has_fut_prunes {
+            println!(
+                "  {:<22} {:>14}",
+                "Futility attempts:",
+                Self::fmt(self.fut_attempts)
+            );
+            println!(
+                "  {:<22} {:>14}",
+                "Futility cutoffs:",
+                Self::fmt(self.fut_cutoffs)
             );
         }
     }
@@ -417,6 +434,9 @@ impl Sub for SearchStats {
             rfp_attempts: self.rfp_attempts.saturating_sub(rhs.rfp_attempts),
             rfp_cutoffs: self.rfp_cutoffs.saturating_sub(rhs.rfp_cutoffs),
 
+            fut_attempts: self.fut_attempts.saturating_sub(rhs.fut_attempts),
+            fut_cutoffs: self.fut_cutoffs.saturating_sub(rhs.fut_cutoffs),
+
             null_attempts: self.null_attempts.saturating_sub(rhs.null_attempts),
             null_cutoffs: self.null_cutoffs.saturating_sub(rhs.null_cutoffs),
 
@@ -462,6 +482,9 @@ impl AddAssign for SearchStats {
 
         self.rfp_attempts += rhs.rfp_attempts;
         self.rfp_cutoffs += rhs.rfp_cutoffs;
+
+        self.fut_attempts += rhs.fut_attempts;
+        self.fut_cutoffs += rhs.fut_cutoffs;
 
         self.null_attempts += rhs.null_attempts;
         self.null_cutoffs += rhs.null_cutoffs;

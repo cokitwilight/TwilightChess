@@ -244,6 +244,428 @@ pub fn build_opening_book() -> OpeningBook {
         6,
     );
 
+    // -------------------------------------------------------------------------
+    // Additional 1.e4 e5 openings
+    // -------------------------------------------------------------------------
+
+    // Petrov Defense
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "e7e5", "g1f3", "g8f6", "f3e5", "d7d6", "e5f3", "f6e4", "d2d4", "d6d5", "f1d3",
+            "f8e7", "e1g1", "e8g8",
+        ],
+        3,
+    );
+
+    // Four Knights Game
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "e7e5", "g1f3", "b8c6", "b1c3", "g8f6", "f1b5", "f8b4", "e1g1", "e8g8", "d2d3",
+            "d7d6",
+        ],
+        3,
+    );
+
+    // Philidor Defense
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "e7e5", "g1f3", "d7d6", "d2d4", "e5d4", "f3d4", "g8f6", "b1c3", "f8e7", "f1e2",
+            "e8g8", "e1g1",
+        ],
+        2,
+    );
+
+    // -------------------------------------------------------------------------
+    // Hypermodern and unusual responses to 1.e4
+    // -------------------------------------------------------------------------
+
+    // Pirc Defense: Austrian Attack
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "d7d6", "d2d4", "g8f6", "b1c3", "g7g6", "f2f4", "f8g7", "g1f3", "e8g8", "f1d3",
+        ],
+        4,
+    );
+
+    // Modern Defense
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "g7g6", "d2d4", "f8g7", "b1c3", "d7d6", "f2f4", "a7a6", "g1f3", "b7b5",
+        ],
+        3,
+    );
+
+    // Alekhine Defense
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "g8f6", "e4e5", "f6d5", "d2d4", "d7d6", "g1f3", "d6e5", "f3e5",
+        ],
+        3,
+    );
+
+    // Scandinavian Defense
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "d7d5", "e4d5", "d8d5", "b1c3", "d5d8", "d2d4", "g8f6", "g1f3",
+        ],
+        3,
+    );
+
+    // -------------------------------------------------------------------------
+    // Additional French and Caro-Kann structures
+    // -------------------------------------------------------------------------
+
+    // French Defense: Advance Variation
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "e7e6", "d2d4", "d7d5", "e4e5", "c7c5", "c2c3", "b8c6", "g1f3", "d8b6", "f1d3",
+        ],
+        4,
+    );
+
+    // French Defense: Winawer Variation
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "e7e6", "d2d4", "d7d5", "b1c3", "f8b4", "e4e5", "c7c5", "a2a3", "b4c3", "b2c3",
+            "g8e7",
+        ],
+        4,
+    );
+
+    // Caro-Kann: Advance Variation
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "c7c6", "d2d4", "d7d5", "e4e5", "c8f5", "g1f3", "e7e6", "f1e2", "c6c5", "e1g1",
+            "b8c6",
+        ],
+        4,
+    );
+
+    // Caro-Kann: Panov Attack
+    // Often produces an isolated queen pawn or hanging-pawn structure.
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "c7c6", "d2d4", "d7d5", "e4d5", "c6d5", "c2c4", "g8f6", "b1c3", "e7e6", "g1f3",
+            "f8e7",
+        ],
+        4,
+    );
+
+    // -------------------------------------------------------------------------
+    // Additional Sicilian structures
+    // -------------------------------------------------------------------------
+
+    // Sicilian Sveshnikov
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "c7c5", "g1f3", "b8c6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "e7e5", "d4b5",
+            "d7d6", "c1g5", "a7a6", "b5a3", "b7b5",
+        ],
+        5,
+    );
+
+    // Classical Sicilian: Richter-Rauzer
+    // Produces opposite-side castling and direct attacks.
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "b8c6", "c1g5",
+            "e7e6", "d1d2", "f8e7", "e1c1",
+        ],
+        5,
+    );
+
+    // Sicilian Alapin
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "c7c5", "c2c3", "g8f6", "e4e5", "f6d5", "d2d4", "c5d4", "g1f3", "b8c6", "c3d4",
+            "d7d6",
+        ],
+        3,
+    );
+
+    // Closed Sicilian
+    book.add_line(
+        &start,
+        &[
+            "e2e4", "c7c5", "b1c3", "b8c6", "g2g3", "g7g6", "f1g2", "f8g7", "d2d3", "d7d6", "f2f4",
+            "e7e5",
+        ],
+        4,
+    );
+
+    // -------------------------------------------------------------------------
+    // Queen's Gambit family
+    // -------------------------------------------------------------------------
+
+    // Queen's Gambit Accepted
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "d7d5", "c2c4", "d5c4", "g1f3", "g8f6", "e2e3", "e7e6", "f1c4", "c7c5", "e1g1",
+            "a7a6",
+        ],
+        4,
+    );
+
+    // Slav Defense
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "d7d5", "c2c4", "c7c6", "g1f3", "g8f6", "b1c3", "d5c4", "a2a4", "c8f5", "e2e3",
+            "e7e6", "f1c4", "f8b4",
+        ],
+        4,
+    );
+
+    // Semi-Slav Defense
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "g1f3", "c7c6", "e2e3", "b8d7", "f1d3",
+            "d5c4", "d3c4", "b7b5",
+        ],
+        4,
+    );
+
+    // Queen's Gambit Declined: Exchange Variation
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c4d5", "e6d5", "c1g5", "c7c6", "e2e3",
+            "c8f5",
+        ],
+        3,
+    );
+
+    // Tarrasch Defense
+    // Frequently creates an isolated black queen pawn.
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "c7c5", "c4d5", "e6d5", "g1f3", "b8c6", "g2g3",
+            "g8f6",
+        ],
+        3,
+    );
+
+    // Catalan Opening
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "g8f6", "c2c4", "e7e6", "g2g3", "d7d5", "f1g2", "f8e7", "g1f3", "e8g8", "e1g1",
+            "d5c4", "d1c2", "a7a6",
+        ],
+        4,
+    );
+
+    // -------------------------------------------------------------------------
+    // Indian defenses and asymmetrical 1.d4 positions
+    // -------------------------------------------------------------------------
+
+    // Nimzo-Indian Defense
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "g8f6", "c2c4", "e7e6", "b1c3", "f8b4", "e2e3", "e8g8", "f1d3", "d7d5", "g1f3",
+            "c7c5", "e1g1",
+        ],
+        5,
+    );
+
+    // Queen's Indian Defense
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "g8f6", "c2c4", "e7e6", "g1f3", "b7b6", "g2g3", "c8a6", "b2b3", "f8b4", "c1d2",
+            "b4e7", "f1g2",
+        ],
+        4,
+    );
+
+    // Grünfeld Defense: Exchange Variation
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "d7d5", "c4d5", "f6d5", "e2e4", "d5c3", "b2c3",
+            "f8g7",
+        ],
+        5,
+    );
+
+    // Modern Benoni
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "g8f6", "c2c4", "c7c5", "d4d5", "e7e6", "b1c3", "e6d5", "c4d5", "d7d6", "e2e4",
+            "g7g6", "f2f4", "f8g7",
+        ],
+        5,
+    );
+
+    // Benko Gambit
+    // Gives Black long-term queenside activity for a pawn.
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "g8f6", "c2c4", "c7c5", "d4d5", "b7b5", "c4b5", "a7a6", "b5a6", "g7g6", "b1c3",
+            "c8a6",
+        ],
+        5,
+    );
+
+    // King's Indian: Sämisch Variation
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6", "f2f3", "e8g8", "c1e3",
+            "e7e5", "d4d5",
+        ],
+        4,
+    );
+
+    // Budapest Gambit
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "g8f6", "c2c4", "e7e5", "d4e5", "f6g4", "g1f3", "b8c6", "c1f4", "f8b4", "b1d2",
+            "d8e7",
+        ],
+        4,
+    );
+
+    // Dutch Defense: Leningrad
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "f7f5", "g2g3", "g8f6", "f1g2", "g7g6", "g1f3", "f8g7", "e1g1", "e8g8", "c2c4",
+            "d7d6", "b1c3",
+        ],
+        4,
+    );
+
+    // -------------------------------------------------------------------------
+    // Independent 1.d4 systems
+    // -------------------------------------------------------------------------
+
+    // London System
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "d7d5", "g1f3", "g8f6", "c1f4", "e7e6", "e2e3", "f8d6", "f4g3", "e8g8", "f1d3",
+            "c7c5",
+        ],
+        3,
+    );
+
+    // Trompowsky Attack
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "g8f6", "c1g5", "f6e4", "g5f4", "d7d5", "e2e3", "c7c5", "f1d3", "b8c6",
+        ],
+        3,
+    );
+
+    // Jobava London
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "d7d5", "b1c3", "g8f6", "c1f4", "c7c5", "e2e3", "b8c6", "c3b5", "e7e5", "d4e5",
+        ],
+        3,
+    );
+
+    // Blackmar-Diemer Gambit
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "d7d5", "e2e4", "d5e4", "b1c3", "g8f6", "f2f3", "e4f3", "g1f3",
+        ],
+        3,
+    );
+
+    // Albin Countergambit
+    book.add_line(
+        &start,
+        &[
+            "d2d4", "d7d5", "c2c4", "e7e5", "d4e5", "d5d4", "g1f3", "b8c6", "a2a3", "c8e6",
+        ],
+        3,
+    );
+
+    // -------------------------------------------------------------------------
+    // Flank openings
+    // -------------------------------------------------------------------------
+
+    // English Opening: Symmetrical Variation
+    book.add_line(
+        &start,
+        &[
+            "c2c4", "c7c5", "b1c3", "b8c6", "g2g3", "g7g6", "f1g2", "f8g7", "g1f3", "e7e5", "e1g1",
+            "g8e7",
+        ],
+        4,
+    );
+
+    // English Opening: Botvinnik Setup
+    book.add_line(
+        &start,
+        &[
+            "c2c4", "e7e5", "b1c3", "b8c6", "g2g3", "g7g6", "f1g2", "f8g7", "e2e4", "d7d6", "g1e2",
+        ],
+        3,
+    );
+
+    // Réti Opening
+    book.add_line(
+        &start,
+        &[
+            "g1f3", "d7d5", "c2c4", "e7e6", "g2g3", "g8f6", "f1g2", "f8e7", "e1g1", "e8g8", "d2d4",
+        ],
+        4,
+    );
+
+    // King's Indian Attack
+    book.add_line(
+        &start,
+        &[
+            "g1f3", "d7d5", "g2g3", "g8f6", "f1g2", "e7e6", "e1g1", "f8e7", "d2d3", "e8g8", "b1d2",
+        ],
+        3,
+    );
+
+    // Bird Opening
+    book.add_line(
+        &start,
+        &[
+            "f2f4", "d7d5", "g1f3", "g8f6", "e2e3", "g7g6", "b2b3", "f8g7", "c1b2", "e8g8",
+        ],
+        2,
+    );
+
+    // Polish Opening / Sokolsky
+    book.add_line(
+        &start,
+        &[
+            "b2b4", "e7e5", "c1b2", "f8b4", "b2e5", "g8f6", "g1f3", "e8g8", "e2e3", "d7d5",
+        ],
+        2,
+    );
+
     book
 }
 

@@ -239,18 +239,10 @@ fn should_replace<Entry: TTReplace>(old: &Entry, new: &Entry) -> bool {
         }
     }
 
-    if new.depth() > old.depth() {
-        return true;
-    }
+    let old_value = i32::from(old.depth()) + old.replacement_bonus();
+    let new_value = i32::from(new.depth()) + new.replacement_bonus();
 
-    if new.depth() == old.depth() {
-        return new.replacement_bonus() >= old.replacement_bonus();
-    }
-
-    // Permit a slightly shallower but more valuable result,
-    // such as an exact entry replacing a bound.
-    new.replacement_bonus() > old.replacement_bonus()
-        && new.depth().saturating_add(2) >= old.depth()
+    new_value >= old_value
 }
 
 #[inline(always)]

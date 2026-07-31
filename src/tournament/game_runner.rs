@@ -4,12 +4,13 @@ use crate::board::Board;
 use crate::engine::Engine;
 use crate::game::{Game, GameState};
 use crate::tournament::results::GameResult::{Black, Draw, White};
-use crate::tournament::{GameRecord, MatchPlayers};
+use crate::tournament::{GameRecord, MatchPlayers, MoveRecord};
 use crate::types::Color;
+use crate::uci::pgn::{PgnMetadata, game_to_pgn};
 
 pub fn run_game(
     start_fen: String,
-    /* // opening_moves: Later  */ players: MatchPlayers,
+    /* // opening_moves: Vec<Move>  */ players: MatchPlayers,
 ) -> Result<GameRecord, String> {
     let mut game_record = GameRecord::new(start_fen.clone());
 
@@ -21,6 +22,7 @@ pub fn run_game(
     let mut game = Game::new();
     game.board = Board::from_fen(&start_fen)?;
 
+    // NOTE: This might be expensive as it allocates an entire new engine(with tt for example)
     let mut white = Engine::new(w_config.clone());
     let mut black = Engine::new(b_config.clone());
 
@@ -28,8 +30,20 @@ pub fn run_game(
     let mut b_count = 0;
 
     while game.state() == GameState::Ongoing {
-        if count >= 300 {
+        if count >= 600 {
             // likely infinite loop
+            let metadata = PgnMetadata {
+                event: "Engine Test".to_string(),
+                site: "Local".to_string(),
+                date: "2026.07.27".to_string(),
+                round: "1".to_string(),
+                white: "White".to_string(),
+                black: "Black".to_string(),
+            };
+
+            let pgn_text = game_to_pgn(&game, &metadata).expect("Game Failed");
+
+            println!("{pgn_text}");
             return Err("Likely Infinite Loop in Run Game".to_string());
         }
 
@@ -42,6 +56,18 @@ pub fn run_game(
             .best_move
             .expect("No best move in white.search in tournament/run_game");
         // game already keeps track of move history and repetition history
+
+        let mut eval = search_result.eval;
+
+        eval = match game.board.side_to_move() {
+            Color::White => eval,
+            Color::Black => -eval,
+        };
+
+        game_record.move_history.push(MoveRecord {
+            mv: best_move,
+            eval,
+        });
 
         match game.board.side_to_move() {
             Color::White => {
@@ -91,7 +117,6 @@ pub fn run_game(
         game_record.black_avg_time = Duration::ZERO;
     }
 
-    game_record.move_history = game.move_history.clone();
     game_record.game = game;
 
     Ok(game_record)
@@ -179,15 +204,21 @@ mod tests {
     #[test]
     #[ignore]
     pub fn test_game_2() {
-        let players =
-            MatchPlayers::from_depth("white".to_string(), "black".to_string(), 10, 8, 6, 7);
+        let mut players = MatchPlayers::from_depth(
+            "WithFutility".to_string(),
+            "black".to_string(),
+            14,
+            7,
+            14,
+            7,
+        );
+
+        players.white.config.search.fut.enabled = true;
 
         let game_record = match run_game(STARTPOS_FEN.to_string(), players.clone()) {
             Ok(g) => g,
             Err(msg) => panic!("{msg}"),
         };
-
-        
 
         println!("White Bot -- {}", players.white.name);
         game_record
@@ -230,17 +261,12 @@ mod tests {
 
         println!("");
 
-        println!(
-            "Result: {:?}\n",
-            game_record.result.expect("No result in test_game_1")
-        );
-
         let metadata = PgnMetadata {
             event: "Engine Test".to_string(),
             site: "Local".to_string(),
             date: "2026.07.27".to_string(),
             round: "1".to_string(),
-            white: "White".to_string(),
+            white: "WithFutility".to_string(),
             black: "Black".to_string(),
         };
 
@@ -249,5 +275,10 @@ mod tests {
         println!("{pgn_text}");
 
         println!("");
+
+        println!(
+            "Result: {:?}\n",
+            game_record.result.expect("No result in test_game_1")
+        );
     }
 }

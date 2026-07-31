@@ -1,19 +1,28 @@
 use std::time::Duration;
 
-use crate::{board::Move, engine::SearchStats, game::Game};
+use crate::board::Move;
+use crate::engine::SearchStats;
+use crate::game::Game;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GameResult {
     Draw,
     White,
     Black,
 }
 
+#[derive(Debug, Clone)]
+pub struct MoveRecord {
+    pub mv: Move,
+    pub eval: i32,
+}
+
+#[derive(Clone)]
 pub struct GameRecord {
     pub id: String,
     pub result: Option<GameResult>,
     pub start_fen: String,
-    pub move_history: Vec<Move>,
+    pub move_history: Vec<MoveRecord>,
     pub game: Game,
 
     // game stats

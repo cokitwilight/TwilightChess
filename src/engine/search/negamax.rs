@@ -1,10 +1,10 @@
 use crate::board::{Board, Move, MoveType, null_move_reduction};
-use crate::engine::Engine;
 use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::pruning::lmr_reduction;
 use crate::engine::search::search::is_insufficient_material;
-use crate::engine::tt::{TTEntry, TTFlag, TTNodeType};
+use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
+use crate::engine::{Engine, MATE_THRESHOLD};
 use crate::eval::evaluation_for_turn;
 
 impl Engine {
@@ -55,6 +55,8 @@ impl Engine {
         if let Some(entry) = self.tt.get(board.hash) {
             context.stats.tt.hits += 1;
 
+            let tt_score = score_from_tt(entry.eval, ply);
+
             tt_best_move = entry.best_move;
 
             if entry.depth >= depth && entry.node_type == TTNodeType::Main {
@@ -63,7 +65,7 @@ impl Engine {
                 match entry.flag {
                     TTFlag::Exact => {
                         context.stats.tt.exact_returns += 1;
-                        return entry.eval;
+                        return tt_score;
                     }
                     TTFlag::LowerBound => {
                         alpha = alpha.max(entry.eval);
@@ -74,7 +76,7 @@ impl Engine {
                 }
                 if alpha >= beta {
                     context.stats.tt.bound_cutoffs += 1;
-                    return entry.eval;
+                    return tt_score;
                 }
             }
         }
@@ -84,7 +86,7 @@ impl Engine {
         let can_rfp = !in_check
             && self.config.search.rfp.enabled
             && beta == alpha + 1
-            && beta.abs() < CHECKMATE_SCORE - 1000
+            && beta < MATE_THRESHOLD
             && ply > 0
             && board.phase() >= self.config.search.rfp.min_phase
             && depth <= self.config.search.rfp.max_depth;
@@ -115,7 +117,7 @@ impl Engine {
             && !in_check
             && depth >= self.config.search.null_move.minimum_depth
             && board.phase >= self.config.search.null_move.minimum_phase
-            && beta < CHECKMATE_SCORE - 1000;
+            && beta < MATE_THRESHOLD;
 
         if can_null_prune {
             context.stats.null_attempts += 1;
@@ -144,6 +146,7 @@ impl Engine {
         let mut moves = board.all_legal_moves();
 
         let mut legal_moves = 0;
+        let mut searched_moves = 0;
 
         let side_to_move = board.side_to_move();
 
@@ -162,49 +165,51 @@ impl Engine {
 
         let mut did_cutoff = false;
 
-        for (move_index, mv) in moves.iter().enumerate() {
-            let is_quiet = (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
-                && mv.promotion.is_none();
+        let can_rfp = self.config.search.fut.enabled
+            && depth <= self.config.search.fut.max_depth
+            && !in_check
+            && alpha.abs() < MATE_THRESHOLD;
 
-            let can_rfp = move_index != 0
-                && self.config.search.fut.enabled
-                && depth <= self.config.search.fut.max_depth
-                && !in_check
-                && is_quiet
-                && alpha.abs() < CHECKMATE_SCORE - 1000
-                && legal_moves > 0;
+        if can_rfp && static_eval.is_none() {
+            let eval = evaluation_for_turn(board);
+            static_eval = Some(eval);
+        }
 
-            if can_rfp {
+        for mv in moves.iter() {
+            let is_quiet = mv.kind == MoveType::Normal && mv.promotion.is_none();
+
+            let undo = board.make_move(*mv);
+
+            legal_moves += 1;
+
+            let gives_check = board.in_check(side_to_move.opposite());
+
+            if can_rfp && searched_moves > 0 && is_quiet && !gives_check {
+                context.stats.fut_attempts += 1;
                 let margin = depth * self.config.search.fut.margin;
 
-                let eval = match static_eval {
-                    Some(e) => e,
-                    None => evaluation_for_turn(board),
-                };
+                let eval = static_eval.expect("No available static eval in negamax!");
 
                 if eval + margin as i32 <= alpha {
+                    context.stats.fut_cutoffs += 1;
+                    board.undo_move(undo);
                     continue;
                 }
             }
 
-            let undo = board.make_move(*mv);
+            searched_moves += 1;
+            context.stats.moves_searched += 1;
 
             let child_hash = board.hash();
+            context.repetition_history.push(child_hash); // only store if valid move
 
             // for stats debugging
             let was_killer = context.killer_moves.contains(ply, *mv);
             let history_score = self.history.get(side_to_move, mv.from, mv.to);
 
-            context.stats.moves_searched += 1;
-            legal_moves += 1;
-
-            context.repetition_history.push(child_hash); // only store if valid move
-
-            let gives_check = board.in_check(side_to_move.opposite());
-
             let reduction =
                 if is_quiet && !in_check && !gives_check && self.config.search.lmr.enabled {
-                    lmr_reduction(depth, move_index)
+                    lmr_reduction(depth, searched_moves)
                 } else {
                     0
                 };
@@ -234,7 +239,6 @@ impl Engine {
             }
 
             context.repetition_history.pop();
-
             board.undo_move(undo);
 
             if eval > max_eval {
@@ -247,9 +251,6 @@ impl Engine {
             if alpha >= beta {
                 context.stats.beta_cutoffs += 1;
                 did_cutoff = true;
-
-                let is_quiet = (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
-                    && mv.promotion.is_none();
 
                 if is_quiet {
                     if was_killer {
@@ -288,7 +289,7 @@ impl Engine {
             board.hash,
             TTEntry {
                 depth,
-                eval: max_eval,
+                eval: score_to_tt(max_eval, ply),
                 best_move,
                 flag,
                 node_type: TTNodeType::Main,

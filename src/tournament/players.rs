@@ -59,4 +59,11 @@ impl MatchPlayers {
 
         Self { white, black }
     }
+
+    pub fn swap(&mut self) {
+        let temp_white = self.white.clone();
+
+        self.white = self.black.clone();
+        self.black = temp_white;
+    }
 }

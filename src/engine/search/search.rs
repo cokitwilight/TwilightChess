@@ -21,7 +21,7 @@ impl Engine {
         if let Some(book_mv) = self.get_book_move(&board) {
             // let piece = board.piece_at(book_mv.from).unwrap();
 
-            println!("Book Move");
+            // println!("Book Move");
             // println!(
             //     "Book Move: {:?} {} to {}. End Stats: nodes={}, qnodes={}",
             //     piece.kind,
@@ -49,7 +49,7 @@ impl Engine {
 
         self.tt.new_search();
 
-        let search_result = self.iterative_deepening(&mut board, &mut context);
+        let search_result = self.iterative_deepening(&mut board, &mut context, false);
 
         let elapsed = start.elapsed();
 

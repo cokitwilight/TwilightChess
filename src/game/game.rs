@@ -3,6 +3,7 @@ use crate::board::{Board, Move, MoveList, STARTPOS_FEN};
 use crate::engine::search::search::is_insufficient_material;
 use crate::game::GameState;
 
+#[derive(Clone)]
 pub struct Game {
     pub board: Board,
     pub state: GameState,

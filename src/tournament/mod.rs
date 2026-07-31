@@ -6,5 +6,6 @@ pub mod players;
 pub mod results;
 pub mod tournament;
 
+pub use game_runner::run_game;
 pub use players::MatchPlayers;
-pub use results::GameRecord;
+pub use results::*;

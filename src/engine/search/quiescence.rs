@@ -1,10 +1,10 @@
 use crate::board::{Board, Move, MoveType};
 use crate::engine::Engine;
 use crate::engine::SearchContext;
-use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
+use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
 use crate::engine::search::search::is_insufficient_material;
-use crate::engine::tt::{TTEntry, TTFlag, TTNodeType};
+use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::eval::{evaluation_for_turn, lazy_eval_for_turn};
 use crate::types::PieceType;
 
@@ -53,13 +53,15 @@ impl Engine {
             context.stats.qtt.hits += 1;
             tt_best_move = entry.best_move;
 
+            let tt_score = score_from_tt(entry.eval, ply);
+
             if entry.depth >= depth && entry.node_type == TTNodeType::Quiescence {
                 context.stats.qtt.usable += 1;
 
                 match entry.flag {
                     TTFlag::Exact => {
                         context.stats.qtt.exact_returns += 1;
-                        return entry.eval;
+                        return tt_score;
                     }
 
                     TTFlag::LowerBound => {
@@ -73,7 +75,7 @@ impl Engine {
 
                 if alpha >= beta {
                     context.stats.qtt.bound_cutoffs += 1;
-                    return entry.eval;
+                    return tt_score;
                 }
             }
         }
@@ -94,7 +96,7 @@ impl Engine {
                     hash,
                     TTEntry {
                         depth,
-                        eval: score,
+                        eval: score_to_tt(score, ply),
                         best_move: None,
                         flag: TTFlag::Exact,
                         node_type: TTNodeType::Quiescence,
@@ -120,7 +122,7 @@ impl Engine {
                     hash,
                     TTEntry {
                         depth,
-                        eval: score,
+                        eval: score_to_tt(score, ply),
                         best_move: None,
                         flag,
                         node_type: TTNodeType::Quiescence,
@@ -149,7 +151,7 @@ impl Engine {
                     hash,
                     TTEntry {
                         depth,
-                        eval: stand_pat,
+                        eval: score_to_tt(stand_pat, ply),
                         best_move: None,
                         flag: TTFlag::LowerBound,
                         node_type: TTNodeType::Quiescence,
@@ -169,7 +171,7 @@ impl Engine {
                     hash,
                     TTEntry {
                         depth,
-                        eval: stand_pat,
+                        eval: score_to_tt(stand_pat, ply),
                         best_move: None,
                         flag: TTFlag::Exact,
                         node_type: TTNodeType::Quiescence,
@@ -203,7 +205,7 @@ impl Engine {
             let can_prune = !in_check
                 && board.phase > 8
                 && mv.promotion.is_none()
-                && alpha.abs() > CHECKMATE_SCORE - 1000;
+                && alpha.abs() > MATE_THRESHOLD;
 
             if can_prune {
                 let captured_value = match mv.kind {
@@ -255,7 +257,7 @@ impl Engine {
                     hash,
                     TTEntry {
                         depth,
-                        eval: score,
+                        eval: score_to_tt(score, ply),
                         best_move,
                         flag: TTFlag::LowerBound,
                         node_type: TTNodeType::Quiescence,
@@ -278,7 +280,7 @@ impl Engine {
             hash,
             TTEntry {
                 depth,
-                eval: best_score,
+                eval: score_to_tt(best_score, ply),
                 best_move,
                 flag,
                 node_type: TTNodeType::Quiescence,

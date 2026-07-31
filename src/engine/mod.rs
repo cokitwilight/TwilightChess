@@ -11,7 +11,7 @@ pub mod search_stats;
 pub mod time_manager;
 pub mod tt;
 
-pub use config::{CHECKMATE_SCORE, MAX_Q_DEPTH, NEG_INF, POS_INF, RFP_MAX_DEPTH};
+pub use config::*;
 pub use engine::Engine;
 pub use search_context::SearchContext;
 pub use search_limits::SearchLimits;

@@ -15,6 +15,7 @@ impl Engine {
         &mut self,
         board: &mut Board,
         ctx: &mut SearchContext,
+        can_print: bool,
     ) -> SearchResult {
         let full_start = Instant::now();
         let mut best_result = SearchResult {
@@ -175,18 +176,19 @@ impl Engine {
             } else {
                 0.0
             };
+            if can_print {
+                depth_stats.print_all(depth, elapsed_secs);
 
-            depth_stats.print_all(depth, elapsed_secs);
-
-            println!(
-                "Eval: {}. Time: {:.3}s. NPS: {} | Avg: {} | Median: {} | Weighted: {}",
-                result.eval,
-                elapsed_secs,
-                fmt_nps(depth_nps),
-                fmt_nps(avg_nps),
-                fmt_nps(median_nps),
-                fmt_nps(weighted_avg_nps),
-            );
+                println!(
+                    "Eval: {}. Time: {:.3}s. NPS: {} | Avg: {} | Median: {} | Weighted: {}",
+                    result.eval,
+                    elapsed_secs,
+                    fmt_nps(depth_nps),
+                    fmt_nps(avg_nps),
+                    fmt_nps(median_nps),
+                    fmt_nps(weighted_avg_nps),
+                );
+            }
 
             if ctx.should_stop() {
                 break;
@@ -203,12 +205,14 @@ impl Engine {
             0.0
         };
 
-        println!(
-            "\nFinal Eval: {}. Total Time: {:.3}. Total NPS: {}\n",
-            best_result.eval,
-            total_time,
-            format!("{:.2}", total_nps).separate_with_commas()
-        );
+        if can_print {
+            println!(
+                "\nFinal Eval: {}. Total Time: {:.3}. Total NPS: {}\n",
+                best_result.eval,
+                total_time,
+                format!("{:.2}", total_nps).separate_with_commas()
+            );
+        }
 
         best_result.stats = ctx.stats;
         best_result
