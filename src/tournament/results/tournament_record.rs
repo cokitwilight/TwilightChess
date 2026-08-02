@@ -255,14 +255,30 @@ impl TournamentResult {
 
             notable_games.reverse();
 
-            // for now only list the first 5 notable games
-            for i in 0..5 {
+            // for now only list the first 10 notable games
+            for i in 0..10 {
                 println!();
                 if i >= notable_games.len() {
                     break;
                 }
                 let notable_game = &notable_games[i];
                 notable_game.print_summary(i + 1);
+
+                if i == 0 {
+                    notable_game
+                        .game_record
+                        .white_stats
+                        .print_all(1, notable_game.game_record.white_time_elapsed.as_secs_f64());
+
+                    println!();
+
+                    notable_game
+                        .game_record
+                        .black_stats
+                        .print_all(1, notable_game.game_record.black_time_elapsed.as_secs_f64());
+
+                    println!();
+                }
 
                 let metadata = PgnMetadata {
                     event: "Engine Test".to_string(),

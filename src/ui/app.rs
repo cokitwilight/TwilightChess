@@ -13,8 +13,8 @@ use crate::ui::bot_thread::{BotSearchRequest, BotSearchResponse};
 
 use eframe::egui;
 
-const DEFAULT_BOT_DEPTH: u16 = 10;
-const DEFAULT_Q_BOT_DEPTH: u16 = 8;
+const DEFAULT_BOT_DEPTH: u16 = 20;
+const DEFAULT_Q_BOT_DEPTH: u16 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {
@@ -105,7 +105,7 @@ impl ChessApp {
 
         self.bot = Some(Bot::new(
             bot_color,
-            SearchLimits::depth(DEFAULT_BOT_DEPTH, DEFAULT_Q_BOT_DEPTH),
+            SearchLimits::depth_and_time(DEFAULT_BOT_DEPTH, DEFAULT_Q_BOT_DEPTH, 1000),
         ));
         self.bot_rx = None;
 
@@ -697,7 +697,7 @@ impl ChessApp {
                 mut engine,
             } = request;
             println!("----------- Start -----------");
-            let result = engine.search(&board, limits, &repetition_history);
+            let result = engine.search(&board, limits, &repetition_history, true);
             println!("------------ End ------------");
 
             let _ = tx.send(BotSearchResponse { engine, result });

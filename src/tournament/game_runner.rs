@@ -48,8 +48,18 @@ pub fn run_game(
         }
 
         let search_result = match game.board.side_to_move() {
-            Color::White => white.search(&game.board, w_config.limits, &game.repetition_history),
-            Color::Black => black.search(&game.board, b_config.limits, &game.repetition_history),
+            Color::White => white.search(
+                &game.board,
+                w_config.limits,
+                &game.repetition_history,
+                false,
+            ),
+            Color::Black => black.search(
+                &game.board,
+                b_config.limits,
+                &game.repetition_history,
+                false,
+            ),
         };
 
         let best_move = search_result
@@ -204,16 +214,16 @@ mod tests {
     #[test]
     #[ignore]
     pub fn test_game_2() {
-        let mut players = MatchPlayers::from_depth(
-            "WithFutility".to_string(),
-            "black".to_string(),
-            14,
-            7,
-            14,
-            7,
-        );
+        let mut players =
+            MatchPlayers::from_depth("200 ms".to_string(), "100 ms".to_string(), 10, 7, 10, 3);
 
-        players.white.config.search.fut.enabled = true;
+        players.white.config.limits.soft_time_limit_ms = Some(200);
+        players.black.config.limits.soft_time_limit_ms = Some(100);
+
+        players.white.config.limits.hard_time_limit_ms = Some(250);
+        players.black.config.limits.hard_time_limit_ms = Some(150);
+
+        // players.white.config.search.fut.enabled = true;
 
         let game_record = match run_game(STARTPOS_FEN.to_string(), players.clone()) {
             Ok(g) => g,

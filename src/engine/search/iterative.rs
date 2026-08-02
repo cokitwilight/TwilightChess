@@ -191,6 +191,7 @@ impl Engine {
             }
 
             if ctx.should_stop() {
+                // dont corrupt the result with a potentially half searched result
                 break;
             }
 

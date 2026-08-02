@@ -11,6 +11,7 @@ impl Engine {
         board: &Board,
         limits: SearchLimits,
         repetition_history: &Vec<u64>,
+        can_print: bool,
     ) -> SearchResult {
         // CHECK IF CLONING HERE IS OK FOR REPETITION HISTORY, OR IF WE SHOULD PASS A REFERENCE
         let mut context = SearchContext::new(limits, repetition_history.clone());
@@ -21,7 +22,10 @@ impl Engine {
         if let Some(book_mv) = self.get_book_move(&board) {
             // let piece = board.piece_at(book_mv.from).unwrap();
 
-            // println!("Book Move");
+            if can_print {
+                println!("Book Move");
+            }
+
             // println!(
             //     "Book Move: {:?} {} to {}. End Stats: nodes={}, qnodes={}",
             //     piece.kind,
@@ -47,9 +51,10 @@ impl Engine {
 
         // context.limits.max_depth = adjusted_depth;
 
+        // increments generation for the transposition table
         self.tt.new_search();
 
-        let search_result = self.iterative_deepening(&mut board, &mut context, false);
+        let search_result = self.iterative_deepening(&mut board, &mut context, can_print);
 
         let elapsed = start.elapsed();
 

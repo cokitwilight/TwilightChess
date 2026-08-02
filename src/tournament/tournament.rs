@@ -65,7 +65,7 @@ pub fn play_games(
                 // look relatively only at the middle game.
                 // Later make this relative
                 let start = ((game_length / 5) - 3).max(1);
-                let end = ((game_length / 2) - 5).min(start + 5);
+                let end = ((game_length / 2) - 5).max(start + 5);
 
                 let mut swings: Vec<(i32, usize)> = Vec::new();
                 for i in start..end {
@@ -86,6 +86,7 @@ pub fn play_games(
 
                             notable_game.reasons.push(reason);
                             notable_game.importance += 10;
+                            swings.push(((eval - previous_eval).abs(), i + 1));
                         } else {
                             // since there are no previous ways to add reasons the only reason here would be the orginal large eval swing
                             // which we dont want to double count
@@ -138,11 +139,19 @@ pub fn play_games(
                 }
 
                 // in plies
-                if game_length <= 40 {
+                if game_length <= 50 {
                     let reason = NotableReason::ShortGame;
 
                     notable_game.reasons.push(reason);
-                    notable_game.importance += 10;
+
+                    match game_result {
+                        GameResult::Draw => {
+                            notable_game.importance += 2;
+                        }
+                        _ => {
+                            notable_game.importance += 5;
+                        }
+                    }
                 }
 
                 // in plies
@@ -152,8 +161,6 @@ pub fn play_games(
                     notable_game.reasons.push(reason);
                     notable_game.importance += 2;
                 }
-
-                // Todo: Add notable games potentially
 
                 match game_result {
                     GameResult::White => {
@@ -183,7 +190,7 @@ pub fn play_games(
                             let reason = NotableReason::Upset;
 
                             notable_game.reasons.push(reason);
-                            notable_game.importance += 10;
+                            notable_game.importance += 5;
                         }
 
                         if average_eval < -200 {
@@ -191,7 +198,7 @@ pub fn play_games(
                             let reason = NotableReason::Comeback { average_eval };
 
                             notable_game.reasons.push(reason);
-                            notable_game.importance += 5;
+                            notable_game.importance += 10;
                         }
                     }
                     GameResult::Black => {
@@ -221,7 +228,7 @@ pub fn play_games(
                             let reason = NotableReason::Upset;
 
                             notable_game.reasons.push(reason);
-                            notable_game.importance += 10;
+                            notable_game.importance += 5;
                         }
 
                         if average_eval > 200 {
@@ -229,7 +236,7 @@ pub fn play_games(
                             let reason = NotableReason::Comeback { average_eval };
 
                             notable_game.reasons.push(reason);
-                            notable_game.importance += 5;
+                            notable_game.importance += 10;
                         }
                     }
                     GameResult::Draw => {
@@ -319,21 +326,26 @@ mod tests {
     #[ignore]
     pub fn test_tournament_different_configs() {
         let mut match_players = MatchPlayers::from_depth(
-            "Pruning on".to_string(),
-            "Pruning off".to_string(),
-            8,
+            "Null Move on".to_string(),
+            "Null Move off".to_string(),
+            20,
             6,
-            8,
+            20,
             6,
         );
 
-        match_players.white.config.search.fut.enabled = true;
+        match_players.white.config.limits.soft_time_limit_ms = Some(1000);
+        match_players.black.config.limits.soft_time_limit_ms = Some(1000);
+
+        match_players.white.config.search.fut.enabled = false;
         match_players.black.config.search.fut.enabled = false;
 
-        match_players.white.config.search.delta.enabled = true;
+        match_players.white.config.search.delta.enabled = false;
         match_players.black.config.search.delta.enabled = false;
 
-        match_players.white.config.search.rfp.enabled = true;
+        // RFP is causing a missed mate issue
+        // might be quiescence rewrite
+        match_players.white.config.search.rfp.enabled = false;
         match_players.black.config.search.rfp.enabled = false;
 
         match_players.white.config.search.null_move.enabled = true;
@@ -342,7 +354,42 @@ mod tests {
         match_players.white.config.search.lmr.enabled = true;
         match_players.black.config.search.lmr.enabled = false;
 
-        let result = play_games(50, match_players, Color::White);
+        let result = play_games(200, match_players, Color::White);
+
+        result.print_stats();
+    }
+
+    #[test]
+    #[ignore]
+    pub fn test_tournament_same_nodes() {
+        let mut match_players = MatchPlayers::from_depth(
+            "Null Move on".to_string(),
+            "Null Move off".to_string(),
+            20,
+            6,
+            20,
+            6,
+        );
+
+        match_players.white.config.limits.max_nodes = Some(1000000);
+        match_players.black.config.limits.max_nodes = Some(1000000);
+
+        match_players.white.config.search.fut.enabled = false;
+        match_players.black.config.search.fut.enabled = false;
+
+        match_players.white.config.search.delta.enabled = false;
+        match_players.black.config.search.delta.enabled = false;
+
+        match_players.white.config.search.rfp.enabled = false;
+        match_players.black.config.search.rfp.enabled = false;
+
+        match_players.white.config.search.null_move.enabled = true;
+        match_players.black.config.search.null_move.enabled = false;
+
+        match_players.white.config.search.lmr.enabled = true;
+        match_players.black.config.search.lmr.enabled = true;
+
+        let result = play_games(100, match_players, Color::White);
 
         result.print_stats();
     }

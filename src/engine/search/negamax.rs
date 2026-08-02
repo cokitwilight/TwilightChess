@@ -19,10 +19,25 @@ impl Engine {
         ply: usize,
         allow_null_move: bool,
     ) -> i32 {
+        // every 2048 nodes check if it should stop rather than expensively checking each time.
+        if context.stats.nodes + context.stats.qnodes & 2047 == 0 {
+            if context.should_stop() {
+                return 0;
+            }
+        }
+
         context.stats.nodes += 1;
 
         if depth == 0 {
-            return self.quiescence(board, context, context.limits.max_q_depth, alpha, beta, ply);
+            return self.quiescence(
+                board,
+                context,
+                context.limits.max_q_depth,
+                alpha,
+                beta,
+                ply,
+                0,
+            );
         }
 
         // ADD DRAWING LOGIC HERE
@@ -87,6 +102,7 @@ impl Engine {
             && self.config.search.rfp.enabled
             && beta == alpha + 1
             && beta < MATE_THRESHOLD
+            && alpha > -MATE_THRESHOLD
             && ply > 0
             && board.phase() >= self.config.search.rfp.min_phase
             && depth <= self.config.search.rfp.max_depth;

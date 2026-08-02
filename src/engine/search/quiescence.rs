@@ -6,11 +6,13 @@ use crate::engine::ordering::see;
 use crate::engine::search::search::is_insufficient_material;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::eval::{evaluation_for_turn, lazy_eval_for_turn};
-use crate::types::PieceType;
+use crate::types::{Color, PieceType};
 
 const DELTA_MARGIN: i32 = 200; // safe defualt for now
 
 const LAZY_MARGIN: i32 = 300;
+
+const MAX_CHECK_Q_PLIES: usize = 16;
 
 impl Engine {
     pub fn quiescence(
@@ -21,7 +23,14 @@ impl Engine {
         mut alpha: i32,
         mut beta: i32,
         ply: usize,
+        check_plies: usize,
     ) -> i32 {
+        if context.stats.nodes + context.stats.qnodes & 2047 == 0 {
+            if context.should_stop() {
+                return 0;
+            }
+        }
+
         context.stats.qnodes += 1;
 
         // NOTE: These will never be true in the first call to quiescence since negamax does this check first before calling if depth == 0 -> quiescence
@@ -105,41 +114,52 @@ impl Engine {
                 return score;
             }
 
-            if depth == 0 {
+            // too many consecutive checks. Most likely a draw anyways.
+            if check_plies > MAX_CHECK_Q_PLIES {
                 // TODO: Later keep searching regardless since in check.
-                let score = evaluation_for_turn(board);
+                let mut score = evaluation_for_turn(board);
 
-                let flag = if score <= original_alpha {
-                    TTFlag::UpperBound
-                } else if score >= original_beta {
-                    TTFlag::LowerBound
-                } else {
-                    TTFlag::Exact
-                };
+                // since this is an awkward node do not store in tt.
+                // Additionally conservatively make the position worse
+                // maybe return alpha instead
+                match board.side_to_move() {
+                    Color::White => score = score - 100,
+                    Color::Black => score = score + 100,
+                }
 
-                context.stats.qtt.stores += 1;
-                self.tt.insert(
-                    hash,
-                    TTEntry {
-                        depth,
-                        eval: score_to_tt(score, ply),
-                        best_move: None,
-                        flag,
-                        node_type: TTNodeType::Quiescence,
-                    },
-                );
+                // let flag = if score <= original_alpha {
+                //     TTFlag::UpperBound
+                // } else if score >= original_beta {
+                //     TTFlag::LowerBound
+                // } else {
+                //     TTFlag::Exact
+                // };
+
+                // context.stats.qtt.stores += 1;
+                // self.tt.insert(
+                //     hash,
+                //     TTEntry {
+                //         depth,
+                //         eval: score_to_tt(score, ply),
+                //         best_move: None,
+                //         flag,
+                //         node_type: TTNodeType::Quiescence,
+                //     },
+                // );
                 return score;
             }
 
             evasions
         } else {
-            let lazy_eval = lazy_eval_for_turn(board);
+            if !in_check {
+                let lazy_eval = lazy_eval_for_turn(board);
 
-            if lazy_eval - LAZY_MARGIN >= beta || lazy_eval + LAZY_MARGIN <= alpha {
-                return lazy_eval;
+                if lazy_eval - LAZY_MARGIN >= beta || lazy_eval + LAZY_MARGIN <= alpha {
+                    // TODO: Add this to the statistics tracker
+                    return lazy_eval;
+                }
             }
 
-            // later you can make evaluation from turn add onto lazy eval since they technically recomputed certain things
             stand_pat = evaluation_for_turn(board);
 
             best_score = stand_pat;
@@ -165,20 +185,6 @@ impl Engine {
                 alpha = stand_pat;
             }
 
-            if depth == 0 {
-                context.stats.qtt.stores += 1;
-                self.tt.insert(
-                    hash,
-                    TTEntry {
-                        depth,
-                        eval: score_to_tt(stand_pat, ply),
-                        best_move: None,
-                        flag: TTFlag::Exact,
-                        node_type: TTNodeType::Quiescence,
-                    },
-                );
-                return stand_pat;
-            }
             board.all_legal_capture_moves()
             // includes promotions and quiet promotions
         };
@@ -236,7 +242,12 @@ impl Engine {
 
             context.stats.qmoves_searched += 1;
 
-            let score = -self.quiescence(board, context, depth - 1, -beta, -alpha, ply + 1);
+            // let reduction = if in_check { 0 } else { 1 };
+
+            let check_plies = if in_check { check_plies + 1 } else { 0 };
+
+            let score =
+                -self.quiescence(board, context, depth, -beta, -alpha, ply + 1, check_plies);
 
             context.repetition_history.pop();
 
