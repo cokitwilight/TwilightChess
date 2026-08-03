@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::board::Move;
 use crate::engine::SearchStats;
 use crate::game::Game;
+use crate::types::Color;
 
 #[derive(Debug, Clone)]
 pub enum GameResult {
@@ -22,8 +23,11 @@ pub struct GameRecord {
     pub id: String,
     pub result: Option<GameResult>,
     pub start_fen: String,
+    pub opening_name: Option<String>,
     pub move_history: Vec<MoveRecord>,
     pub game: Game,
+
+    pub engine_1_color: Option<Color>,
 
     // game stats
     pub white_stats: SearchStats,
@@ -38,13 +42,16 @@ pub struct GameRecord {
 }
 
 impl GameRecord {
-    pub fn new(start_fen: String) -> Self {
+    pub fn new(start_fen: String, engine_1: Color) -> Self {
         Self {
             id: String::new(),
             result: None,
             start_fen,
+            opening_name: None,
             move_history: Vec::with_capacity(50),
             game: Game::new(),
+
+            engine_1_color: Some(engine_1),
 
             white_stats: SearchStats::default(),
             white_time_elapsed: Duration::ZERO,

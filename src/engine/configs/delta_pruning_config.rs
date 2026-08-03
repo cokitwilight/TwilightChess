@@ -9,7 +9,7 @@ impl Default for DeltaPruneConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            margin: 200,
+            margin: 250,
         }
     }
 }

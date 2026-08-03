@@ -669,7 +669,7 @@ pub fn build_opening_book() -> OpeningBook {
     book
 }
 
-fn find_legal_move_from_uci(board: &Board, s: &str) -> Option<Move> {
+pub fn find_legal_move_from_uci(board: &Board, s: &str) -> Option<Move> {
     let parsed = parse_uci_move(s)?;
 
     let mut board_clone = board.clone();

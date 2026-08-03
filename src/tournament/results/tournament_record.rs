@@ -264,29 +264,46 @@ impl TournamentResult {
                 let notable_game = &notable_games[i];
                 notable_game.print_summary(i + 1);
 
-                if i == 0 {
-                    notable_game
-                        .game_record
-                        .white_stats
-                        .print_all(1, notable_game.game_record.white_time_elapsed.as_secs_f64());
+                // if i == 0 {
+                //     notable_game
+                //         .game_record
+                //         .white_stats
+                //         .print_all(1, notable_game.game_record.white_time_elapsed.as_secs_f64());
 
-                    println!();
+                //     println!();
 
-                    notable_game
-                        .game_record
-                        .black_stats
-                        .print_all(1, notable_game.game_record.black_time_elapsed.as_secs_f64());
+                //     notable_game
+                //         .game_record
+                //         .black_stats
+                //         .print_all(1, notable_game.game_record.black_time_elapsed.as_secs_f64());
 
-                    println!();
-                }
+                //     println!();
+                // }
+
+                // TODO: This currently puts engine 1 name as white despite the fact that it may have been black. Need to fix this to reflect the actual color played by each engine.
+                let white = if notable_game.game_record.engine_1_color
+                    == Some(crate::types::Color::White)
+                {
+                    &self.engine_1_name
+                } else {
+                    &self.engine_2_name
+                };
+
+                let black = if notable_game.game_record.engine_1_color
+                    == Some(crate::types::Color::Black)
+                {
+                    &self.engine_1_name
+                } else {
+                    &self.engine_2_name
+                };
 
                 let metadata = PgnMetadata {
                     event: "Engine Test".to_string(),
                     site: "Local".to_string(),
                     date: "2026.07.27".to_string(),
                     round: i.to_string(),
-                    white: self.engine_1_name.clone(),
-                    black: self.engine_2_name.clone(),
+                    white: white.to_string(),
+                    black: black.to_string(),
                 };
 
                 let pgn_text =

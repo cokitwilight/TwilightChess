@@ -9,9 +9,9 @@ pub struct FutilityConfig {
 impl Default for FutilityConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
-            margin: 100,
-            max_depth: 2,
+            enabled: true,
+            margin: 110,
+            max_depth: 1,
         }
     }
 }

@@ -16,6 +16,8 @@ use eframe::egui;
 const DEFAULT_BOT_DEPTH: u16 = 20;
 const DEFAULT_Q_BOT_DEPTH: u16 = 4;
 
+const DEFAULT_BOT_TIME_MS: u64 = 1000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {
     WhiteBottom,
@@ -105,7 +107,11 @@ impl ChessApp {
 
         self.bot = Some(Bot::new(
             bot_color,
-            SearchLimits::depth_and_time(DEFAULT_BOT_DEPTH, DEFAULT_Q_BOT_DEPTH, 1000),
+            SearchLimits::depth_and_time(
+                DEFAULT_BOT_DEPTH,
+                DEFAULT_Q_BOT_DEPTH,
+                DEFAULT_BOT_TIME_MS,
+            ),
         ));
         self.bot_rx = None;
 
@@ -359,7 +365,11 @@ impl ChessApp {
                 let bot_color = human.opposite();
                 self.bot = Some(Bot::new(
                     bot_color,
-                    SearchLimits::depth(DEFAULT_BOT_DEPTH, DEFAULT_Q_BOT_DEPTH),
+                    SearchLimits::depth_and_time(
+                        DEFAULT_BOT_DEPTH,
+                        DEFAULT_Q_BOT_DEPTH,
+                        DEFAULT_BOT_TIME_MS,
+                    ),
                 ));
             }
         }
@@ -697,7 +707,7 @@ impl ChessApp {
                 mut engine,
             } = request;
             println!("----------- Start -----------");
-            let result = engine.search(&board, limits, &repetition_history, true);
+            let result = engine.search(&board, limits, &repetition_history, true, true);
             println!("------------ End ------------");
 
             let _ = tx.send(BotSearchResponse { engine, result });

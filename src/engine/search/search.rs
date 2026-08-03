@@ -11,6 +11,7 @@ impl Engine {
         board: &Board,
         limits: SearchLimits,
         repetition_history: &Vec<u64>,
+        opening_allowed: bool,
         can_print: bool,
     ) -> SearchResult {
         // CHECK IF CLONING HERE IS OK FOR REPETITION HISTORY, OR IF WE SHOULD PASS A REFERENCE
@@ -19,7 +20,7 @@ impl Engine {
 
         let start = Instant::now();
 
-        if let Some(book_mv) = self.get_book_move(&board) {
+        if opening_allowed && let Some(book_mv) = self.get_book_move(&board) {
             // let piece = board.piece_at(book_mv.from).unwrap();
 
             if can_print {

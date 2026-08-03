@@ -9,6 +9,8 @@ pub struct Game {
     pub state: GameState,
     pub repetition_history: Vec<u64>,
     pub move_history: Vec<Move>,
+
+    pub starting_fen: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,8 +31,28 @@ impl Game {
             state,
             repetition_history,
             move_history,
+
+            starting_fen: STARTPOS_FEN.to_string(),
         }
     }
+    pub fn from_fen(fen: &str) -> Result<Self, String> {
+        let mut board = Board::from_fen(fen)?;
+
+        let state = board.game_state_basic();
+
+        let repetition_history: Vec<u64> = vec![board.hash()];
+        let move_history: Vec<Move> = Vec::new();
+
+        Ok(Self {
+            board,
+            state,
+            repetition_history,
+            move_history,
+
+            starting_fen: fen.to_string(),
+        })
+    }
+
     pub fn game_state(&mut self) -> GameState {
         let side_to_move = self.board.side_to_move();
         let legal_moves = self.board.legal_moves(side_to_move);

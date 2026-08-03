@@ -27,7 +27,7 @@ impl Default for PgnMetadata {
 }
 
 pub fn game_to_pgn(finished_game: &Game, metadata: &PgnMetadata) -> Result<String, MoveError> {
-    let mut replay_game = Game::new();
+    let mut replay_game = Game::from_fen(&finished_game.starting_fen).unwrap();
 
     let result = game_state_to_pgn_result(&finished_game.state);
 

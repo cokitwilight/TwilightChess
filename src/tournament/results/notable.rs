@@ -30,10 +30,20 @@ pub struct NotableGame {
 
 impl NotableGame {
     pub fn print_summary(&self, index: usize) {
-        println!(
-            "  {}. Importance: {} | Result: {:?} | Reasons:",
-            index, self.importance, self.game_record.result
-        );
+        if self.game_record.opening_name.is_some() {
+            println!(
+                "Game: {}. Opening: {}. Importance: {} | Result: {:?} | Reasons:",
+                index,
+                self.game_record.opening_name.as_ref().unwrap(),
+                self.importance,
+                self.game_record.result
+            );
+        } else {
+            println!(
+                "Game: {}. Importance: {} | Result: {:?} | Reasons:",
+                index, self.importance, self.game_record.result
+            );
+        }
 
         for reason in &self.reasons {
             match reason {

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use crate::board::Board;
 use crate::engine::Engine;
 use crate::game::{Game, GameState};
+use crate::tournament::opening_suite::OpeningPosition;
 use crate::tournament::results::GameResult::{Black, Draw, White};
 use crate::tournament::{GameRecord, MatchPlayers, MoveRecord};
 use crate::types::Color;
@@ -10,17 +10,26 @@ use crate::uci::pgn::{PgnMetadata, game_to_pgn};
 
 pub fn run_game(
     start_fen: String,
-    /* // opening_moves: Vec<Move>  */ players: MatchPlayers,
+    players: MatchPlayers,
+    engine_1_color: Color,
+    opening_line: Option<OpeningPosition>,
 ) -> Result<GameRecord, String> {
-    let mut game_record = GameRecord::new(start_fen.clone());
+    let mut game_record = GameRecord::new(start_fen.clone(), engine_1_color);
+
+    if let Some(opening) = &opening_line {
+        game_record.opening_name = Some(opening.name.clone());
+    }
 
     let w_config = players.white.config;
     let b_config = players.black.config;
 
     let mut count = 0;
 
-    let mut game = Game::new();
-    game.board = Board::from_fen(&start_fen)?;
+    let mut game = if let Some(opening) = opening_line {
+        opening.create_game()
+    } else {
+        Game::from_fen(&start_fen).unwrap()
+    };
 
     // NOTE: This might be expensive as it allocates an entire new engine(with tt for example)
     let mut white = Engine::new(w_config.clone());
@@ -53,11 +62,13 @@ pub fn run_game(
                 w_config.limits,
                 &game.repetition_history,
                 false,
+                false,
             ),
             Color::Black => black.search(
                 &game.board,
                 b_config.limits,
                 &game.repetition_history,
+                false,
                 false,
             ),
         };
@@ -146,7 +157,12 @@ mod tests {
     pub fn test_game_1() {
         let players = MatchPlayers::new("white".to_string(), "black".to_string());
 
-        let game_record = match run_game(STARTPOS_FEN.to_string(), players.clone()) {
+        let game_record = match run_game(
+            STARTPOS_FEN.to_string(),
+            players.clone(),
+            Color::White,
+            None,
+        ) {
             Ok(g) => g,
             Err(msg) => panic!("{msg}"),
         };
@@ -215,17 +231,20 @@ mod tests {
     #[ignore]
     pub fn test_game_2() {
         let mut players =
-            MatchPlayers::from_depth("200 ms".to_string(), "100 ms".to_string(), 10, 7, 10, 3);
+            MatchPlayers::from_depth("10 s".to_string(), "8 s".to_string(), 20, 7, 20, 3);
 
-        players.white.config.limits.soft_time_limit_ms = Some(200);
-        players.black.config.limits.soft_time_limit_ms = Some(100);
+        players.white.config.limits.soft_time_limit_ms = Some(10000);
+        players.black.config.limits.soft_time_limit_ms = Some(8000);
 
-        players.white.config.limits.hard_time_limit_ms = Some(250);
-        players.black.config.limits.hard_time_limit_ms = Some(150);
+        players.white.config.limits.hard_time_limit_ms = Some(25000);
+        players.black.config.limits.hard_time_limit_ms = Some(15000);
 
-        // players.white.config.search.fut.enabled = true;
-
-        let game_record = match run_game(STARTPOS_FEN.to_string(), players.clone()) {
+        let game_record = match run_game(
+            STARTPOS_FEN.to_string(),
+            players.clone(),
+            Color::White,
+            None,
+        ) {
             Ok(g) => g,
             Err(msg) => panic!("{msg}"),
         };
@@ -276,8 +295,8 @@ mod tests {
             site: "Local".to_string(),
             date: "2026.07.27".to_string(),
             round: "1".to_string(),
-            white: "WithFutility".to_string(),
-            black: "Black".to_string(),
+            white: "10 s".to_string(),
+            black: "8 s".to_string(),
         };
 
         let pgn_text = game_to_pgn(&game_record.game, &metadata).expect("Game Failed");
