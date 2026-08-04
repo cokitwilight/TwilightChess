@@ -231,19 +231,29 @@ mod tests {
     #[ignore]
     pub fn test_game_2() {
         let mut players =
-            MatchPlayers::from_depth("10 s".to_string(), "8 s".to_string(), 20, 7, 20, 3);
+            MatchPlayers::from_depth("3 s".to_string(), "5 s".to_string(), 20, 7, 20, 3);
 
-        players.white.config.limits.soft_time_limit_ms = Some(10000);
-        players.black.config.limits.soft_time_limit_ms = Some(8000);
+        players.white.config.limits.soft_time_limit_ms = Some(3000);
+        players.black.config.limits.soft_time_limit_ms = Some(5000);
 
         players.white.config.limits.hard_time_limit_ms = Some(25000);
         players.black.config.limits.hard_time_limit_ms = Some(15000);
 
+        let opening_line = OpeningPosition::from_uci(
+            // Solid but tactically rich central tension.
+            "Semi-Slav Defense",
+            STARTPOS_FEN.to_owned(),
+            &[
+                "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "g1f3", "c7c6", "e2e3", "b8d7",
+                "f1d3", "d5c4", "d3c4", "b7b5",
+            ],
+        );
+
         let game_record = match run_game(
-            STARTPOS_FEN.to_string(),
+            opening_line.game.starting_fen.clone(),
             players.clone(),
             Color::White,
-            None,
+            Some(opening_line),
         ) {
             Ok(g) => g,
             Err(msg) => panic!("{msg}"),

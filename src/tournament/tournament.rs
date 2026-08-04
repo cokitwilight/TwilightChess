@@ -336,15 +336,15 @@ mod tests {
     #[ignore]
     pub fn test_tournament_different_depth() {
         let mut match_players =
-            MatchPlayers::from_depth("Depth 6".to_string(), "Depth 5".to_string(), 6, 6, 5, 6);
+            MatchPlayers::from_depth("Depth 11".to_string(), "Depth 10".to_string(), 11, 6, 10, 6);
 
         let opening_suite = build_important_opening_suite();
 
-        match_players.white.config.search.fut.enabled = false;
-        match_players.black.config.search.fut.enabled = false;
+        match_players.white.config.search.fut.enabled = true;
+        match_players.black.config.search.fut.enabled = true;
 
-        match_players.white.config.limits.soft_time_limit_ms = Some(50000);
-        match_players.black.config.limits.soft_time_limit_ms = Some(50000);
+        match_players.white.config.limits.soft_time_limit_ms = Some(5000000);
+        match_players.black.config.limits.soft_time_limit_ms = Some(5000000);
 
         let result = play_games(opening_suite, 1, match_players, Color::White);
 
@@ -355,8 +355,8 @@ mod tests {
     #[ignore]
     pub fn test_tournament_different_configs() {
         let mut match_players = MatchPlayers::from_depth(
-            "Delta on".to_string(),
-            "Delta off".to_string(),
+            "Delta/SEE on".to_string(),
+            "Delta/SEE off".to_string(),
             20,
             6,
             20,
@@ -382,7 +382,10 @@ mod tests {
         match_players.white.config.search.lmr.enabled = false;
         match_players.black.config.search.lmr.enabled = false;
 
-        let opening_suite = build_opening_suite();
+        match_players.white.config.search.see.enabled = true;
+        match_players.black.config.search.see.enabled = false;
+
+        let opening_suite = build_important_opening_suite();
 
         let result = play_games(opening_suite, 1, match_players, Color::White);
 

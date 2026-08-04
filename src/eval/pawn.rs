@@ -334,7 +334,7 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
 
     let starting_pawns = (pawns & starting_mask & !king_file_mask).count_ones();
 
-    score -= starting_pawns as i32 * -8;
+    score -= starting_pawns as i32 * 8;
 
     // includes two rows ahead
     let enemy_half = match color {

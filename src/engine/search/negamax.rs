@@ -128,12 +128,19 @@ impl Engine {
         // 4 is a placeholder for now
         // use phase for now. Might not be viable though
 
-        let can_null_prune = self.config.search.null_move.enabled
+        let mut can_null_prune = self.config.search.null_move.enabled
             && allow_null_move
             && !in_check
             && depth >= self.config.search.null_move.minimum_depth
             && board.phase >= self.config.search.null_move.minimum_phase
-            && beta < MATE_THRESHOLD;
+            && beta.abs() < MATE_THRESHOLD
+            && beta == alpha + 1;
+
+        if let Some(eval) = static_eval {
+            if eval < beta {
+                can_null_prune = false;
+            }
+        }
 
         if can_null_prune {
             context.stats.null_attempts += 1;
@@ -181,12 +188,13 @@ impl Engine {
 
         let mut did_cutoff = false;
 
-        let can_rfp = self.config.search.fut.enabled
+        let can_fut = self.config.search.fut.enabled
             && depth <= self.config.search.fut.max_depth
             && !in_check
-            && alpha.abs() < MATE_THRESHOLD;
+            && alpha.abs() < MATE_THRESHOLD
+            && depth > 0;
 
-        if can_rfp && static_eval.is_none() {
+        if can_fut && static_eval.is_none() {
             let eval = evaluation_for_turn(board);
             static_eval = Some(eval);
         }

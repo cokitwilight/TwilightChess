@@ -8,7 +8,7 @@ use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt}
 use crate::eval::{evaluation_for_turn, lazy_eval_for_turn};
 use crate::types::{Color, PieceType};
 
-const DELTA_MARGIN: i32 = 200; // safe defualt for now
+const _DELTA_MARGIN: i32 = 200; // safe defualt for now
 
 const LAZY_MARGIN: i32 = 300;
 
@@ -127,25 +127,6 @@ impl Engine {
                     Color::Black => score = score + 100,
                 }
 
-                // let flag = if score <= original_alpha {
-                //     TTFlag::UpperBound
-                // } else if score >= original_beta {
-                //     TTFlag::LowerBound
-                // } else {
-                //     TTFlag::Exact
-                // };
-
-                // context.stats.qtt.stores += 1;
-                // self.tt.insert(
-                //     hash,
-                //     TTEntry {
-                //         depth,
-                //         eval: score_to_tt(score, ply),
-                //         best_move: None,
-                //         flag,
-                //         node_type: TTNodeType::Quiescence,
-                //     },
-                // );
                 return score;
             }
 
@@ -211,7 +192,7 @@ impl Engine {
             let can_prune = !in_check
                 && board.phase > 8
                 && mv.promotion.is_none()
-                && alpha.abs() > MATE_THRESHOLD;
+                && alpha.abs() < MATE_THRESHOLD;
 
             if can_prune {
                 let captured_value = match mv.kind {
@@ -219,21 +200,19 @@ impl Engine {
 
                     _ => board.piece_at(mv.to).map(|p| p.kind.value()).unwrap_or(0),
                 };
-                if stand_pat + captured_value + DELTA_MARGIN < alpha {
+                if stand_pat + captured_value + self.config.search.delta.margin < alpha {
                     context.stats.delta_prunes += 1;
                     continue;
                 }
 
-                // For now this is too expensive relative to node cutoffs(since its not legal the margin is too large)
                 if self.config.search.see.enabled
                     && see(board, *mv) <= self.config.search.see.margin
                 {
                     context.stats.see_prunes += 1;
-                    // less agressive pruning since see doesn't check legality yet
+
                     continue;
                 }
             }
-
             let undo = board.make_move(*mv);
 
             let child_hash = board.hash();
@@ -241,8 +220,6 @@ impl Engine {
             context.repetition_history.push(child_hash);
 
             context.stats.qmoves_searched += 1;
-
-            // let reduction = if in_check { 0 } else { 1 };
 
             let check_plies = if in_check { check_plies + 1 } else { 0 };
 

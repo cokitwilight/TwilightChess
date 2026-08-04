@@ -8,8 +8,8 @@ pub struct SEEConfig {
 impl Default for SEEConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
-            margin: -500,
+            enabled: true,
+            margin: -200,
         }
     }
 }
