@@ -20,10 +20,10 @@ impl Engine {
         allow_null_move: bool,
     ) -> i32 {
         // every 2048 nodes check if it should stop rather than expensively checking each time.
-        if context.stats.nodes + context.stats.qnodes & 2047 == 0 {
-            if context.should_stop() {
-                return 0;
-            }
+        if context.stopped
+            || (context.stats.nodes + context.stats.qnodes & 2047 == 0 && context.should_stop())
+        {
+            return 0;
         }
 
         context.stats.nodes += 1;
@@ -61,6 +61,9 @@ impl Engine {
         let original_alpha = alpha;
         // let original_beta = beta;
 
+        // before the tt modifies the windows
+        let is_pv = beta != alpha + 1;
+
         let in_check = board.in_check(board.side_to_move());
 
         let mut tt_best_move: Option<Move> = None;
@@ -83,10 +86,10 @@ impl Engine {
                         return tt_score;
                     }
                     TTFlag::LowerBound => {
-                        alpha = alpha.max(entry.eval);
+                        alpha = alpha.max(tt_score);
                     }
                     TTFlag::UpperBound => {
-                        beta = beta.min(entry.eval);
+                        beta = beta.min(tt_score);
                     }
                 }
                 if alpha >= beta {
@@ -100,7 +103,7 @@ impl Engine {
 
         let can_rfp = !in_check
             && self.config.search.rfp.enabled
-            && beta == alpha + 1
+            && !is_pv
             && beta < MATE_THRESHOLD
             && alpha > -MATE_THRESHOLD
             && ply > 0
@@ -134,9 +137,11 @@ impl Engine {
             && depth >= self.config.search.null_move.minimum_depth
             && board.phase >= self.config.search.null_move.minimum_phase
             && beta.abs() < MATE_THRESHOLD
-            && beta == alpha + 1;
+            && !is_pv;
 
-        if let Some(eval) = static_eval {
+        if can_null_prune {
+            let eval = *static_eval.get_or_insert_with(|| evaluation_for_turn(board));
+
             if eval < beta {
                 can_null_prune = false;
             }
@@ -160,15 +165,27 @@ impl Engine {
 
             board.undo_null_move(undo);
 
+            if context.stopped {
+                return 0;
+            }
+
             if score >= beta {
                 context.stats.null_cutoffs += 1;
                 return beta;
             }
         }
 
+        // for now call legal moves instead of pseudo moves since it is relatively fast since we added pin and check masks
+        // NOTE: Legal moves will likely equal searched moves
         let mut moves = board.all_legal_moves();
 
-        let mut legal_moves = 0;
+        if moves.len() == 0 {
+            if in_check {
+                return -CHECKMATE_SCORE + ply as i32;
+            } else {
+                return 0; // Stalemate
+            }
+        }
         let mut searched_moves = 0;
 
         let side_to_move = board.side_to_move();
@@ -192,7 +209,8 @@ impl Engine {
             && depth <= self.config.search.fut.max_depth
             && !in_check
             && alpha.abs() < MATE_THRESHOLD
-            && depth > 0;
+            && depth > 0
+            && !is_pv;
 
         if can_fut && static_eval.is_none() {
             let eval = evaluation_for_turn(board);
@@ -201,14 +219,11 @@ impl Engine {
 
         for mv in moves.iter() {
             let is_quiet = mv.kind == MoveType::Normal && mv.promotion.is_none();
+            let gives_check = board.move_gives_check(mv);
 
             let undo = board.make_move(*mv);
 
-            legal_moves += 1;
-
-            let gives_check = board.in_check(side_to_move.opposite());
-
-            if can_rfp && searched_moves > 0 && is_quiet && !gives_check {
+            if can_fut && searched_moves > 0 && is_quiet && !gives_check {
                 context.stats.fut_attempts += 1;
                 let margin = depth * self.config.search.fut.margin;
 
@@ -220,9 +235,6 @@ impl Engine {
                     continue;
                 }
             }
-
-            searched_moves += 1;
-            context.stats.moves_searched += 1;
 
             let child_hash = board.hash();
             context.repetition_history.push(child_hash); // only store if valid move
@@ -240,9 +252,20 @@ impl Engine {
 
             let mut eval: i32;
 
-            if reduction > 0 {
-                context.stats.lmr_attempts += 1;
-                // null window search
+            if searched_moves == 0 {
+                eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1, true);
+
+                if context.stopped {
+                    context.repetition_history.pop();
+                    board.undo_move(undo);
+                    return 0;
+                }
+            } else {
+                if reduction > 0 {
+                    context.stats.lmr_attempts += 1;
+                }
+
+                // null window search reduced depth
                 eval = -self.negamax(
                     board,
                     context,
@@ -253,14 +276,51 @@ impl Engine {
                     true,
                 );
 
-                if eval > alpha {
-                    context.stats.lmr_researched += 1;
-                    // this move might improve alpha, research it at full depth
-                    eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1, true);
+                if context.stopped {
+                    context.repetition_history.pop();
+                    board.undo_move(undo);
+                    return 0;
                 }
-            } else {
-                eval = -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1, true);
+
+                if eval > alpha {
+                    if reduction > 0 {
+                        context.stats.lmr_researched += 1;
+
+                        // null window search full depth
+                        eval = -self.negamax(
+                            board,
+                            context,
+                            depth - 1,
+                            -alpha - 1,
+                            -alpha,
+                            ply + 1,
+                            true,
+                        );
+
+                        if context.stopped {
+                            context.repetition_history.pop();
+                            board.undo_move(undo);
+                            return 0;
+                        }
+                    }
+
+                    if eval > alpha && eval < beta {
+                        // this move might improve alpha, research it at full depth
+                        // full window search, full depth
+                        eval =
+                            -self.negamax(board, context, depth - 1, -beta, -alpha, ply + 1, true);
+
+                        if context.stopped {
+                            context.repetition_history.pop();
+                            board.undo_move(undo);
+                            return 0;
+                        }
+                    }
+                }
             }
+
+            searched_moves += 1;
+            context.stats.moves_searched += 1;
 
             context.repetition_history.pop();
             board.undo_move(undo);
@@ -287,14 +347,6 @@ impl Engine {
                     context.killer_moves.add(ply, *mv);
                 }
                 break;
-            }
-        }
-
-        if legal_moves == 0 {
-            if in_check {
-                return -CHECKMATE_SCORE + ply as i32;
-            } else {
-                return 0; // Stalemate
             }
         }
 

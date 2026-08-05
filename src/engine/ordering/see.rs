@@ -77,12 +77,6 @@ pub fn see(board: &Board, mv: Move) -> i32 {
         | all_pieces[Color::White.idx()][PieceType::Queen.idx()]
         | all_pieces[Color::Black.idx()][PieceType::Queen.idx()];
 
-    // technically we only call on legal moves but this is a good safegaurd regardless
-    if see_in_check(&all_pieces, occupied, side_to_move) {
-        // if the side to move is in check, then we can't capture anything
-        return 0;
-    }
-
     'see_loop: loop {
         // go from pawns -> knights -> bishops -> rooks -> queens -> king(add extra in check here)
         attackers &= occupied;
@@ -245,7 +239,7 @@ pub fn see(board: &Board, mv: Move) -> i32 {
             occupied &= !attacker_mask;
 
             if see_in_check(&all_pieces, occupied, side_to_move) {
-                all_pieces[side_to_move.idx()][PieceType::Rook.idx()] |= attacker_mask;
+                all_pieces[side_to_move.idx()][PieceType::Queen.idx()] |= attacker_mask;
                 occupied |= attacker_mask;
 
                 continue;
@@ -378,28 +372,28 @@ fn see_in_check(pieces: &[[Bitboard; 6]; 2], occupied: Bitboard, color: Color) -
 
 fn square_attacked(pieces: &[[Bitboard; 6]; 2], occupied: Bitboard, sq: Square, by: Color) -> bool {
     // only check sliders for now
-    // let pawns = pieces[by.idx()][PieceType::Pawn.idx()];
-    // let knights = pieces[by.idx()][PieceType::Knight.idx()];
+    let pawns = pieces[by.idx()][PieceType::Pawn.idx()];
+    let knights = pieces[by.idx()][PieceType::Knight.idx()];
     let bishops = pieces[by.idx()][PieceType::Bishop.idx()];
     let rooks = pieces[by.idx()][PieceType::Rook.idx()];
     let queens = pieces[by.idx()][PieceType::Queen.idx()];
     let king = pieces[by.idx()][PieceType::King.idx()];
 
-    // let pawn_attackers = match by {
-    //     Color::White => pawn_attacks_from_square(sq, Color::Black) & pawns,
-    //     Color::Black => pawn_attacks_from_square(sq, Color::White) & pawns,
-    // };
+    let pawn_attackers = match by {
+        Color::White => pawn_attacks_from_square(sq, Color::Black) & pawns,
+        Color::Black => pawn_attacks_from_square(sq, Color::White) & pawns,
+    };
 
-    // if pawn_attackers != 0 {
-    //     return true;
-    // }
+    if pawn_attackers != 0 {
+        return true;
+    }
 
-    // // -------------------------
-    // // Knights
-    // // -------------------------
-    // if knight_attacks(sq) & knights != 0 {
-    //     return true;
-    // }
+    // -------------------------
+    // Knights
+    // -------------------------
+    if knight_attacks(sq) & knights != 0 {
+        return true;
+    }
 
     // -------------------------
     // Kings

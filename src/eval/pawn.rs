@@ -3,6 +3,7 @@ use crate::bitboard::{
     pop_lsb, rank_of,
 };
 use crate::board::Board;
+use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
 use crate::eval::eval::{CENTER_4, CENTER_SQUARES, EvalInfo};
@@ -306,7 +307,7 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
     if pawns == 0 {
         return 0;
     }
-    if info.phase() > 20 || info.phase() < 12 {
+    if info.phase() == 24 {
         return 0;
     }
 
@@ -390,6 +391,7 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
 
     score += attacking_bonus + aggressive_bonus;
 
+    score = scale_by_phase(score, info.phase(), 12, 18);
     score
 }
 

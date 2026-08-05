@@ -265,3 +265,16 @@ pub fn evaluation_for_turn(board: &Board) -> i32 {
         Color::Black => -eval,
     }
 }
+
+// takes the score and scales based on the min phase(start) to the max phase(full)
+// For example start = 4 and full = 12 means at phase 12 the score is just score
+// at phase 4 the eval is 0. At phase 8 would be 8-4 / 12-4 = 4/8 = 50% of the original score
+pub fn scale_by_phase(score: i32, phase: i32, start: i32, full: i32) -> i32 {
+    if phase <= start {
+        0
+    } else if phase >= full {
+        score
+    } else {
+        score * (phase - start) / (full - start)
+    }
+}

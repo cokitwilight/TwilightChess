@@ -2,6 +2,7 @@ use crate::bitboard::{Bitboard, FILE_A, FILE_H, RANK_1, RANK_3, RANK_6, RANK_8, 
 
 use crate::board::Board;
 use crate::eval::eval::EvalInfo;
+use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
 pub fn mobility_score(board: &Board, info: &EvalInfo) -> i32 {
@@ -129,7 +130,7 @@ fn space_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let available_space =
         space_mask & !info.all_attacks(color.opposite()) & !board.occupancy_of(color.opposite());
 
-    available_space.count_ones() as i32 * 3
+    scale_by_phase(available_space.count_ones() as i32 * 3, info.phase(), 8, 16)
 }
 
 // since not all pawn moves are captures. Ignore en passant for now as it might be too expensive/complicated

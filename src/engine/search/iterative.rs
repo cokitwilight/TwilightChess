@@ -4,7 +4,7 @@ use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
 use crate::engine::tt::entry::TTNodeType;
-use crate::engine::tt::{TTEntry, TTFlag};
+use crate::engine::tt::{TTEntry, TTFlag, score_to_tt};
 use crate::engine::{Engine, SearchContext, SearchResult};
 
 // for debug printing
@@ -276,6 +276,10 @@ impl Engine {
 
             let eval = -self.negamax(board, ctx, depth - 1, -beta, -alpha, 1, true);
 
+            if stopped {
+                break;
+            }
+
             ctx.repetition_history.pop();
 
             board.undo_move(undo);
@@ -339,7 +343,7 @@ impl Engine {
         self.tt.insert(
             root_hash,
             TTEntry {
-                eval: best_eval,
+                eval: score_to_tt(best_eval, 1),
                 depth: depth as u16,
                 flag,
                 best_move,

@@ -1,5 +1,6 @@
 pub mod board;
 pub mod fen;
+pub mod gives_check;
 pub mod make_move;
 pub mod mv;
 pub mod null_move;

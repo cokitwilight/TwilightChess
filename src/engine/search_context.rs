@@ -25,7 +25,7 @@ impl SearchContext {
         }
     }
 
-    pub fn should_stop(&self) -> bool {
+    pub fn should_stop(&mut self) -> bool {
         if self.stopped {
             return true;
         }
@@ -33,12 +33,14 @@ impl SearchContext {
         if let Some(max_nodes) = self.limits.max_nodes
             && self.stats.nodes + self.stats.qnodes >= max_nodes
         {
+            self.stopped = true;
             return true;
         }
 
         if let Some(time_limit_ms) = self.limits.soft_time_limit_ms
             && self.start_time.elapsed().as_millis() >= time_limit_ms as u128
         {
+            self.stopped = true;
             return true;
         }
 

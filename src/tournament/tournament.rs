@@ -8,7 +8,8 @@ use crate::types::Color;
 pub fn play_games(
     opening_suite: OpeningSuite,
     num_games_per_opening: usize, // how many games to play for each opening in the suite. input 1 = 1 as white, 1 as black. input 2 = 2 as white, 2 as black, etc.
-    mut players: MatchPlayers,    /* Later: OpeningSuite, Start_fen */
+    max_games: usize,
+    mut players: MatchPlayers, /* Later: OpeningSuite, Start_fen */
     expected: Color, // For now expected is the starting players color. For example white would be engine 1 or MatchPlayers.white
 ) -> TournamentResult {
     if num_games_per_opening == 0 {
@@ -31,6 +32,9 @@ pub fn play_games(
     let mut count = 1;
 
     for opening in opening_suite.openings.iter() {
+        if count - 1 >= max_games {
+            break;
+        }
         for _ in 0..total_opening_games {
             let start = Instant::now();
             match run_game(
@@ -346,7 +350,7 @@ mod tests {
         match_players.white.config.limits.soft_time_limit_ms = Some(5000000);
         match_players.black.config.limits.soft_time_limit_ms = Some(5000000);
 
-        let result = play_games(opening_suite, 1, match_players, Color::White);
+        let result = play_games(opening_suite, 1, 5, match_players, Color::White);
 
         result.print_stats();
     }
@@ -355,39 +359,39 @@ mod tests {
     #[ignore]
     pub fn test_tournament_different_configs() {
         let mut match_players = MatchPlayers::from_depth(
-            "Delta/SEE on".to_string(),
-            "Delta/SEE off".to_string(),
+            "Delta on".to_string(),
+            "Delta off".to_string(),
             20,
             6,
             20,
             6,
         );
 
-        match_players.white.config.limits.soft_time_limit_ms = Some(2000);
-        match_players.black.config.limits.soft_time_limit_ms = Some(2000);
+        match_players.white.config.limits.soft_time_limit_ms = Some(1000);
+        match_players.black.config.limits.soft_time_limit_ms = Some(1000);
 
-        match_players.white.config.search.fut.enabled = false;
-        match_players.black.config.search.fut.enabled = false;
+        // match_players.white.config.search.fut.enabled = false;
+        // match_players.black.config.search.fut.enabled = false;
+
+        // // might be quiescence rewrite
+        // match_players.white.config.search.rfp.enabled = false;
+        // match_players.black.config.search.rfp.enabled = false;
+
+        // match_players.white.config.search.null_move.enabled = false;
+        // match_players.black.config.search.null_move.enabled = false;
+
+        // match_players.white.config.search.lmr.enabled = false;
+        // match_players.black.config.search.lmr.enabled = false;
 
         match_players.white.config.search.delta.enabled = true;
         match_players.black.config.search.delta.enabled = false;
 
-        // might be quiescence rewrite
-        match_players.white.config.search.rfp.enabled = false;
-        match_players.black.config.search.rfp.enabled = false;
-
-        match_players.white.config.search.null_move.enabled = false;
-        match_players.black.config.search.null_move.enabled = false;
-
-        match_players.white.config.search.lmr.enabled = false;
-        match_players.black.config.search.lmr.enabled = false;
-
-        match_players.white.config.search.see.enabled = true;
+        match_players.white.config.search.see.enabled = false;
         match_players.black.config.search.see.enabled = false;
 
-        let opening_suite = build_important_opening_suite();
+        let opening_suite = build_opening_suite();
 
-        let result = play_games(opening_suite, 1, match_players, Color::White);
+        let result = play_games(opening_suite, 2, 300, match_players, Color::White);
 
         result.print_stats();
     }
@@ -424,7 +428,7 @@ mod tests {
 
         let opening_suite = build_important_opening_suite();
 
-        let result = play_games(opening_suite, 1, match_players, Color::White);
+        let result = play_games(opening_suite, 1, 5, match_players, Color::White);
 
         result.print_stats();
     }

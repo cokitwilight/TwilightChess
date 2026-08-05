@@ -4,6 +4,7 @@ use crate::bitboard::{
 };
 use crate::board::Board;
 use crate::eval::eval::{BLACK_SQUARES, CENTER_SQUARES, EvalInfo, WHITE_SQUARES};
+use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
 pub fn sliders_eval(board: &Board, info: &EvalInfo) -> i32 {
@@ -28,6 +29,7 @@ pub fn sliders_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     score += connected_file_bonus(board, color, straight_sliders, info);
     score += rook_on_the_seventh(board, color, info);
     score += straights_on_open_file(board, color, straight_sliders, info);
+    // score += straights_xray_bonus(board, color, straight_sliders, info);
 
     score
 }
@@ -214,10 +216,7 @@ fn xray_pressure_diagonal_bonus(
         }
     }
 
-    if info.phase() < 10 {
-        // bishop will likely be open and given a huge bonus in an endgame
-        score /= 2;
-    }
+    score = scale_by_phase(score, info.phase(), 4, 16);
 
     score
 }
@@ -289,11 +288,40 @@ fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
     score
 }
 
-fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, info: &EvalInfo) -> i32 {
+fn straights_xray_bonus(board: &Board, color: Color, sliders: Bitboard, info: &EvalInfo) -> i32 {
     if sliders == 0 {
         return 0;
     }
-    if info.phase() < 10 {
+
+    let mut straights = sliders;
+
+    let enemy_occupancy = board.occupancy_of(color.opposite());
+    let friendly_occupancy = board.occupancy_of(color);
+
+    let enemy_pawns = board.pieces(color.opposite(), PieceType::Pawn);
+
+    let mut score = 0;
+
+    while let Some(sq) = pop_lsb(&mut straights) {
+        let file = FILE_MASKS[file_of(sq) as usize];
+
+        let hits = ((enemy_occupancy & !enemy_pawns & file).count_ones() as i32
+            - ((friendly_occupancy & file).count_ones() as i32 - 1))
+            .max(0)
+            - enemy_pawns.count_ones() as i32;
+
+        score += hits * 8; // note open file already gives a bonus to a rook with no pawns on the file
+
+        if file & info.king_ring(color.opposite()) != 0 {
+            score += 10;
+        }
+    }
+
+    scale_by_phase(score, info.phase(), 6, 12)
+}
+
+fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, info: &EvalInfo) -> i32 {
+    if sliders == 0 {
         return 0;
     }
     let open_files = open_file_mask(
@@ -302,7 +330,7 @@ fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, info: 
 
     let open_straights = (open_files & sliders).count_ones() as i32;
 
-    open_straights * 15
+    scale_by_phase(open_straights * 15, info.phase(), 6, 12)
 }
 
 fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo) -> i32 {

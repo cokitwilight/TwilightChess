@@ -9,7 +9,7 @@ impl Default for SEEConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            margin: -200,
+            margin: 250, // used as see value < -margin
         }
     }
 }

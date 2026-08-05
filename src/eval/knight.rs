@@ -1,6 +1,7 @@
 use crate::bitboard::{Bitboard, Square, bit, file_of, pop_lsb, rank_of};
 use crate::board::Board;
 use crate::eval::eval::EvalInfo;
+use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
 pub fn knight_eval(board: &Board, info: &EvalInfo) -> i32 {
@@ -48,7 +49,7 @@ pub fn knight_outpost_bonus(
             }
         }
 
-        let outpost_mask = calculate_outpost_mask(knight_sq, color);
+        let outpost_mask = calculate_outpost_mask(knight_sq, color); // all squares to the adjacent files and in front of the knight
 
         if enemy_pawns & outpost_mask == 0 {
             let knight_bb = bit(knight_sq);
@@ -74,6 +75,8 @@ pub fn knight_outpost_bonus(
             // TODO: Later add more detail like how valuable the knight outpost is
         }
     }
+
+    score = scale_by_phase(score, info.phase(), 4, 8);
 
     score
 }

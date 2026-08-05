@@ -24,17 +24,8 @@ impl Engine {
             // let piece = board.piece_at(book_mv.from).unwrap();
 
             if can_print {
-                println!("Book Move");
+                println!("Book Move. {}", book_mv);
             }
-
-            // println!(
-            //     "Book Move: {:?} {} to {}. End Stats: nodes={}, qnodes={}",
-            //     piece.kind,
-            //     square_name(book_mv.from),
-            //     square_name(book_mv.to),
-            //     self.nodes,
-            //     self.qnodes
-            // );
 
             return SearchResult {
                 best_move: Some(book_mv),
@@ -52,7 +43,7 @@ impl Engine {
 
         // context.limits.max_depth = adjusted_depth;
 
-        // increments generation for the transposition table
+        // IMPORTANT: increments generation for the transposition table
         self.tt.new_search();
 
         let search_result = self.iterative_deepening(&mut board, &mut context, can_print);

@@ -5,14 +5,14 @@ use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
 use crate::engine::search::search::is_insufficient_material;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
-use crate::eval::{evaluation_for_turn, lazy_eval_for_turn};
-use crate::types::{Color, PieceType};
+use crate::eval::evaluation_for_turn;
+use crate::types::PieceType;
 
 const _DELTA_MARGIN: i32 = 200; // safe defualt for now
 
-const LAZY_MARGIN: i32 = 300;
+// const LAZY_MARGIN: i32 = 300;
 
-const MAX_CHECK_Q_PLIES: usize = 16;
+const MAX_CHECK_Q_PLIES: usize = 64;
 
 impl Engine {
     pub fn quiescence(
@@ -25,10 +25,10 @@ impl Engine {
         ply: usize,
         check_plies: usize,
     ) -> i32 {
-        if context.stats.nodes + context.stats.qnodes & 2047 == 0 {
-            if context.should_stop() {
-                return 0;
-            }
+        if context.stopped
+            || (context.stats.nodes + context.stats.qnodes & 2047 == 0 && context.should_stop())
+        {
+            return 0;
         }
 
         context.stats.qnodes += 1;
@@ -74,11 +74,11 @@ impl Engine {
                     }
 
                     TTFlag::LowerBound => {
-                        alpha = alpha.max(entry.eval);
+                        alpha = alpha.max(tt_score);
                     }
 
                     TTFlag::UpperBound => {
-                        beta = beta.min(entry.eval);
+                        beta = beta.min(tt_score);
                     }
                 }
 
@@ -117,29 +117,24 @@ impl Engine {
             // too many consecutive checks. Most likely a draw anyways.
             if check_plies > MAX_CHECK_Q_PLIES {
                 // TODO: Later keep searching regardless since in check.
-                let mut score = evaluation_for_turn(board);
 
                 // since this is an awkward node do not store in tt.
                 // Additionally conservatively make the position worse
                 // maybe return alpha instead
-                match board.side_to_move() {
-                    Color::White => score = score - 100,
-                    Color::Black => score = score + 100,
-                }
-
-                return score;
+                let fallback = 0.clamp(alpha, beta - 1);
+                return fallback;
             }
-
             evasions
         } else {
-            if !in_check {
-                let lazy_eval = lazy_eval_for_turn(board);
+            // disable lazy eval for now
+            // if !in_check {
+            //     let lazy_eval = lazy_eval_for_turn(board);
 
-                if lazy_eval - LAZY_MARGIN >= beta || lazy_eval + LAZY_MARGIN <= alpha {
-                    // TODO: Add this to the statistics tracker
-                    return lazy_eval;
-                }
-            }
+            //     if lazy_eval - LAZY_MARGIN >= beta || lazy_eval + LAZY_MARGIN <= alpha {
+            //         // TODO: Add this to the statistics tracker
+            //         return lazy_eval;
+            //     }
+            // }
 
             stand_pat = evaluation_for_turn(board);
 
@@ -188,43 +183,53 @@ impl Engine {
         }
 
         for mv in raw_moves.iter() {
-            // add see pruning and delta pruning here
+            let gives_check = board.move_gives_check(mv);
+            let captured_value = match mv.kind {
+                MoveType::EnPassant => PieceType::Pawn.value(),
+
+                _ => board.piece_at(mv.to).map(|p| p.kind.value()).unwrap_or(0),
+            };
+
             let can_prune = !in_check
                 && board.phase > 8
                 && mv.promotion.is_none()
-                && alpha.abs() < MATE_THRESHOLD;
+                && alpha.abs() < MATE_THRESHOLD
+                && !gives_check;
 
             if can_prune {
-                let captured_value = match mv.kind {
-                    MoveType::EnPassant => PieceType::Pawn.value(),
-
-                    _ => board.piece_at(mv.to).map(|p| p.kind.value()).unwrap_or(0),
-                };
-                if stand_pat + captured_value + self.config.search.delta.margin < alpha {
+                // delta pruning
+                if self.config.search.delta.enabled
+                    && stand_pat + captured_value + self.config.search.delta.margin < alpha
+                {
                     context.stats.delta_prunes += 1;
                     continue;
                 }
 
                 if self.config.search.see.enabled
-                    && see(board, *mv) <= self.config.search.see.margin
+                    && see(board, *mv) < -self.config.search.see.margin
                 {
                     context.stats.see_prunes += 1;
-
                     continue;
                 }
             }
-            let undo = board.make_move(*mv);
 
+            let undo = board.make_move(*mv);
             let child_hash = board.hash();
 
             context.repetition_history.push(child_hash);
 
-            context.stats.qmoves_searched += 1;
-
-            let check_plies = if in_check { check_plies + 1 } else { 0 };
+            let check_plies = if gives_check { check_plies + 1 } else { 0 };
 
             let score =
                 -self.quiescence(board, context, depth, -beta, -alpha, ply + 1, check_plies);
+
+            if context.stopped {
+                context.repetition_history.pop();
+                board.undo_move(undo);
+                return 0;
+            }
+
+            context.stats.qmoves_searched += 1;
 
             context.repetition_history.pop();
 

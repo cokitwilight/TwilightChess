@@ -3,6 +3,7 @@ use crate::bitboard::{
 };
 use crate::board::Board;
 use crate::eval::eval::{EvalInfo, KING_DANGER_TABLE, MAX_DANGER};
+use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
 pub fn king_eval(board: &Board, info: &EvalInfo) -> i32 {
@@ -39,7 +40,9 @@ pub fn king_eval_danger_raw(board: &Board, color: Color, info: &EvalInfo) -> i32
     danger += open_diagonal_danger_bonus(board, color, king_sq, info);
     danger += escape_score_danger_bonus(board, color, info);
 
-    -KING_DANGER_TABLE[danger.clamp(0, MAX_DANGER as i32) as usize]
+    let mut penalty = -KING_DANGER_TABLE[danger.clamp(0, MAX_DANGER as i32) as usize];
+    penalty = scale_by_phase(penalty, info.phase(), 4, 12);
+    penalty
 }
 
 fn king_ring_safety(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
@@ -90,6 +93,8 @@ fn king_ring_safety(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
     score -= attack_penalty;
 
     score += defender_bonus;
+
+    score = scale_by_phase(score, info.phase(), 4, 12);
 
     score
 }
@@ -142,6 +147,9 @@ fn pawn_shield_score(board: &Board, color: Color, king_sq: Square, info: &EvalIn
     } else {
         score -= 10;
     }
+
+    score = scale_by_phase(score, info.phase(), 6, 10);
+
     score
 }
 
