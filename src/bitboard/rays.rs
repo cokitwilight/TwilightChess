@@ -1,4 +1,8 @@
-use crate::bitboard::{Bitboard, Square, bit, file_of, pop_lsb, rank_of, square};
+use crate::bitboard::{
+    Bitboard, Square, bit, file_of,
+    magic::{self, bishop_attack_table, bishop_magics, rook_attack_table, rook_magics},
+    pop_lsb, rank_of, square,
+};
 
 /// Generate attacks in one direction until edge of board or first blocker.
 ///
@@ -36,15 +40,39 @@ fn ray_attacks(sq: Square, occupied: Bitboard, df: i8, dr: i8) -> Bitboard {
     attacks
 }
 
+// WILL SOON REWRITE WITH MAGIC BITBOARDS
+#[inline(always)]
 pub fn rook_attacks(sq: Square, occupied: Bitboard) -> Bitboard {
+    let entry = rook_magics()[sq as usize];
+
+    let blockers = entry.mask & occupied;
+
+    let magic_index = (blockers.wrapping_mul(entry.magic) >> entry.shift) as usize;
+
+    rook_attack_table()[entry.offset + magic_index]
+}
+
+#[inline]
+pub fn rook_attacks_slow(sq: Square, occupied: Bitboard) -> Bitboard {
     ray_attacks(sq, occupied, 0, 1)   // north
         | ray_attacks(sq, occupied, 0, -1)  // south
         | ray_attacks(sq, occupied, 1, 0)   // east
         | ray_attacks(sq, occupied, -1, 0) // west
 }
 
-#[inline]
+#[inline(always)]
 pub fn bishop_attacks(sq: Square, occupied: Bitboard) -> Bitboard {
+    let entry = bishop_magics()[sq as usize];
+
+    let blockers = entry.mask & occupied;
+
+    let magic_index = (blockers.wrapping_mul(entry.magic) >> entry.shift) as usize;
+
+    bishop_attack_table()[entry.offset + magic_index]
+}
+
+#[inline]
+pub fn bishop_attacks_slow(sq: Square, occupied: Bitboard) -> Bitboard {
     ray_attacks(sq, occupied, 1, 1)    // northeast
         | ray_attacks(sq, occupied, -1, 1)  // northwest
         | ray_attacks(sq, occupied, 1, -1)  // southeast

@@ -200,6 +200,8 @@ impl Engine {
             best_result.elapsed = full_start.elapsed()
         }
 
+        total_time = full_start.elapsed().as_secs_f64();
+
         let total_nps = if total_time > 0.0 {
             (ctx.stats.nodes + ctx.stats.qnodes) as f64 / total_time
         } else {

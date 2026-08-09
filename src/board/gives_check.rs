@@ -197,7 +197,7 @@ fn square_attacked(pieces: &[[Bitboard; 6]; 2], occupied: Bitboard, sq: Square, 
 mod move_gives_check_tests {
     use super::*;
     use crate::board::Move;
-    use crate::types::{Color, Piece, PieceType};
+    use crate::types::PieceType;
 
     fn assert_move_gives_check(fen: &str, mv: Move, expected: bool) {
         let mut board = Board::from_fen(fen).expect("Invalid test FEN");
