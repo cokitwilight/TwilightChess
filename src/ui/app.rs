@@ -16,7 +16,7 @@ use eframe::egui;
 const DEFAULT_BOT_DEPTH: u16 = 20;
 const DEFAULT_Q_BOT_DEPTH: u16 = 4;
 
-const DEFAULT_BOT_TIME_MS: u64 = 1000;
+const DEFAULT_BOT_TIME_MS: u64 = 3000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {

@@ -7,6 +7,10 @@ const TT_CLUSTER_SIZE: usize = 4;
 const AGE_PENALTY: i32 = 4;
 
 pub trait TTReplace {
+    type Domain: Copy + Eq;
+
+    fn domain(&self) -> Self::Domain;
+
     fn depth(&self) -> u16;
 
     fn replacement_bonus(&self) -> i32 {
@@ -19,10 +23,18 @@ pub trait TTReplace {
 }
 
 impl TTReplace for TTEntry {
+    type Domain = TTNodeType;
+
     #[inline(always)]
     fn depth(&self) -> u16 {
         self.depth
     }
+
+    #[inline(always)]
+    fn domain(&self) -> Self::Domain {
+        self.node_type
+    }
+
     #[inline(always)]
     fn replacement_bonus(&self) -> i32 {
         let exact_bonus = match self.flag {
@@ -99,13 +111,13 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
     }
 
     #[inline(always)]
-    pub fn get(&self, key: u64) -> Option<&Entry> {
+    pub fn get(&self, key: u64, domain: Entry::Domain) -> Option<&Entry> {
         let index = self.index(key);
         let cluster = &self.table[index];
 
         for slot in &cluster.slots {
             if let Some(slot) = slot {
-                if slot.key == key {
+                if slot.key == key && slot.entry.domain() == domain {
                     return Some(&slot.entry);
                 }
             }
@@ -115,17 +127,33 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
     }
 
     #[inline(always)]
+    pub fn get_any(&self, key: u64) -> Option<&Entry> {
+        let index = self.index(key);
+        let cluster = &self.table[index];
+
+        cluster
+            .slots
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|slot| slot.key == key)
+            .map(|slot| &slot.entry)
+    }
+
+    #[inline(always)]
     pub fn insert(&mut self, key: u64, entry: Entry) {
         let index = self.index(key);
         let generation = self.generation;
         let cluster = &mut self.table[index];
 
+        let new_domain = entry.domain();
+
+        // prevent duplicate key values by replacing the existing
         for slot in &mut cluster.slots {
             let Some(old_slot) = slot else {
                 continue;
             };
 
-            if old_slot.key != key {
+            if old_slot.key != key && old_slot.entry.domain() != new_domain {
                 continue;
             }
 
@@ -158,6 +186,7 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
 
         // full cluster
 
+        // returns the least valuable clusters index
         let replacement_index = cluster
             .slots
             .iter()

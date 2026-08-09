@@ -46,6 +46,13 @@ pub struct SearchStats {
     pub repetition_returns: u64,
     pub fifty_returns: u64,
     pub insufficient_returns: u64,
+
+    // singular extension
+    pub singular_attempts: u64,
+    pub singular_extensions: u64,
+    pub singular_fail_highs: u64,
+    pub singular_no_alternatives: u64,
+    pub singular_verification_nodes: u64,
 }
 
 impl SearchStats {
@@ -88,7 +95,10 @@ impl SearchStats {
         self.print_cutoffs();
         self.print_aspiration();
         self.print_ordering();
-        self.print_pruning();
+        self.print_reductions();
+        self.print_main_pruning();
+        self.print_q_pruning();
+        self.print_singular_extensions();
         self.print_returns();
         self.print_tts();
 
@@ -260,99 +270,219 @@ impl SearchStats {
         }
     }
 
-    pub fn print_pruning(&self) {
+    pub fn print_reductions(&self) {
         let has_lmr = self.lmr_attempts > 0 || self.lmr_researched > 0;
-        let has_null = self.null_attempts > 0 || self.null_cutoffs > 0;
-        let has_q_prunes = self.delta_prunes > 0 || self.see_prunes > 0;
-        let has_rfp_prunes = self.rfp_attempts > 0 || self.rfp_cutoffs > 0;
-        let has_fut_prunes = self.fut_attempts > 0 || self.fut_cutoffs > 0;
 
-        if !has_lmr && !has_null && !has_q_prunes && !has_rfp_prunes && !has_fut_prunes {
+        if !has_lmr {
             return;
         }
 
-        println!("Pruning / Reductions");
+        println!("Search Reductions");
+        println!("  Late Move Reductions");
+        println!(
+            "    {:<20} {:>14}",
+            "Attempts:",
+            Self::fmt(self.lmr_attempts)
+        );
+        println!(
+            "    {:<20} {:>14}",
+            "Re-searches:",
+            Self::fmt(self.lmr_researched)
+        );
 
-        if has_lmr {
+        if self.lmr_attempts > 0 {
             println!(
-                "  {:<22} {:>14}",
-                "LMR attempts:",
-                Self::fmt(self.lmr_attempts)
+                "    {:<20} {:>14}",
+                "Re-search rate:",
+                Self::pct(self.lmr_researched, self.lmr_attempts)
             );
-            println!(
-                "  {:<22} {:>14}",
-                "LMR re-searches:",
-                Self::fmt(self.lmr_researched)
-            );
+        }
+    }
 
-            if self.lmr_attempts > 0 {
+    pub fn print_main_pruning(&self) {
+        let has_rfp = self.rfp_attempts > 0 || self.rfp_cutoffs > 0;
+        let has_futility = self.fut_attempts > 0 || self.fut_cutoffs > 0;
+        let has_null = self.null_attempts > 0 || self.null_cutoffs > 0;
+
+        if !has_rfp && !has_futility && !has_null {
+            return;
+        }
+
+        println!("Main Search Pruning");
+
+        if has_rfp {
+            println!("  Reverse Futility Pruning");
+            println!(
+                "    {:<20} {:>14}",
+                "Attempts:",
+                Self::fmt(self.rfp_attempts)
+            );
+            println!("    {:<20} {:>14}", "Cutoffs:", Self::fmt(self.rfp_cutoffs));
+
+            if self.rfp_attempts > 0 {
                 println!(
-                    "  {:<22} {:>14}",
-                    "LMR re-search rate:",
-                    Self::pct(self.lmr_researched, self.lmr_attempts)
+                    "    {:<20} {:>14}",
+                    "Cutoff rate:",
+                    Self::pct(self.rfp_cutoffs, self.rfp_attempts)
+                );
+            }
+        }
+
+        if has_futility {
+            println!("  Futility Pruning");
+            println!(
+                "    {:<20} {:>14}",
+                "Attempts:",
+                Self::fmt(self.fut_attempts)
+            );
+            println!(
+                "    {:<20} {:>14}",
+                "Pruned moves:",
+                Self::fmt(self.fut_cutoffs)
+            );
+
+            if self.fut_attempts > 0 {
+                println!(
+                    "    {:<20} {:>14}",
+                    "Prune rate:",
+                    Self::pct(self.fut_cutoffs, self.fut_attempts)
                 );
             }
         }
 
         if has_null {
+            println!("  Null-Move Pruning");
             println!(
-                "  {:<22} {:>14}",
-                "Null attempts:",
+                "    {:<20} {:>14}",
+                "Attempts:",
                 Self::fmt(self.null_attempts)
             );
             println!(
-                "  {:<22} {:>14}",
-                "Null cutoffs:",
+                "    {:<20} {:>14}",
+                "Cutoffs:",
                 Self::fmt(self.null_cutoffs)
             );
 
             if self.null_attempts > 0 {
                 println!(
-                    "  {:<22} {:>14}",
-                    "Null cutoff rate:",
+                    "    {:<20} {:>14}",
+                    "Cutoff rate:",
                     Self::pct(self.null_cutoffs, self.null_attempts)
                 );
             }
         }
+    }
 
-        if has_q_prunes {
+    pub fn print_q_pruning(&self) {
+        let has_delta = self.delta_prunes > 0;
+        let has_see = self.see_prunes > 0;
+
+        if !has_delta && !has_see {
+            return;
+        }
+
+        println!("Quiescence Pruning");
+
+        if has_delta {
+            println!("  Delta Pruning");
             println!(
-                "  {:<22} {:>14}",
-                "Delta prunes:",
+                "    {:<20} {:>14}",
+                "Pruned moves:",
                 Self::fmt(self.delta_prunes)
             );
-            println!("  {:<22} {:>14}", "SEE prunes:", Self::fmt(self.see_prunes));
-
-            let total_q_prunes = self.delta_prunes + self.see_prunes;
-            println!(
-                "  {:<22} {:>14}",
-                "Total q prunes:",
-                Self::fmt(total_q_prunes)
-            );
         }
-        if has_rfp_prunes {
+
+        if has_see {
+            println!("  SEE Pruning");
             println!(
-                "  {:<22} {:>14}",
-                "RFP attempts:",
-                Self::fmt(self.rfp_attempts)
-            );
-            println!(
-                "  {:<22} {:>14}",
-                "RFP cutoffs:",
-                Self::fmt(self.rfp_cutoffs)
+                "    {:<20} {:>14}",
+                "Pruned moves:",
+                Self::fmt(self.see_prunes)
             );
         }
 
-        if has_fut_prunes {
+        let total_q_prunes = self.delta_prunes + self.see_prunes;
+        println!(
+            "  {:<22} {:>14}",
+            "Total q prunes:",
+            Self::fmt(total_q_prunes)
+        );
+    }
+
+    // Kept as a convenience wrapper for any existing callers.
+    pub fn print_pruning(&self) {
+        self.print_reductions();
+        self.print_main_pruning();
+        self.print_q_pruning();
+    }
+
+    pub fn print_singular_extensions(&self) {
+        let has_singular = self.singular_attempts > 0
+            || self.singular_extensions > 0
+            || self.singular_fail_highs > 0
+            || self.singular_no_alternatives > 0
+            || self.singular_verification_nodes > 0;
+
+        if !has_singular {
+            return;
+        }
+
+        println!("Singular Extensions");
+        println!(
+            "  {:<22} {:>14}",
+            "Attempts:",
+            Self::fmt(self.singular_attempts)
+        );
+        println!(
+            "  {:<22} {:>14}",
+            "Extensions:",
+            Self::fmt(self.singular_extensions)
+        );
+        println!(
+            "  {:<22} {:>14}",
+            "Alt fail-highs:",
+            Self::fmt(self.singular_fail_highs)
+        );
+        println!(
+            "  {:<22} {:>14}",
+            "No alternatives:",
+            Self::fmt(self.singular_no_alternatives)
+        );
+        println!(
+            "  {:<22} {:>14}",
+            "Verification nodes:",
+            Self::fmt(self.singular_verification_nodes)
+        );
+
+        if self.singular_attempts > 0 {
             println!(
                 "  {:<22} {:>14}",
-                "Futility attempts:",
-                Self::fmt(self.fut_attempts)
+                "Extension rate:",
+                Self::pct(self.singular_extensions, self.singular_attempts)
             );
             println!(
                 "  {:<22} {:>14}",
-                "Futility cutoffs:",
-                Self::fmt(self.fut_cutoffs)
+                "Fail-high rate:",
+                Self::pct(self.singular_fail_highs, self.singular_attempts)
+            );
+            println!(
+                "  {:<22} {:>14}",
+                "No-alt rate:",
+                Self::pct(self.singular_no_alternatives, self.singular_attempts)
+            );
+            println!(
+                "  {:<22} {:>14.2}",
+                "Nodes / attempt:",
+                self.singular_verification_nodes as f64 / self.singular_attempts as f64
+            );
+        }
+
+        let total_nodes = self.total_nodes();
+        if total_nodes > 0 {
+            println!(
+                "  {:<22} {:>14}",
+                "Verification share:",
+                Self::pct(self.singular_verification_nodes, total_nodes)
             );
         }
     }
@@ -409,7 +539,7 @@ impl Sub for SearchStats {
             beta_cutoffs: self.beta_cutoffs.saturating_sub(rhs.beta_cutoffs),
             stand_pat_cutoffs: self.stand_pat_cutoffs.saturating_sub(rhs.stand_pat_cutoffs),
 
-            moves_searched: self.nodes.saturating_sub(rhs.moves_searched),
+            moves_searched: self.moves_searched.saturating_sub(rhs.moves_searched),
             qmoves_searched: self.qmoves_searched.saturating_sub(rhs.qmoves_searched),
 
             illegal_moves: self.illegal_moves.saturating_sub(rhs.illegal_moves),
@@ -450,6 +580,20 @@ impl Sub for SearchStats {
             insufficient_returns: self
                 .insufficient_returns
                 .saturating_sub(rhs.insufficient_returns),
+
+            singular_attempts: self.singular_attempts.saturating_sub(rhs.singular_attempts),
+            singular_extensions: self
+                .singular_extensions
+                .saturating_sub(rhs.singular_extensions),
+            singular_fail_highs: self
+                .singular_fail_highs
+                .saturating_sub(rhs.singular_fail_highs),
+            singular_no_alternatives: self
+                .singular_no_alternatives
+                .saturating_sub(rhs.singular_no_alternatives),
+            singular_verification_nodes: self
+                .singular_verification_nodes
+                .saturating_sub(rhs.singular_verification_nodes),
         }
     }
 }
@@ -495,6 +639,12 @@ impl AddAssign for SearchStats {
         self.repetition_returns += rhs.repetition_returns;
         self.fifty_returns += rhs.fifty_returns;
         self.insufficient_returns += rhs.insufficient_returns;
+
+        self.singular_attempts += rhs.singular_attempts;
+        self.singular_extensions += rhs.singular_extensions;
+        self.singular_fail_highs += rhs.singular_fail_highs;
+        self.singular_no_alternatives += rhs.singular_no_alternatives;
+        self.singular_verification_nodes += rhs.singular_verification_nodes;
     }
 }
 

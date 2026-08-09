@@ -1,10 +1,10 @@
 use crate::board::{Board, Move, MoveType};
-use crate::engine::Engine;
 use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
 use crate::engine::search::search::is_insufficient_material;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
+use crate::engine::{Engine, MAX_PLY};
 use crate::eval::evaluation_for_turn;
 use crate::types::PieceType;
 
@@ -49,6 +49,10 @@ impl Engine {
             return 0;
         }
 
+        if ply >= MAX_PLY as usize - 1 {
+            return evaluation_for_turn(board);
+        }
+
         let original_alpha = alpha;
         let original_beta = beta;
         let hash = board.hash();
@@ -58,13 +62,13 @@ impl Engine {
 
         context.stats.qtt.probes += 1;
 
-        if let Some(entry) = self.tt.get(hash) {
+        if let Some(entry) = self.tt.get(hash, TTNodeType::Quiescence) {
             context.stats.qtt.hits += 1;
             tt_best_move = entry.best_move;
 
             let tt_score = score_from_tt(entry.eval, ply);
 
-            if entry.depth >= depth && entry.node_type == TTNodeType::Quiescence {
+            if entry.depth >= depth {
                 context.stats.qtt.usable += 1;
 
                 match entry.flag {

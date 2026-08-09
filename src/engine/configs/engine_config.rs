@@ -19,3 +19,16 @@ impl Default for EngineConfig {
         }
     }
 }
+
+impl EngineConfig {
+    pub fn standard() -> Self {
+        let limits = SearchLimits::depth_and_time(20, 20, 250);
+        let tt_size = 128;
+
+        Self {
+            search: SearchConfig::standard(),
+            limits,
+            tt_size,
+        }
+    }
+}

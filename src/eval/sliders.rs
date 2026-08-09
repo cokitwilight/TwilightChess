@@ -29,7 +29,7 @@ pub fn sliders_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     score += connected_file_bonus(board, color, straight_sliders, info);
     score += rook_on_the_seventh(board, color, info);
     score += straights_on_open_file(board, color, straight_sliders, info);
-    // score += straights_xray_bonus(board, color, straight_sliders, info);
+    score += straights_xray_bonus(board, color, straight_sliders, info);
 
     score
 }
@@ -310,7 +310,7 @@ fn straights_xray_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
             .max(0)
             - enemy_pawns.count_ones() as i32;
 
-        score += hits * 8; // note open file already gives a bonus to a rook with no pawns on the file
+        score += hits * 5; // note open file already gives a bonus to a rook with no pawns on the file
 
         if file & info.king_ring(color.opposite()) != 0 {
             score += 10;

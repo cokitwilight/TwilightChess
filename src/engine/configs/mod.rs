@@ -7,6 +7,7 @@ pub mod null_move_config;
 pub mod rfp_config;
 pub mod search_config;
 pub mod see_config;
+pub mod singular_config;
 
 pub use aspiration_config::AspirationConfig;
 pub use delta_pruning_config::DeltaPruneConfig;
@@ -17,3 +18,4 @@ pub use null_move_config::NullMoveConfig;
 pub use rfp_config::RFPConfig;
 pub use search_config::SearchConfig;
 pub use see_config::SEEConfig;
+pub use singular_config::SingularConfig;

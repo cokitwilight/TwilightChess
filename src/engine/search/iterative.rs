@@ -5,7 +5,7 @@ use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
 use crate::engine::tt::entry::TTNodeType;
 use crate::engine::tt::{TTEntry, TTFlag, score_to_tt};
-use crate::engine::{Engine, SearchContext, SearchResult};
+use crate::engine::{Engine, SearchContext, SearchOptions, SearchResult};
 
 // for debug printing
 use thousands::Separable;
@@ -244,7 +244,15 @@ impl Engine {
 
         let mut stopped = false;
 
-        let tt_best_move = self.tt.get(board.hash()).and_then(|entry| entry.best_move);
+        let tt_best_move = self
+            .tt
+            .get(board.hash(), TTNodeType::Main)
+            .and_then(|entry| entry.best_move)
+            .or_else(|| {
+                self.tt
+                    .get_any(board.hash())
+                    .and_then(|entry| entry.best_move)
+            });
 
         self.order_moves(
             board,
@@ -274,7 +282,15 @@ impl Engine {
 
             ctx.repetition_history.push(child_hash);
 
-            let eval = -self.negamax(board, ctx, depth - 1, -beta, -alpha, 1, true);
+            let eval = -self.negamax(
+                board,
+                ctx,
+                depth - 1,
+                -beta,
+                -alpha,
+                1,
+                SearchOptions::NORMAL,
+            );
 
             if stopped {
                 break;

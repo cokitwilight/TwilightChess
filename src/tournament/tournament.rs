@@ -332,7 +332,10 @@ pub fn play_games(
 
 #[cfg(test)]
 mod tests {
-    use crate::tournament::opening_suite::{build_important_opening_suite, build_opening_suite};
+    use crate::{
+        engine::configs::EngineConfig,
+        tournament::opening_suite::{build_important_opening_suite, build_opening_suite},
+    };
 
     use super::*;
 
@@ -359,11 +362,11 @@ mod tests {
     #[ignore]
     pub fn test_tournament_different_configs() {
         let mut match_players = MatchPlayers::from_depth(
-            "Delta on".to_string(),
-            "Delta off".to_string(),
-            20,
+            "Singular on".to_string(),
+            "Singular off".to_string(),
+            10,
             6,
-            20,
+            10,
             6,
         );
 
@@ -383,17 +386,15 @@ mod tests {
         // match_players.white.config.search.lmr.enabled = false;
         // match_players.black.config.search.lmr.enabled = false;
 
-        match_players.white.config.search.delta.enabled = true;
-        match_players.black.config.search.delta.enabled = false;
-
-        match_players.white.config.search.see.enabled = false;
-        match_players.black.config.search.see.enabled = false;
+        match_players.white.config.search.singular.enabled = true;
+        match_players.white.config.search.singular.minimum_depth = 6;
+        match_players.black.config.search.singular.enabled = false;
 
         let opening_suite = build_opening_suite();
 
-        let result = play_games(opening_suite, 2, 300, match_players, Color::White);
+        let result = play_games(opening_suite, 1, 300, match_players, Color::White);
 
-        result.print_stats();
+        result.review().expect("IO Error");
     }
 
     #[test]
@@ -431,5 +432,23 @@ mod tests {
         let result = play_games(opening_suite, 1, 5, match_players, Color::White);
 
         result.print_stats();
+    }
+
+    #[test]
+    #[ignore]
+    pub fn test_tournament_lmr() {
+        let mut match_players =
+            MatchPlayers::from_depth("LMR on".to_string(), "LMR off".to_string(), 10, 6, 10, 6);
+
+        match_players.white.config = EngineConfig::standard();
+        match_players.black.config = EngineConfig::standard();
+
+        match_players.black.config.search.lmr.enabled = true;
+
+        let opening_suite = build_opening_suite();
+
+        let result = play_games(opening_suite, 10, 1000, match_players, Color::White);
+
+        result.review().expect("IO Error");
     }
 }
