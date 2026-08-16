@@ -198,7 +198,6 @@ fn pawn_shield_danger_score(board: &Board, color: Color, king_sq: Square, info: 
 
     let mut first_row_shield = KING_PAWN_SHIELD[color.idx()][king_sq as usize];
 
-    
     match color {
         Color::White => {
             if king_sq < 56 {

@@ -4,10 +4,12 @@ use std::thread;
 use crate::bitboard::{Square, square_to_algebraic};
 use crate::board::{Move, MoveList};
 use crate::bot::Bot;
+use crate::debug::eval_breakdown::evaluation_breakdown;
 use crate::engine::configs::EngineConfig;
 use crate::engine::{Engine, SearchLimits};
 use crate::game::{Game, GameState};
 use crate::types::{Color, PieceType};
+use crate::uci::pgn::{PgnMetadata, game_to_pgn};
 use crate::ui::board_view::{BoardAction, PromotionPicker, draw_board_sized};
 use crate::ui::bot_thread::{BotSearchRequest, BotSearchResponse};
 
@@ -16,7 +18,7 @@ use eframe::egui;
 const DEFAULT_BOT_DEPTH: u16 = 25;
 const DEFAULT_Q_BOT_DEPTH: u16 = 4;
 
-const DEFAULT_BOT_TIME_MS: u64 = 100;
+const DEFAULT_BOT_TIME_MS: u64 = 2000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {
@@ -34,6 +36,8 @@ pub enum Screen {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GameScreenAction {
     None,
+    PrintEval,
+    TogglePgn,
     NewGame,
     MainMenu,
 }
@@ -63,6 +67,9 @@ pub struct ChessApp {
 
     bot: Option<Bot>,
     bot_rx: Option<Receiver<BotSearchResponse>>,
+
+    show_pgn: bool,
+    pgn_text: String,
 }
 
 impl Default for ChessApp {
@@ -79,6 +86,9 @@ impl Default for ChessApp {
 
             bot: None,
             bot_rx: None,
+
+            show_pgn: false,
+            pgn_text: String::new(),
         }
     }
 }
@@ -95,6 +105,7 @@ impl ChessApp {
         self.bot = None;
         self.bot_rx = None;
 
+        self.clear_pgn_display();
         self.clear_selection();
         self.screen = Screen::Game;
     }
@@ -115,6 +126,7 @@ impl ChessApp {
         ));
         self.bot_rx = None;
 
+        self.clear_pgn_display();
         self.clear_selection();
         self.screen = Screen::Game;
     }
@@ -127,6 +139,7 @@ impl ChessApp {
         self.bot = None;
         self.bot_rx = None;
 
+        self.clear_pgn_display();
         self.clear_selection();
     }
 
@@ -264,7 +277,9 @@ impl ChessApp {
             });
 
             match action {
-                GameScreenAction::None => {}
+                GameScreenAction::None
+                | GameScreenAction::PrintEval
+                | GameScreenAction::TogglePgn => {}
                 GameScreenAction::NewGame => self.restart_current_game(),
                 GameScreenAction::MainMenu => self.return_to_main_menu(),
             }
@@ -284,6 +299,9 @@ impl ChessApp {
 
         let mut board_action = None;
         let mut action = GameScreenAction::None;
+
+        let show_pgn = self.show_pgn;
+        let pgn_text = &mut self.pgn_text;
 
         let available = ui.available_size();
 
@@ -328,6 +346,8 @@ impl ChessApp {
                         orientation,
                         selected_square,
                         selected_move_count,
+                        show_pgn,
+                        pgn_text,
                     );
                 },
             );
@@ -344,6 +364,8 @@ impl ChessApp {
 
         match action {
             GameScreenAction::None => {}
+            GameScreenAction::PrintEval => self.print_current_eval(),
+            GameScreenAction::TogglePgn => self.toggle_pgn_display(),
             GameScreenAction::NewGame => self.restart_current_game(),
             GameScreenAction::MainMenu => self.return_to_main_menu(),
         }
@@ -378,6 +400,7 @@ impl ChessApp {
         // - PlayerVsPlayer stays PlayerVsPlayer
         // - PlayerVsBot keeps the same human color
         self.mode = Some(mode);
+        self.clear_pgn_display();
         self.clear_selection();
         self.screen = Screen::Game;
     }
@@ -389,6 +412,8 @@ impl ChessApp {
         orientation: BoardOrientation,
         selected_square: Option<Square>,
         selected_move_count: usize,
+        show_pgn: bool,
+        pgn_text: &mut String,
     ) -> GameScreenAction {
         let mut action = GameScreenAction::None;
 
@@ -424,6 +449,36 @@ impl ChessApp {
                 ui.add_space(16.0);
 
                 ui.label("Game over.");
+            }
+        }
+
+        ui.add_space(16.0);
+
+        if ui.button("Print Eval").clicked() {
+            action = GameScreenAction::PrintEval;
+        }
+
+        if state != GameState::Ongoing {
+            ui.add_space(8.0);
+
+            let pgn_button_text = if show_pgn { "Hide PGN" } else { "Show PGN" };
+            if ui.button(pgn_button_text).clicked() {
+                action = GameScreenAction::TogglePgn;
+            }
+
+            if show_pgn {
+                ui.add_space(8.0);
+                ui.label("PGN:");
+
+                egui::ScrollArea::vertical()
+                    .max_height(260.0)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(pgn_text)
+                                .desired_width(f32::INFINITY)
+                                .desired_rows(10),
+                        );
+                    });
             }
         }
 
@@ -480,7 +535,9 @@ impl ChessApp {
             });
 
             match action {
-                GameScreenAction::None => {}
+                GameScreenAction::None
+                | GameScreenAction::PrintEval
+                | GameScreenAction::TogglePgn => {}
                 GameScreenAction::NewGame => self.restart_current_game(),
                 GameScreenAction::MainMenu => self.return_to_main_menu(),
             }
@@ -507,6 +564,9 @@ impl ChessApp {
 
         let mut board_action = None;
         let mut action = GameScreenAction::None;
+
+        let show_pgn = self.show_pgn;
+        let pgn_text = &mut self.pgn_text;
 
         let available = ui.available_size();
 
@@ -552,6 +612,8 @@ impl ChessApp {
                         selected_move_count,
                         bot_color,
                         bot_thinking,
+                        show_pgn,
+                        pgn_text,
                     );
                 },
             );
@@ -568,6 +630,8 @@ impl ChessApp {
 
         match action {
             GameScreenAction::None => {}
+            GameScreenAction::PrintEval => self.print_current_eval(),
+            GameScreenAction::TogglePgn => self.toggle_pgn_display(),
             GameScreenAction::NewGame => self.restart_current_game(),
             GameScreenAction::MainMenu => self.return_to_main_menu(),
         }
@@ -583,6 +647,8 @@ impl ChessApp {
         selected_move_count: usize,
         bot_color: Option<Color>,
         bot_thinking: bool,
+        show_pgn: bool,
+        pgn_text: &mut String,
     ) -> GameScreenAction {
         let mut action = GameScreenAction::None;
 
@@ -637,6 +703,36 @@ impl ChessApp {
                 ui.add_space(16.0);
 
                 ui.label("Game over.");
+            }
+        }
+
+        ui.add_space(16.0);
+
+        if ui.button("Print Eval").clicked() {
+            action = GameScreenAction::PrintEval;
+        }
+
+        if state != GameState::Ongoing {
+            ui.add_space(8.0);
+
+            let pgn_button_text = if show_pgn { "Hide PGN" } else { "Show PGN" };
+            if ui.button(pgn_button_text).clicked() {
+                action = GameScreenAction::TogglePgn;
+            }
+
+            if show_pgn {
+                ui.add_space(8.0);
+                ui.label("PGN:");
+
+                egui::ScrollArea::vertical()
+                    .max_height(260.0)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(pgn_text)
+                                .desired_width(f32::INFINITY)
+                                .desired_rows(10),
+                        );
+                    });
             }
         }
 
@@ -816,6 +912,79 @@ impl ChessApp {
     // **************************
     // **** HELPER FUNCTIONS ****
     // **************************
+
+    fn print_current_eval(&self) {
+        let Some(game) = &self.game else {
+            return;
+        };
+
+        let breakdown = evaluation_breakdown(game.board());
+        println!("Current eval breakdown:\n{:#?}", breakdown);
+    }
+
+    fn toggle_pgn_display(&mut self) {
+        if self.show_pgn {
+            self.show_pgn = false;
+            return;
+        }
+
+        let Some(mode) = self.mode else {
+            return;
+        };
+
+        let Some(game) = &self.game else {
+            return;
+        };
+
+        if game.state() == GameState::Ongoing {
+            return;
+        }
+
+        let metadata = Self::pgn_metadata(mode);
+
+        match game_to_pgn(game, &metadata) {
+            Ok(pgn) => {
+                self.pgn_text = pgn;
+                self.show_pgn = true;
+            }
+            Err(err) => {
+                eprintln!("Failed to generate PGN: {:?}", err);
+            }
+        }
+    }
+
+    fn pgn_metadata(mode: AppMode) -> PgnMetadata {
+        let mut metadata = PgnMetadata::default();
+
+        match mode {
+            AppMode::PlayerVsPlayer => {
+                metadata.event = "Player vs Player".to_string();
+                metadata.white = "White".to_string();
+                metadata.black = "Black".to_string();
+            }
+            AppMode::PlayerVsBot {
+                human: Color::White,
+            } => {
+                metadata.event = "Player vs Bot".to_string();
+                metadata.white = "Player".to_string();
+                metadata.black = "Bot".to_string();
+            }
+            AppMode::PlayerVsBot {
+                human: Color::Black,
+            } => {
+                metadata.event = "Player vs Bot".to_string();
+                metadata.white = "Bot".to_string();
+                metadata.black = "Player".to_string();
+            }
+        }
+
+        metadata
+    }
+
+    fn clear_pgn_display(&mut self) {
+        self.show_pgn = false;
+        self.pgn_text.clear();
+    }
 
     fn clear_selection(&mut self) {
         self.selected_square = None;
