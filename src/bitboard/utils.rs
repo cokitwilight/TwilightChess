@@ -66,7 +66,7 @@ pub const G8: Square = 62;
 pub const H8: Square = 63;
 
 #[inline]
-pub fn bit(sq: Square) -> Bitboard {
+pub const fn bit(sq: Square) -> Bitboard {
     1u64 << sq
 }
 
@@ -82,7 +82,7 @@ pub fn pop_lsb(bb: &mut Bitboard) -> Option<Square> {
 }
 
 #[inline]
-pub fn file_of(sq: Square) -> u8 {
+pub const fn file_of(sq: Square) -> u8 {
     sq % 8
 }
 
@@ -91,7 +91,7 @@ pub fn file_char(sq: Square) -> char {
     char::from(b'a' + file_of(sq))
 }
 
-pub fn file_mask(file: u8) -> Bitboard {
+pub const fn file_mask(file: u8) -> Bitboard {
     match file {
         0 => FILE_A,
         1 => FILE_B,
@@ -108,7 +108,7 @@ pub fn file_mask(file: u8) -> Bitboard {
 }
 
 #[inline]
-pub fn rank_of(sq: Square) -> u8 {
+pub const fn rank_of(sq: Square) -> u8 {
     sq / 8
 }
 
@@ -118,7 +118,7 @@ pub fn rank_char(sq: Square) -> char {
 }
 
 #[inline]
-pub fn square(file: u8, rank: u8) -> Square {
+pub const fn square(file: u8, rank: u8) -> Square {
     debug_assert!(file < 8);
     debug_assert!(rank < 8);
     rank * 8 + file

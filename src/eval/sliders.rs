@@ -1,6 +1,6 @@
 use crate::bitboard::{
-    Bitboard, FILE_A, FILE_B, FILE_C, FILE_D, FILE_E, FILE_F, FILE_G, FILE_H, FILE_MASKS, RANK_1,
-    RANK_2, RANK_7, RANK_8, Square, bit, file_of, pop_lsb, rank_of, square,
+    Bitboard, FILE_MASKS, RANK_1, RANK_2, RANK_7, RANK_8, Square, bit, file_of, pop_lsb, rank_of,
+    square,
 };
 use crate::board::Board;
 use crate::eval::eval::{BLACK_SQUARES, CENTER_SQUARES, EvalInfo, WHITE_SQUARES};
@@ -375,31 +375,6 @@ fn open_file_mask(pawns: Bitboard) -> Bitboard {
         if pawns & mask == 0 {
             open_files |= mask;
         }
-    }
-
-    if pawns & FILE_A == 0 {
-        open_files |= FILE_A;
-    }
-    if pawns & FILE_B == 0 {
-        open_files |= FILE_B;
-    }
-    if pawns & FILE_C == 0 {
-        open_files |= FILE_C;
-    }
-    if pawns & FILE_D == 0 {
-        open_files |= FILE_D;
-    }
-    if pawns & FILE_E == 0 {
-        open_files |= FILE_E;
-    }
-    if pawns & FILE_F == 0 {
-        open_files |= FILE_F;
-    }
-    if pawns & FILE_G == 0 {
-        open_files |= FILE_G;
-    }
-    if pawns & FILE_H == 0 {
-        open_files |= FILE_H;
     }
 
     open_files

@@ -1,4 +1,5 @@
 pub mod eval;
+pub mod incremental_eval;
 pub mod king;
 pub mod knight;
 pub mod material;

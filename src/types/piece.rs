@@ -19,7 +19,7 @@ pub enum Color {
 
 impl Color {
     #[inline]
-    pub fn opposite(self) -> Color {
+    pub const fn opposite(self) -> Color {
         match self {
             Color::White => Color::Black,
             Color::Black => Color::White,
@@ -27,7 +27,7 @@ impl Color {
     }
 
     #[inline]
-    pub fn idx(self) -> usize {
+    pub const fn idx(self) -> usize {
         self as usize
     }
 }
@@ -45,10 +45,10 @@ pub enum PieceType {
 
 impl PieceType {
     #[inline]
-    pub fn idx(self) -> usize {
+    pub const fn idx(self) -> usize {
         self as usize
     }
-    pub fn value(self) -> i32 {
+    pub const fn value(self) -> i32 {
         match self {
             PieceType::Pawn => 100,
             PieceType::Knight => 310,

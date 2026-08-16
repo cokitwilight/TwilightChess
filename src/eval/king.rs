@@ -6,6 +6,9 @@ use crate::eval::eval::{EvalInfo, KING_DANGER_TABLE, MAX_DANGER};
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
+static KING_PAWN_SHIELD: [[Bitboard; 64]; 2] = generate_king_shield();
+static KING_PAWN_TWO_SHIELD: [[Bitboard; 64]; 2] = generate_king_two_shield();
+
 pub fn king_eval(board: &Board, info: &EvalInfo) -> i32 {
     king_eval_danger_raw(board, Color::White, info)
         - king_eval_danger_raw(board, Color::Black, info)
@@ -39,10 +42,27 @@ pub fn king_eval_danger_raw(board: &Board, color: Color, info: &EvalInfo) -> i32
     danger += open_file_danger_bonus(board, color, king_sq, info);
     danger += open_diagonal_danger_bonus(board, color, king_sq, info);
     danger += escape_score_danger_bonus(board, color, info);
+    danger += defender_danger_bonus(board, color, info);
 
     let mut penalty = -KING_DANGER_TABLE[danger.clamp(0, MAX_DANGER as i32) as usize];
     penalty = scale_by_phase(penalty, info.phase(), 4, 12);
     penalty
+}
+
+pub fn king_eval_danger_index(board: &Board, color: Color, info: &EvalInfo) -> i8 {
+    let mut danger = 0;
+
+    let Some(king_sq) = pop_lsb(&mut board.pieces(color, PieceType::King)) else {
+        panic!("No king in board.pieces in king_eval_raw!");
+    };
+
+    danger += info.king_attack_weight(color) as i8;
+    danger += pawn_shield_danger_score(board, color, king_sq, info) as i8;
+    danger += open_file_danger_bonus(board, color, king_sq, info) as i8;
+    danger += open_diagonal_danger_bonus(board, color, king_sq, info) as i8;
+    danger += escape_score_danger_bonus(board, color, info) as i8;
+
+    danger
 }
 
 fn king_ring_safety(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
@@ -122,7 +142,7 @@ fn pawn_shield_score(board: &Board, color: Color, king_sq: Square, info: &EvalIn
 
     let pawns = board.pieces(color, PieceType::Pawn);
 
-    let first_row_shield = generate_king_shield(color, king_sq);
+    let first_row_shield = KING_PAWN_SHIELD[color.idx()][king_sq as usize];
 
     let mut total_pawn_shield = 0;
 
@@ -132,7 +152,7 @@ fn pawn_shield_score(board: &Board, color: Color, king_sq: Square, info: &EvalIn
 
     score += (pawn_count * 10) + ((3 - pawn_count) * -10);
 
-    let second_row_shield = generate_king_shield_two_forward(color, king_sq);
+    let second_row_shield = KING_PAWN_TWO_SHIELD[color.idx()][king_sq as usize];
 
     let second_pawn_count = (pawns & second_row_shield).count_ones() as i32;
 
@@ -176,7 +196,29 @@ fn pawn_shield_danger_score(board: &Board, color: Color, king_sq: Square, info: 
 
     let pawns = board.pieces(color, PieceType::Pawn);
 
-    let first_row_shield = generate_king_shield(color, king_sq);
+    let mut first_row_shield = KING_PAWN_SHIELD[color.idx()][king_sq as usize];
+
+    
+    match color {
+        Color::White => {
+            if king_sq < 56 {
+                let front_mask = bit(king_sq + 8);
+
+                let enemy_pawn = board.pieces(color.opposite(), PieceType::Pawn) & front_mask;
+
+                first_row_shield |= enemy_pawn;
+            }
+        }
+        Color::Black => {
+            if king_sq > 7 {
+                let front_mask = bit(king_sq - 8);
+
+                let enemy_pawn = board.pieces(color.opposite(), PieceType::Pawn) & front_mask;
+
+                first_row_shield |= enemy_pawn;
+            }
+        }
+    }
 
     let mut total_pawn_shield = 0;
 
@@ -186,7 +228,7 @@ fn pawn_shield_danger_score(board: &Board, color: Color, king_sq: Square, info: 
 
     danger -= pawn_count * 2;
 
-    let second_row_shield = generate_king_shield_two_forward(color, king_sq);
+    let second_row_shield = KING_PAWN_TWO_SHIELD[color.idx()][king_sq as usize];
 
     let second_pawn_count = (pawns & second_row_shield).count_ones() as i32;
 
@@ -405,7 +447,59 @@ fn escape_score_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i3
     }
 }
 
-fn generate_king_shield(color: Color, sq: Square) -> Bitboard {
+fn defender_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+    let defended_squares = info.king_ring(color) & info.attacked_by_two(color); // king is included in regular attacks
+
+    let local_defenders = info.king_ring(color) & board.occupancy_of(color);
+
+    let mut danger = 0;
+
+    // since this represents king danger the bonus is negative
+    danger -= defended_squares.count_ones() as i32;
+    danger -= local_defenders.count_ones() as i32 * 2;
+
+    danger
+}
+
+const fn generate_king_shield() -> [[Bitboard; 64]; 2] {
+    let mut table = [[0u64; 64]; 2];
+
+    // square
+    let mut sq = 0u8;
+    while sq < 64 {
+        table[0][sq as usize] = generate_king_shield_mask(Color::White, sq);
+        sq += 1;
+    }
+
+    sq = 0u8;
+    while sq < 64 {
+        table[1][sq as usize] = generate_king_shield_mask(Color::Black, sq);
+        sq += 1;
+    }
+
+    table
+}
+
+const fn generate_king_two_shield() -> [[Bitboard; 64]; 2] {
+    let mut table = [[0u64; 64]; 2];
+
+    // square
+    let mut sq = 0u8;
+    while sq < 64 {
+        table[0][sq as usize] = generate_king_shield_two_mask(Color::White, sq);
+        sq += 1;
+    }
+
+    sq = 0u8;
+    while sq < 64 {
+        table[1][sq as usize] = generate_king_shield_two_mask(Color::Black, sq);
+        sq += 1;
+    }
+
+    table
+}
+
+const fn generate_king_shield_mask(color: Color, sq: Square) -> Bitboard {
     let b = bit(sq);
 
     let mut shield = 0u64;
@@ -428,7 +522,7 @@ fn generate_king_shield(color: Color, sq: Square) -> Bitboard {
     shield
 }
 
-fn generate_king_shield_two_forward(color: Color, sq: Square) -> Bitboard {
+const fn generate_king_shield_two_mask(color: Color, sq: Square) -> Bitboard {
     let b = bit(sq);
 
     let mut shield = 0u64;

@@ -229,11 +229,11 @@ pub fn evaluation(board: &Board) -> i32 {
     total_eval += sliders_eval(board, &eval_info);
     total_eval += king_eval(board, &eval_info);
 
-    // match board.side_to_move() {
-    //     // for tempo
-    //     Color::White => total_eval + 10,
-    //     Color::Black => total_eval - 10,
-    // };
+    match board.side_to_move() {
+        // for tempo
+        Color::White => total_eval + 15,
+        Color::Black => total_eval - 15,
+    };
 
     total_eval
 }
@@ -268,7 +268,7 @@ pub fn evaluation_for_turn(board: &Board) -> i32 {
 
 // takes the score and scales based on the min phase(start) to the max phase(full)
 // For example start = 4 and full = 12 means at phase 12 the score is just score
-// at phase 4 the eval is 0. At phase 8 would be 8-4 / 12-4 = 4/8 = 50% of the original score
+// at phase 4 the score is 0. At phase 8 it would be 8-4 / 12-4 = 4/8 = 50% of the original score
 pub fn scale_by_phase(score: i32, phase: i32, start: i32, full: i32) -> i32 {
     if phase <= start {
         0

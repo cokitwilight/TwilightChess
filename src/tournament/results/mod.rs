@@ -1,3 +1,4 @@
+pub mod elo_stats;
 pub mod game_record;
 pub mod notable;
 pub mod tournament_record;

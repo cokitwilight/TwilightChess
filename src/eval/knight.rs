@@ -4,6 +4,8 @@ use crate::eval::eval::EvalInfo;
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
+static KNIGHT_OUTPOSTS: [[Bitboard; 64]; 2] = calculate_outposts();
+
 pub fn knight_eval(board: &Board, info: &EvalInfo) -> i32 {
     knight_eval_raw(board, Color::White, info) - knight_eval_raw(board, Color::Black, info)
 }
@@ -49,7 +51,7 @@ pub fn knight_outpost_bonus(
             }
         }
 
-        let outpost_mask = calculate_outpost_mask(knight_sq, color); // all squares to the adjacent files and in front of the knight
+        let outpost_mask = KNIGHT_OUTPOSTS[color.idx()][knight_sq as usize]; // all squares to the adjacent files and in front of the knight
 
         if enemy_pawns & outpost_mask == 0 {
             let knight_bb = bit(knight_sq);
@@ -81,7 +83,26 @@ pub fn knight_outpost_bonus(
     score
 }
 
-fn calculate_outpost_mask(sq: Square, color: Color) -> Bitboard {
+const fn calculate_outposts() -> [[Bitboard; 64]; 2] {
+    // although this fills squares for knights that are on the incorrect side it would never be called on low ranks
+    let mut table = [[0u64; 64]; 2];
+
+    let mut sq = 0u8;
+    while sq < 64 {
+        table[0][sq as usize] = calculate_outpost_mask(Color::White, sq);
+        sq += 1;
+    }
+
+    sq = 0u8;
+    while sq < 64 {
+        table[1][sq as usize] = calculate_outpost_mask(Color::Black, sq);
+        sq += 1;
+    }
+
+    table
+}
+
+const fn calculate_outpost_mask(color: Color, sq: Square) -> Bitboard {
     // creates a mask of all squares ahead of the knight and in the adjacent files(1-2)
     let file = file_of(sq);
     let mut mask = 0u64;

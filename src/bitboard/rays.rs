@@ -1,6 +1,6 @@
 use crate::bitboard::{
     Bitboard, Square, bit, file_of,
-    magic::{self, bishop_attack_table, bishop_magics, rook_attack_table, rook_magics},
+    magic::{bishop_attack_table, bishop_magics, rook_attack_table, rook_magics},
     pop_lsb, rank_of, square,
 };
 
@@ -40,7 +40,6 @@ fn ray_attacks(sq: Square, occupied: Bitboard, df: i8, dr: i8) -> Bitboard {
     attacks
 }
 
-// WILL SOON REWRITE WITH MAGIC BITBOARDS
 #[inline(always)]
 pub fn rook_attacks(sq: Square, occupied: Bitboard) -> Bitboard {
     let entry = rook_magics()[sq as usize];
@@ -52,6 +51,7 @@ pub fn rook_attacks(sq: Square, occupied: Bitboard) -> Bitboard {
     rook_attack_table()[entry.offset + magic_index]
 }
 
+// original slow version
 #[inline]
 pub fn rook_attacks_slow(sq: Square, occupied: Bitboard) -> Bitboard {
     ray_attacks(sq, occupied, 0, 1)   // north

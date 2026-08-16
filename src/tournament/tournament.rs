@@ -443,11 +443,31 @@ mod tests {
         match_players.white.config = EngineConfig::standard();
         match_players.black.config = EngineConfig::standard();
 
-        match_players.black.config.search.lmr.enabled = true;
+        match_players.white.config.search.lmr.enabled = true;
+        match_players.black.config.search.lmr.enabled = false;
 
         let opening_suite = build_opening_suite();
 
-        let result = play_games(opening_suite, 10, 1000, match_players, Color::White);
+        let result = play_games(opening_suite, 8, 880, match_players, Color::White);
+
+        result.review().expect("IO Error");
+    }
+
+    #[test]
+    #[ignore]
+    pub fn test_tournament_null() {
+        let mut match_players =
+            MatchPlayers::from_depth("Null on".to_string(), "Null off".to_string(), 12, 6, 12, 6);
+
+        match_players.white.config = EngineConfig::standard();
+        match_players.black.config = EngineConfig::standard();
+
+        match_players.white.config.search.null_move.enabled = true;
+        match_players.black.config.search.null_move.enabled = false;
+
+        let opening_suite = build_opening_suite();
+
+        let result = play_games(opening_suite, 8, 880, match_players, Color::White);
 
         result.review().expect("IO Error");
     }

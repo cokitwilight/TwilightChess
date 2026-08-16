@@ -62,6 +62,8 @@ impl Engine {
                 // Losing captures: still below killers/history, ranked so "least bad" goes first
                 -600_000 + see_score
             };
+            // FOR BENCHMARKING
+            // return 1_000_000;
         }
 
         // Quiet promotions (no capture involved)

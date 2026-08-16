@@ -33,6 +33,8 @@ impl Engine {
         }
 
         if depth == 0 {
+            // FOR BENCHMARKING
+            // return evaluation_for_turn(board);
             return self.quiescence(
                 board,
                 context,

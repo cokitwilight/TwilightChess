@@ -411,6 +411,7 @@ impl TournamentViewer {
             match command.to_ascii_lowercase().as_str() {
                 "help" => Self::print_help(),
                 "tournament" => self.tournament.print_compact_summary(),
+                "elo" => self.tournament.print_elo(),
                 "games" => match parse_optional_usize(parts.next(), 1, "page") {
                     Ok(page) => self.print_games_page(page),
                     Err(message) => println!("{message}"),
@@ -470,6 +471,7 @@ impl TournamentViewer {
         println!();
         println!("Commands");
         println!("  tournament              Print compact tournament totals");
+        println!("  elo                      Print elo stats");
         println!("  games [page]             List 10 regular games on a page");
         println!("  notables [limit]         List notable games by importance");
         println!("  game <number>            Select a regular game");
@@ -1029,6 +1031,40 @@ impl TournamentResult {
             "  Total tournament time: {:.3}s",
             self.total_time.as_secs_f64()
         );
+    }
+
+    pub fn print_elo(&self) {
+        if let Some(elo) = self.elo_stats() {
+            println!();
+            println!("Elo Estimate");
+            println!("────────────────────────────────────────────");
+            println!(
+                "  {} score:                 {:>7.2}%",
+                self.engine_1_name,
+                elo.score_rate * 100.0
+            );
+            println!("  Elo difference:             {:+7.1}", elo.elo_difference);
+            println!(
+                "  95% Elo CI:           [{:+.1}, {:+.1}]",
+                elo.elo_ci_low, elo.elo_ci_high
+            );
+            println!(
+                "  Score std. error:            {:>6.2}%",
+                elo.score_standard_error * 100.0
+            );
+            println!(
+                "  LOS:                         {:>6.2}%",
+                elo.likelihood_of_superiority * 100.0
+            );
+            println!(
+                "  Draw rate:                   {:>6.2}%",
+                elo.draw_rate * 100.0
+            );
+            println!(
+                "  Decisive rate:               {:>6.2}%",
+                elo.decisive_rate * 100.0
+            );
+        }
     }
 
     fn engine_names_for_game<'a>(&'a self, game: &GameRecord) -> (&'a str, &'a str) {

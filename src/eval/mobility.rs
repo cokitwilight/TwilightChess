@@ -1,9 +1,19 @@
-use crate::bitboard::{Bitboard, FILE_A, FILE_H, RANK_1, RANK_3, RANK_6, RANK_8, RANK_MASKS};
+use crate::bitboard::{
+    Bitboard, FILE_A, FILE_H, RANK_1, RANK_2, RANK_3, RANK_6, RANK_7, RANK_8, RANK_MASKS,
+};
 
 use crate::board::Board;
 use crate::eval::eval::EvalInfo;
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
+
+const KNIGHT_MOVE: [i32; 8] = [-100, -40, -10, 0, 10, 40, 60, 85]; // PREV MAX: 64
+const BISHOP_MOVE: [i32; 13] = [-100, -90, -70, -40, -10, 0, 10, 20, 30, 45, 50, 55, 60]; // PREV MAX: 78
+const ROOK_MOVE: [i32; 14] = [-40, -35, -20, -10, 0, 0, 0, 10, 20, 25, 30, 35, 40, 45]; // PREV MAX: 84
+const QUEEN_MOVE: [i32; 27] = [
+    -400, -150, -100, -50, -25, -15, 0, 0, 0, 0, 0, 0, 0, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65,
+    70, 75, 80, 80,
+]; // PREV MAX: 54
 
 pub fn mobility_score(board: &Board, info: &EvalInfo) -> i32 {
     mobility_score_raw(board, Color::White, info) - mobility_score_raw(board, Color::Black, info)
@@ -41,13 +51,18 @@ fn development_penalty(board: &Board, color: Color, info: &EvalInfo) -> i32 {
         non_developed_pieces += starting_rooks;
     }
 
-    let bonus = if info.phase() < 16 { -8 } else { -6 };
+    let bonus = if info.phase() < 16 { -6 } else { -4 };
 
     non_developed_pieces * bonus
 }
 
 fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
+
+    // gives a beginning opening bonus so as not to overvalue development over other values.
+    // For example in the beginning the queen as 0 moves so it slaps a -300 bonus on the eval.
+    // tapered bonus will give an added index to the lookup table while in the opening
+    let tapered_bonus = scale_by_phase(8, info.phase(), 19, 22) as u32;
 
     let enemy_color = color.opposite();
 
@@ -76,10 +91,31 @@ fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let available_queen_moves = info.attacks(color, PieceType::Queen)
         & !(pawn_attacks | knight_and_bishop_attacks | rook_attacks | friends);
 
-    score += available_knight_moves.count_ones() as i32 * 4;
-    score += available_bishop_moves.count_ones() as i32 * 3;
-    score += available_rook_moves.count_ones() as i32 * 3;
-    score += available_queen_moves.count_ones() as i32 * 2;
+    let num_knights = board.pieces(color, PieceType::Knight).count_ones();
+    let num_bishops = board.pieces(color, PieceType::Bishop).count_ones();
+    let num_rooks = board.pieces(color, PieceType::Rook).count_ones();
+    let num_queens = board.pieces(color, PieceType::Queen).count_ones();
+
+    if num_knights != 0 {
+        score += num_knights as i32
+            * KNIGHT_MOVE[(available_knight_moves.count_ones() / num_knights + tapered_bonus / 4)
+                .clamp(0, 7) as usize];
+    }
+    if num_bishops != 0 {
+        score += num_bishops as i32
+            * BISHOP_MOVE[(available_bishop_moves.count_ones() / num_bishops + tapered_bonus / 2)
+                .clamp(0, 12) as usize];
+    }
+    if num_rooks != 0 {
+        score += num_rooks as i32
+            * ROOK_MOVE[(available_rook_moves.count_ones() / num_rooks + tapered_bonus).clamp(0, 13)
+                as usize];
+    }
+    if num_queens != 0 {
+        score += num_queens as i32
+            * QUEEN_MOVE[(available_queen_moves.count_ones() / num_queens + tapered_bonus * 2)
+                .clamp(0, 26) as usize];
+    }
 
     score
 }
@@ -115,15 +151,17 @@ fn hanging_pieces(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
     let hanging = occupancy & info.all_attacks(color.opposite()) & !info.all_attacks(color);
 
-    -10 * hanging.count_ones() as i32
+    let weak = occupancy & !info.all_attacks(color) & !board.pieces(color, PieceType::Pawn); // not defended but not attacked. Could become a weakness
+
+    -10 * hanging.count_ones() as i32 + -3 * weak.count_ones() as i32
 }
 
 fn space_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
-    if info.phase() < 12 {
+    let pawns = board.pieces(color, PieceType::Pawn);
+
+    if pawns == 0 {
         return 0;
     }
-
-    let pawns = board.pieces(color, PieceType::Pawn);
 
     let space_mask = pawn_space_bitboard(pawns, color);
 
@@ -167,14 +205,14 @@ fn pawn_space_bitboard(pawns: Bitboard, color: Color) -> Bitboard {
             pawn_space = pawns >> 8;
             pawn_space |= pawn_space >> 8;
             pawn_space |= pawn_space >> 16;
-            pawn_space |= pawn_space >> 32;
+            pawn_space &= !RANK_2;
             pawn_space &= !RANK_1;
         }
         Color::Black => {
             pawn_space = pawns << 8;
             pawn_space |= pawn_space << 8;
             pawn_space |= pawn_space << 16;
-            pawn_space |= pawn_space << 32;
+            pawn_space &= !RANK_7;
             pawn_space &= !RANK_8;
         }
     }

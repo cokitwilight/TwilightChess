@@ -233,36 +233,36 @@ mod tests {
         let mut players = MatchPlayers::from_depth(
             "Singular on".to_string(),
             "Singular off".to_string(),
-            12,
+            10,
             7,
             12,
-            3,
+            7,
         );
 
         // players.white.config.limits.soft_time_limit_ms = Some(1000);
         // players.black.config.limits.soft_time_limit_ms = Some(1000);
 
-        players.white.config.limits.hard_time_limit_ms = Some(25000);
-        players.black.config.limits.hard_time_limit_ms = Some(15000);
+        players.white.config.limits.hard_time_limit_ms = Some(250000);
+        players.black.config.limits.hard_time_limit_ms = Some(150000);
 
         players.white.config.search.singular.enabled = true;
         players.black.config.search.singular.enabled = false;
 
-        // let opening_line = OpeningPosition::from_uci(
-        //     // Solid but tactically rich central tension.
-        //     "Semi-Slav Defense",
-        //     STARTPOS_FEN.to_owned(),
-        //     &[
-        //         "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "g1f3", "c7c6", "e2e3", "b8d7",
-        //         "f1d3", "d5c4", "d3c4", "b7b5",
-        //     ],
-        // );
+        let opening_line = OpeningPosition::from_uci(
+            // Solid but tactically rich central tension.
+            "Semi-Slav Defense",
+            STARTPOS_FEN.to_owned(),
+            &[
+                "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "g1f3", "c7c6", "e2e3", "b8d7",
+                "f1d3", "d5c4", "d3c4", "b7b5",
+            ],
+        );
 
         let game_record = match run_game(
             STARTPOS_FEN.to_string(),
             players.clone(),
             Color::White,
-            None,
+            Some(opening_line),
         ) {
             Ok(g) => g,
             Err(msg) => panic!("{msg}"),

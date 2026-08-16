@@ -38,6 +38,18 @@ impl Move {
     pub fn is_castle(self) -> bool {
         matches!(self.kind, MoveType::Castle)
     }
+    pub fn from(self) -> Square {
+        self.from
+    }
+    pub fn to(self) -> Square {
+        self.to
+    }
+    pub fn kind(self) -> MoveType {
+        self.kind
+    }
+    pub fn promotion(self) -> Option<PieceType> {
+        self.promotion
+    }
 }
 
 #[derive(Clone, PartialEq, Eq)]
