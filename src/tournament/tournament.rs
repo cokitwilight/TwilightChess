@@ -221,7 +221,7 @@ pub fn play_games(
                                 notable_game.importance += 5;
                             }
 
-                            if average_eval < -200 {
+                            if average_eval < -150 {
                                 // comeback
                                 let reason = NotableReason::Comeback { average_eval };
 
@@ -259,7 +259,7 @@ pub fn play_games(
                                 notable_game.importance += 5;
                             }
 
-                            if average_eval > 200 {
+                            if average_eval > 150 {
                                 // comeback
                                 let reason = NotableReason::Comeback { average_eval };
 
@@ -464,6 +464,47 @@ mod tests {
 
         match_players.white.config.search.null_move.enabled = true;
         match_players.black.config.search.null_move.enabled = false;
+
+        let opening_suite = build_opening_suite();
+
+        let result = play_games(opening_suite, 8, 880, match_players, Color::White);
+
+        result.review().expect("IO Error");
+    }
+
+    #[test]
+    #[ignore]
+    pub fn test_tournament_rfp() {
+        let mut match_players =
+            MatchPlayers::from_depth("RFP on".to_string(), "RFP off".to_string(), 12, 6, 12, 6);
+
+        match_players.white.config = EngineConfig::standard();
+        match_players.black.config = EngineConfig::standard();
+
+        match_players.white.config.search.rfp.enabled = true;
+        match_players.black.config.search.rfp.enabled = false;
+
+        let opening_suite = build_opening_suite();
+
+        let result = play_games(opening_suite, 8, 880, match_players, Color::White);
+
+        result.review().expect("IO Error");
+    }
+
+    #[test]
+    #[ignore]
+    pub fn test_tournament_see() {
+        let mut match_players =
+            MatchPlayers::from_depth("SEE 250".to_string(), "SEE 180".to_string(), 12, 6, 12, 6);
+
+        match_players.white.config = EngineConfig::standard();
+        match_players.black.config = EngineConfig::standard();
+
+        match_players.white.config.search.see.enabled = true;
+        match_players.black.config.search.see.enabled = true;
+
+        match_players.white.config.search.see.margin = 250;
+        match_players.black.config.search.see.margin = 180;
 
         let opening_suite = build_opening_suite();
 

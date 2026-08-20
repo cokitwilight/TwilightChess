@@ -132,8 +132,9 @@ fn stacked_pawns_bonus(_board: &Board, color: Color, pawns: Bitboard, info: &Eva
     let mut total = 0;
 
     for mask in FILE_MASKS {
-        let pawns = (pawns & mask).count_ones() as i32;
-        if pawns <= 1 {
+        let pawns = pawns & mask;
+        let pawn_count = pawns.count_ones() as i32;
+        if pawn_count <= 1 {
             continue;
         }
         if mask & info.king_ring(color) != 0 {
@@ -141,7 +142,11 @@ fn stacked_pawns_bonus(_board: &Board, color: Color, pawns: Bitboard, info: &Eva
             score -= 15;
         }
 
-        score -= pawns * 10;
+        if pawns & CENTER_SQUARES != 0 {
+            score -= 15;
+        }
+
+        score -= pawn_count * 10;
         total += 1;
     }
     score -= PAWN_WEAKNESS_TABLE[total];
@@ -174,8 +179,9 @@ fn isolated_pawns_bonus(_board: &Board, _color: Color, pawns: Bitboard, info: &E
     } else {
         -16
     };
-    let total = isolated_pawns.count_ones();
-    let mut score = penalty * total as i32;
+    let total = isolated_pawns.count_ones() as i32;
+    let center_iso = (isolated_pawns & CENTER_SQUARES).count_ones() as i32;
+    let mut score = penalty * (total + 2 * center_iso);
 
     score -= PAWN_WEAKNESS_TABLE[total as usize];
 
@@ -428,7 +434,19 @@ fn pawn_chain(_board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) ->
     }
     let defended_pawns = pawns & info.attacks(color, PieceType::Pawn);
 
-    defended_pawns.count_ones() as i32 * 4
+    // this is technically temporary/non formal backwards pawns
+    let non_defended_pawns = match color {
+        Color::White => pawns & !info.attacks(color, PieceType::Pawn) & !RANK_2,
+        Color::Black => pawns & !info.attacks(color, PieceType::Pawn) & !RANK_7,
+    };
+
+    let mut score = 0;
+
+    score += defended_pawns.count_ones() as i32 * 4;
+
+    score -= non_defended_pawns.count_ones() as i32 * 2;
+
+    score
 }
 
 const fn generate_passed_pawns() -> [[Bitboard; 64]; 2] {
