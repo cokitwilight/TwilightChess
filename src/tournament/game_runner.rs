@@ -235,7 +235,7 @@ mod tests {
             "Singular off".to_string(),
             10,
             7,
-            12,
+            10,
             7,
         );
 
@@ -250,11 +250,11 @@ mod tests {
 
         let opening_line = OpeningPosition::from_uci(
             // Solid but tactically rich central tension.
-            "Semi-Slav Defense",
-            STARTPOS_FEN.to_owned(),
+            // King's Gambit Accepted
+            "King's Gambit Accepted",
+            STARTPOS_FEN.to_string(),
             &[
-                "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "g1f3", "c7c6", "e2e3", "b8d7",
-                "f1d3", "d5c4", "d3c4", "b7b5",
+                "e2e4", "e7e5", "f2f4", "e5f4", "g1f3", "g7g5", "f1c4", "f8g7", "e1g1",
             ],
         );
 

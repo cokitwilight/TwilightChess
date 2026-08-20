@@ -198,7 +198,6 @@ fn pawn_shield_danger_score(board: &Board, color: Color, king_sq: Square, info: 
 
     let mut first_row_shield = KING_PAWN_SHIELD[color.idx()][king_sq as usize];
 
-    
     match color {
         Color::White => {
             if king_sq < 56 {
@@ -440,17 +439,20 @@ fn escape_score_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i3
 
     if escape_squares == 0 {
         12
+    } else if escape_squares <= 1 {
+        4
     } else if escape_squares <= 2 {
-        3
+        1
     } else {
-        -5
+        -6
     }
 }
 
 fn defender_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let defended_squares = info.king_ring(color) & info.attacked_by_two(color); // king is included in regular attacks
 
-    let local_defenders = info.king_ring(color) & board.occupancy_of(color);
+    let local_defenders =
+        info.king_ring(color) & board.occupancy_of(color) & !board.pieces(color, PieceType::Pawn);
 
     let mut danger = 0;
 

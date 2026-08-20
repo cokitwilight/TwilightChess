@@ -1,3 +1,4 @@
+use crate::bitboard::lookup::BETWEEN;
 use crate::bitboard::{
     Bitboard, FILE_MASKS, RANK_1, RANK_2, RANK_7, RANK_8, Square, bit, file_of, pop_lsb, rank_of,
     square,
@@ -230,58 +231,61 @@ fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
 
     let mut sliders = sliders;
 
-    let occupied = board.all_occupancy();
+    let enemy_pawns = board.pieces(color.opposite(), PieceType::Pawn);
 
-    let directions = &[(0, 1), (0, -1)];
+    let friendly_pawns = board.pieces(color, PieceType::Pawn);
 
     while let Some(sq) = pop_lsb(&mut sliders) {
-        for (_df, dr) in directions {
-            let file = file_of(sq) as i8;
-            let mut rank = rank_of(sq) as i8 + dr;
+        let file = FILE_MASKS[file_of(sq) as usize];
 
-            while (0..8).contains(&file) && (0..8).contains(&rank) {
-                let ray_sq = square(file as u8, rank as u8);
-                let ray_mask = bit(ray_sq);
+        let slider = file & sliders; // sliders shouldn't contain the original slider as it was popped(mutable)
 
-                if ray_mask & occupied != 0 {
-                    if ray_mask & sliders != 0 {
-                        let file_mask = FILE_MASKS[file as usize];
+        if slider.count_ones() < 1 {
+            continue;
+        }
 
-                        let enemy_pawns = (file_mask
-                            & board.pieces(color.opposite(), PieceType::Pawn))
-                        .count_ones() as i32;
-                        let enemy_pieces = file_mask
-                            & (board.occupancy_of(color.opposite())
-                                & !board.pieces(color.opposite(), PieceType::Pawn));
+        let other_sq = slider.trailing_zeros() as Square;
 
-                        let defended_pieces =
-                            (enemy_pieces & info.all_attacks(color)).count_ones() as i32;
+        let front_sq = match color {
+            Color::White => other_sq,
+            Color::Black => sq,
+        };
 
-                        let undefended_pieces = (enemy_pieces & !info.all_attacks(color.opposite()))
-                            .count_ones() as i32;
+        let end_square = match color {
+            Color::White => square(file_of(sq), 7),
 
-                        let sees_king_ring = file_mask & info.king_ring(color.opposite()) != 0;
+            Color::Black => square(file_of(sq), 0),
+        };
 
-                        if enemy_pawns >= 1 {
-                            // not open file
-                            score -= 10;
-                        }
+        let between = BETWEEN[sq as usize][other_sq as usize];
 
-                        if sees_king_ring && enemy_pawns == 0 {
-                            score += 60;
-                        } else if sees_king_ring {
-                            score += 10;
-                        }
-                        score += 5 * (defended_pieces - undefended_pieces);
+        if between & board.all_occupancy() != 0 {
+            continue; // not connected
+        }
 
-                        score += 20; // general bonus for a doubles rook/queen
-                        sliders &= !ray_mask; // removes the detected slider so the bonus isn't double counted
-                    }
+        let ray = BETWEEN[front_sq as usize][end_square as usize] | bit(end_square);
 
-                    break;
-                }
-                rank += dr;
-            }
+        // only count pawns defended by pawns as these can be a problem.
+        let pawn_count =
+            (ray & enemy_pawns & info.attacks(color.opposite(), PieceType::Pawn)).count_ones();
+
+        let enemy_pieces = board.occupancy_of(color.opposite()) & !enemy_pawns & ray;
+
+        let blockers =
+            (enemy_pieces & info.attacks(color.opposite(), PieceType::Pawn)).count_ones();
+
+        let blocked = blockers >= 1 || friendly_pawns & ray != 0;
+
+        if pawn_count >= 1 || blocked {
+            score -= 20;
+        } else {
+            score += 40;
+        }
+
+        score += enemy_pieces.count_ones() as i32 * 5;
+
+        if info.king_ring(color.opposite()) & file != 0 {
+            score += 30;
         }
     }
 
@@ -303,10 +307,22 @@ fn straights_xray_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
     let mut score = 0;
 
     while let Some(sq) = pop_lsb(&mut straights) {
+        let end_square = match color {
+            Color::White => square(file_of(sq), 7),
+
+            Color::Black => square(file_of(sq), 0),
+        };
+        let ray = BETWEEN[sq as usize][end_square as usize] | bit(end_square);
+
         let file = FILE_MASKS[file_of(sq) as usize];
 
-        let hits = ((enemy_occupancy & !enemy_pawns & file).count_ones() as i32
-            - ((friendly_occupancy & file).count_ones() as i32 - 1))
+        // hits =
+        // all enemy pieces besides pawns on the ray
+        // minus all the friendly pieces on the ray -> capped at 0
+        // minus total enemy pawns
+
+        let hits = ((enemy_occupancy & !enemy_pawns & ray).count_ones() as i32
+            - ((friendly_occupancy & ray).count_ones() as i32 - 1))
             .max(0)
             - enemy_pawns.count_ones() as i32;
 
@@ -324,13 +340,57 @@ fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, info: 
     if sliders == 0 {
         return 0;
     }
-    let open_files = open_file_mask(
-        board.pieces(color, PieceType::Pawn) | board.pieces(color.opposite(), PieceType::Pawn),
-    );
+    let mut score = 0;
 
-    let open_straights = (open_files & sliders).count_ones() as i32;
+    let friendly_pawns = board.pieces(color, PieceType::Pawn);
+    let enemy_pawns = board.pieces(color.opposite(), PieceType::Pawn);
 
-    scale_by_phase(open_straights * 15, info.phase(), 6, 12)
+    let friendly_occ = board.occupancy_of(color) & !friendly_pawns;
+    let enemy_occ = board.occupancy_of(color.opposite()) & !enemy_pawns;
+
+    // add an xray bonus.
+    // change to if the file is open from the rooks perseptive not the entire file(encourages lifted rooks)
+
+    let mut sliders = sliders;
+
+    while let Some(sq) = pop_lsb(&mut sliders) {
+        let end_square = match color {
+            Color::White => square(file_of(sq), 7),
+
+            Color::Black => square(file_of(sq), 0),
+        };
+
+        let ray = BETWEEN[sq as usize][end_square as usize] | bit(end_square);
+
+        let friendly_pawn_count = (ray & friendly_pawns).count_ones();
+        let enemy_pawn_count =
+            (ray & enemy_pawns & info.attacks(color.opposite(), PieceType::Pawn)).count_ones();
+
+        let total_pawns = friendly_pawn_count + enemy_pawn_count;
+
+        if friendly_pawn_count >= 1 {
+            // later add if the pawn is a passed pawn give a bonus.
+            // NOTE: passed pawn already has a is_defended() bonus so it may double count
+            continue;
+        } else if total_pawns != 0 {
+            // semi-open. Although there can be more than 1 enemy pawns these pawns will be doubled and weak anyways
+            score += 10;
+        } else {
+            score += 20;
+        }
+
+        let enemy_pieces = (enemy_occ & ray).count_ones() as i32;
+
+        let friendly_pieces = (friendly_occ & ray).count_ones() as i32;
+
+        score += (2 * enemy_pieces - friendly_pieces) * 5;
+
+        if ray & info.king_ring(color.opposite()) != 0 {
+            score += 30;
+        }
+    }
+
+    scale_by_phase(score, info.phase(), 6, 12)
 }
 
 fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo) -> i32 {

@@ -51,7 +51,7 @@ fn development_penalty(board: &Board, color: Color, info: &EvalInfo) -> i32 {
         non_developed_pieces += starting_rooks;
     }
 
-    let bonus = if info.phase() < 16 { -6 } else { -4 };
+    let bonus = if info.phase() < 16 { -8 } else { -5 };
 
     non_developed_pieces * bonus
 }
@@ -60,9 +60,9 @@ fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut score = 0;
 
     // gives a beginning opening bonus so as not to overvalue development over other values.
-    // For example in the beginning the queen as 0 moves so it slaps a -300 bonus on the eval.
+    // For example in the beginning the queen has 0 moves so it slaps a -300 bonus on the eval.
     // tapered bonus will give an added index to the lookup table while in the opening
-    let tapered_bonus = scale_by_phase(8, info.phase(), 19, 22) as u32;
+    let tapered_bonus = scale_by_phase(8, info.phase(), 18, 22) as u32;
 
     let enemy_color = color.opposite();
 

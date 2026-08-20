@@ -8,8 +8,6 @@ use crate::engine::{Engine, MAX_PLY};
 use crate::eval::evaluation_for_turn;
 use crate::types::PieceType;
 
-const _DELTA_MARGIN: i32 = 200; // safe defualt for now
-
 // const LAZY_MARGIN: i32 = 300;
 
 const MAX_CHECK_Q_PLIES: usize = 64;
