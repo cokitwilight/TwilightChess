@@ -54,7 +54,7 @@ impl PieceType {
             PieceType::Knight => 310,
             PieceType::Bishop => 330,
             PieceType::Rook => 500,
-            PieceType::Queen => 1000, // experimental 1000 vs 900
+            PieceType::Queen => 900, // experimental 1000 vs 900
             PieceType::King => 0,
         }
     }

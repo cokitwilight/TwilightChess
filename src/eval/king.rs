@@ -413,7 +413,7 @@ fn escape_score_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
     let king_ring = info.king_ring(color); // this includes the king itself
 
-    let escape_squares = (king_ring & all_attacks & !friends).count_ones() as i32;
+    let escape_squares = (king_ring & !all_attacks & !friends).count_ones() as i32;
 
     if escape_squares == 0 {
         -30
@@ -435,7 +435,7 @@ fn escape_score_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i3
 
     let king_ring = info.king_ring(color); // this includes the king itself
 
-    let escape_squares = (king_ring & all_attacks & !friends).count_ones() as i32;
+    let escape_squares = (king_ring & !all_attacks & !friends).count_ones() as i32;
 
     if escape_squares == 0 {
         12
@@ -458,7 +458,7 @@ fn defender_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
     // since this represents king danger the bonus is negative
     danger -= defended_squares.count_ones() as i32;
-    danger -= local_defenders.count_ones() as i32 * 2;
+    danger -= local_defenders.count_ones() as i32 * 3;
 
     danger
 }

@@ -322,9 +322,6 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
     if pawns == 0 {
         return 0;
     }
-    if info.phase() == 24 {
-        return 0;
-    }
 
     let mut score = 0;
 
@@ -365,7 +362,7 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
         Color::Black => RANK_MASKS[0] | RANK_MASKS[1] | RANK_MASKS[2] | RANK_MASKS[3],
     };
 
-    let attacking_pawns = pawns & enemy_half & RANK_MASKS[3] & RANK_MASKS[4];
+    let attacking_pawns = pawns & enemy_half & (RANK_MASKS[3] | RANK_MASKS[4]);
 
     let mut attacking_bonus = attacking_pawns.count_ones() as i32 * 4;
 

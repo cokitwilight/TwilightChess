@@ -56,7 +56,7 @@ pub fn knight_outpost_bonus(
         if enemy_pawns & outpost_mask == 0 {
             let knight_bb = bit(knight_sq);
             // no adjacent pawns can attack the knight
-            let defended = knight_bb & info.attacks(enemy, PieceType::Pawn) != 0;
+            let defended = knight_bb & info.attacks(color, PieceType::Pawn) != 0;
 
             let attacked = knight_bb
                 & (info.attacks(enemy, PieceType::Knight) | info.attacks(enemy, PieceType::Bishop))

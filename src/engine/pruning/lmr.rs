@@ -1,3 +1,7 @@
+use crate::engine::MAX_PLY;
+
+const MAX_MOVES: usize = 128;
+
 pub fn lmr_reduction(depth: u16, move_index: usize) -> u16 {
     if depth < 3 || move_index < 3 {
         return 0;

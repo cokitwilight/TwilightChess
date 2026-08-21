@@ -321,10 +321,12 @@ fn straights_xray_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
         // minus all the friendly pieces on the ray -> capped at 0
         // minus total enemy pawns
 
-        let hits = ((enemy_occupancy & !enemy_pawns & ray).count_ones() as i32
+        let enemy_pawns_on_ray = enemy_pawns & ray;
+
+        let hits = ((enemy_occupancy & !enemy_pawns_on_ray).count_ones() as i32
             - ((friendly_occupancy & ray).count_ones() as i32 - 1))
             .max(0)
-            - enemy_pawns.count_ones() as i32;
+            - enemy_pawns_on_ray.count_ones() as i32;
 
         score += hits * 5; // note open file already gives a bonus to a rook with no pawns on the file
 

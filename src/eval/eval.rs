@@ -231,8 +231,8 @@ pub fn evaluation(board: &Board) -> i32 {
 
     match board.side_to_move() {
         // for tempo
-        Color::White => total_eval + 15,
-        Color::Black => total_eval - 15,
+        Color::White => total_eval += 15,
+        Color::Black => total_eval -= 15,
     };
 
     total_eval

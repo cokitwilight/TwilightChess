@@ -121,8 +121,9 @@ fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 }
 
 // this might not be best file for this function
-fn move_pressure(_board: &Board, color: Color, info: &EvalInfo) -> i32 {
-    let multiple_attacked = info.attacked_by_two(color.opposite()).count_ones() as i32; // already includes occupancy check
+fn move_pressure(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+    let multiple_attacked =
+        (info.attacked_by_two(color.opposite()) & board.occupancy_of(color)).count_ones() as i32;
 
     if multiple_attacked > 3 {
         multiple_attacked * -15
@@ -151,9 +152,13 @@ fn hanging_pieces(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
     let hanging = occupancy & info.all_attacks(color.opposite()) & !info.all_attacks(color);
 
+    let hanging_major_pieces = hanging & !board.pieces(color, PieceType::Pawn);
+
     let weak = occupancy & !info.all_attacks(color) & !board.pieces(color, PieceType::Pawn); // not defended but not attacked. Could become a weakness
 
-    -10 * hanging.count_ones() as i32 + -3 * weak.count_ones() as i32
+    -10 * hanging_major_pieces.count_ones() as i32
+        + -5 * hanging.count_ones() as i32
+        + -3 * weak.count_ones() as i32
 }
 
 fn space_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
