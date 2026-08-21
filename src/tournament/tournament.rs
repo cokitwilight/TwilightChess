@@ -493,9 +493,28 @@ mod tests {
 
     #[test]
     #[ignore]
+    pub fn test_tournament_fut() {
+        let mut match_players =
+            MatchPlayers::from_depth("FUT on".to_string(), "FUT off".to_string(), 12, 6, 12, 6);
+
+        match_players.white.config = EngineConfig::standard();
+        match_players.black.config = EngineConfig::standard();
+
+        match_players.white.config.search.fut.enabled = true;
+        match_players.black.config.search.fut.enabled = false;
+
+        let opening_suite = build_opening_suite();
+
+        let result = play_games(opening_suite, 8, 880, match_players, Color::White);
+
+        result.review().expect("IO Error");
+    }
+
+    #[test]
+    #[ignore]
     pub fn test_tournament_see() {
         let mut match_players =
-            MatchPlayers::from_depth("SEE 250".to_string(), "SEE 180".to_string(), 12, 6, 12, 6);
+            MatchPlayers::from_depth("SEE 250".to_string(), "SEE 200".to_string(), 12, 6, 12, 6);
 
         match_players.white.config = EngineConfig::standard();
         match_players.black.config = EngineConfig::standard();
@@ -504,11 +523,11 @@ mod tests {
         match_players.black.config.search.see.enabled = true;
 
         match_players.white.config.search.see.margin = 250;
-        match_players.black.config.search.see.margin = 180;
+        match_players.black.config.search.see.margin = 200;
 
         let opening_suite = build_opening_suite();
 
-        let result = play_games(opening_suite, 8, 880, match_players, Color::White);
+        let result = play_games(opening_suite, 2, 150, match_players, Color::White);
 
         result.review().expect("IO Error");
     }

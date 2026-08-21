@@ -1,10 +1,11 @@
-use crate::engine::ordering::KillerTable;
-use crate::engine::{SearchLimits, SearchStats};
+use crate::engine::history::KillerTable;
+use crate::engine::{MAX_PLY, SearchLimits, SearchStackEntry, SearchStats};
 
 #[derive(Clone, Debug)]
 pub struct SearchContext {
     pub limits: SearchLimits,
     pub stats: SearchStats,
+    pub stack: [SearchStackEntry; MAX_PLY as usize],
 
     pub killer_moves: KillerTable,
     pub repetition_history: Vec<u64>,
@@ -18,6 +19,7 @@ impl SearchContext {
         Self {
             limits,
             stats: SearchStats::default(),
+            stack: [SearchStackEntry::default(); MAX_PLY as usize],
             killer_moves: KillerTable::new(),
             repetition_history,
             start_time: std::time::Instant::now(),

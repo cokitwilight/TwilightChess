@@ -1,12 +1,19 @@
-use crate::tournament::TournamentResult;
+use crate::{tournament::TournamentResult, types::Color};
 
 impl TournamentResult {
-    pub fn elo_stats(&self) -> Option<EloStats> {
-        calculate_elo_stats(
-            self.engine_1_wins,
-            self.engine_1_draws,
-            self.engine_1_losses,
-        )
+    pub fn elo_stats(&self, color: Color) -> Option<EloStats> {
+        match color {
+            Color::White => calculate_elo_stats(
+                self.engine_1_wins,
+                self.engine_1_draws,
+                self.engine_1_losses,
+            ),
+            Color::Black => calculate_elo_stats(
+                self.engine_2_wins,
+                self.engine_2_draws,
+                self.engine_2_losses,
+            ),
+        }
     }
 }
 

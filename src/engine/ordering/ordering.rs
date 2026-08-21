@@ -1,6 +1,7 @@
 use crate::board::{Board, Move, MoveList, MoveType};
 use crate::engine::Engine;
 use crate::engine::SearchContext;
+use crate::engine::history::HistoryKey;
 use crate::engine::ordering::see;
 use crate::types::{Color, PieceType};
 
@@ -69,8 +70,7 @@ impl Engine {
         // Quiet promotions (no capture involved)
         if let Some(promo) = mv.promotion {
             // Queen promotions are strong enough to rank with good captures;
-            // under-promotions are almost always worse than a quiet move and
-            // should sit low unless you have specific tactical reasons to boost them
+            // under-promotions are almost always worse than a quiet move
             return match promo {
                 PieceType::Queen => 800_000 + promotion_score(promo),
                 _ => -700_000 + promotion_score(promo),
@@ -81,7 +81,35 @@ impl Engine {
             return 700_000;
         }
 
-        self.history.get(side_to_move, mv.from, mv.to).min(500_000)
+        let piece = board
+            .piecetype_at(mv.from())
+            .expect("No piece in board in move ordering!");
+
+        let curr_key = HistoryKey::new(side_to_move, piece, mv.to());
+
+        let mut score = self.history.main.get(curr_key);
+
+        let mut plies_ago = 1;
+
+        if let Some(prev_key) = context.stack[ply].history_index {
+            score += self.history.continuation.get(plies_ago, prev_key, curr_key);
+        }
+
+        if ply > 0 {
+            plies_ago += 1;
+            if let Some(prev_key) = context.stack[ply - 1].history_index {
+                score += self.history.continuation.get(plies_ago, prev_key, curr_key) / 2;
+            }
+
+            if ply > 2 {
+                plies_ago += 2;
+                if let Some(prev_key) = context.stack[ply - 3].history_index {
+                    score += self.history.continuation.get(plies_ago, prev_key, curr_key) / 2;
+                }
+            }
+        }
+
+        score
     }
     pub fn q_move_order_score(&self, board: &Board, mv: Move, tt_best_move: Option<Move>) -> i32 {
         if Some(mv) == tt_best_move {
@@ -100,8 +128,8 @@ impl Engine {
 #[allow(dead_code)]
 fn mvv_lva_score(board: &Board, mv: Move) -> i32 {
     let attacker = board
-        .piece_at(mv.from)
-        .expect("move_order_score called with no attacker on mv.from")
+        .piece_at(mv.from())
+        .expect("move_order_score called with no attacker on mv.from()")
         .kind;
 
     let victim = match mv.kind {

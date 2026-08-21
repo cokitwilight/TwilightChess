@@ -72,6 +72,22 @@ mod eval_tests {
     fn print_eval_breakdowns_for_fens() {
         let positions = [
             (
+                "Opening Before",
+                "rnbqk2r/ppp1bppp/4pn2/3pP1B1/3P4/2N5/PPP2PPP/R2QKBNR b KQkq - 0 5",
+            ),
+            (
+                "Opening During",
+                "r1bqk2r/ppp1bppp/2n1pn2/3pP1B1/3P4/2N5/PPP2PPP/R2QKBNR w KQkq - 1 6",
+            ),
+            (
+                "Opening After",
+                "r1bqk2r/ppp1bppp/2n1pP2/3p2B1/3P4/2N5/PPP2PPP/R2QKBNR b KQkq - 0 6",
+            ),
+            (
+                "Large King Pressure. Current Max potential value is 834",
+                "r3k3/1p3pp1/p1p2n1r/2p4p/4Pqb1/2NP1N1P/PPP2PK1/R2Q1R2 w q - 2 16",
+            ),
+            (
                 "Equal Material. More attackers pointed at black.",
                 "r2qr1k1/ppp2ppp/1bn5/5N2/8/2B3Q1/PPP2PPP/R4RK1 b - - 0 1",
             ),

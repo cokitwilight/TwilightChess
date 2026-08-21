@@ -11,7 +11,11 @@ pub struct SearchStats {
     pub qnodes: u64,
 
     pub beta_cutoffs: u64,
+    pub q_beta_cutoffs: u64,
     pub stand_pat_cutoffs: u64,
+
+    pub first_move_beta_cutoffs: u64,
+    pub first_move_q_beta_cutoffs: u64,
 
     pub moves_searched: u64,
     pub qmoves_searched: u64,
@@ -27,6 +31,11 @@ pub struct SearchStats {
 
     pub killer_cutoffs: u64,
     pub history_cutoffs: u64,
+
+    pub history_bonus_updates: u64,
+    pub history_malus_updates: u64,
+    pub continuation_bonus_updates: u64,
+    pub continuation_malus_updates: u64,
 
     pub lmr_attempts: u64,
     pub lmr_researched: u64,
@@ -94,7 +103,7 @@ impl SearchStats {
         self.print_moves();
         self.print_cutoffs();
         self.print_aspiration();
-        self.print_ordering();
+        self.print_history();
         self.print_reductions();
         self.print_main_pruning();
         self.print_q_pruning();
@@ -187,6 +196,37 @@ impl SearchStats {
             "Beta cutoffs:",
             Self::fmt(self.beta_cutoffs)
         );
+
+        if self.first_move_beta_cutoffs > 0 && self.beta_cutoffs > 0 {
+            println!(
+                "  {:<22} {:>14}",
+                "First Move Beta cutoffs:",
+                Self::fmt(self.first_move_beta_cutoffs)
+            );
+            println!(
+                "  {:<22} {:>14}",
+                "First Move Beta / Beta:",
+                Self::pct(self.first_move_beta_cutoffs, self.beta_cutoffs)
+            );
+        }
+
+        println!(
+            "  {:<22} {:>14}",
+            "Q Beta cutoffs:",
+            Self::fmt(self.q_beta_cutoffs)
+        );
+        if self.first_move_q_beta_cutoffs > 0 && self.q_beta_cutoffs > 0 {
+            println!(
+                "  {:<22} {:>14}",
+                "First Q Move Beta cutoffs:",
+                Self::fmt(self.first_move_q_beta_cutoffs)
+            );
+            println!(
+                "  {:<22} {:>14}",
+                "First Move Q Beta / Q Beta:",
+                Self::pct(self.first_move_q_beta_cutoffs, self.q_beta_cutoffs)
+            );
+        }
         println!(
             "  {:<22} {:>14}",
             "Stand-pat cutoffs:",
@@ -204,10 +244,30 @@ impl SearchStats {
         if self.qnodes > 0 {
             println!(
                 "  {:<22} {:>14}",
+                "Q-Beta / q moves:",
+                Self::pct(self.q_beta_cutoffs, self.qmoves_searched)
+            );
+            println!(
+                "  {:<22} {:>14}",
                 "Stand-pat / qnodes:",
                 Self::pct(self.stand_pat_cutoffs, self.qnodes)
             );
         }
+        println!("Total");
+        println!(
+            "  {:<22} {:>14}",
+            "Beta cutoffs:",
+            Self::fmt(self.beta_cutoffs + self.q_beta_cutoffs)
+        );
+
+        println!(
+            "  {:<22} {:>14}",
+            "Beta / Move",
+            Self::pct(
+                self.q_beta_cutoffs + self.beta_cutoffs,
+                self.moves_searched + self.qmoves_searched
+            )
+        );
     }
 
     pub fn print_aspiration(&self) {
@@ -237,14 +297,14 @@ impl SearchStats {
         );
     }
 
-    pub fn print_ordering(&self) {
-        let has_ordering = self.killer_cutoffs > 0 || self.history_cutoffs > 0;
+    pub fn print_history(&self) {
+        let has_history = self.killer_cutoffs > 0 || self.history_cutoffs > 0;
 
-        if !has_ordering {
+        if !has_history {
             return;
         }
 
-        println!("Move Ordering");
+        println!("Move History");
         println!(
             "  {:<22} {:>14}",
             "Killer cutoffs:",
@@ -254,6 +314,26 @@ impl SearchStats {
             "  {:<22} {:>14}",
             "History cutoffs:",
             Self::fmt(self.history_cutoffs)
+        );
+        println!(
+            "  {:<22} {:>14}",
+            "History bonuses:",
+            Self::fmt(self.history_bonus_updates)
+        );
+        println!(
+            "  {:<22} {:>14}",
+            "History maluses:",
+            Self::fmt(self.history_malus_updates)
+        );
+        println!(
+            "  {:<22} {:>14}",
+            "Continuation bonuses:",
+            Self::fmt(self.continuation_bonus_updates)
+        );
+        println!(
+            "  {:<22} {:>14}",
+            "Continuation maluses",
+            Self::fmt(self.continuation_malus_updates)
         );
 
         if self.beta_cutoffs > 0 {
@@ -537,7 +617,15 @@ impl Sub for SearchStats {
             qnodes: self.qnodes.saturating_sub(rhs.qnodes),
 
             beta_cutoffs: self.beta_cutoffs.saturating_sub(rhs.beta_cutoffs),
+            q_beta_cutoffs: self.q_beta_cutoffs.saturating_sub(rhs.q_beta_cutoffs),
             stand_pat_cutoffs: self.stand_pat_cutoffs.saturating_sub(rhs.stand_pat_cutoffs),
+
+            first_move_beta_cutoffs: self
+                .first_move_beta_cutoffs
+                .saturating_sub(rhs.first_move_beta_cutoffs),
+            first_move_q_beta_cutoffs: self
+                .first_move_q_beta_cutoffs
+                .saturating_sub(rhs.first_move_q_beta_cutoffs),
 
             moves_searched: self.moves_searched.saturating_sub(rhs.moves_searched),
             qmoves_searched: self.qmoves_searched.saturating_sub(rhs.qmoves_searched),
@@ -557,6 +645,19 @@ impl Sub for SearchStats {
 
             killer_cutoffs: self.killer_cutoffs.saturating_sub(rhs.killer_cutoffs),
             history_cutoffs: self.history_cutoffs.saturating_sub(rhs.history_cutoffs),
+
+            history_bonus_updates: self
+                .history_bonus_updates
+                .saturating_sub(rhs.history_bonus_updates),
+            history_malus_updates: self
+                .history_malus_updates
+                .saturating_sub(rhs.history_malus_updates),
+            continuation_bonus_updates: self
+                .continuation_bonus_updates
+                .saturating_sub(rhs.continuation_bonus_updates),
+            continuation_malus_updates: self
+                .continuation_malus_updates
+                .saturating_sub(rhs.continuation_malus_updates),
 
             lmr_attempts: self.lmr_attempts.saturating_sub(rhs.lmr_attempts),
             lmr_researched: self.lmr_researched.saturating_sub(rhs.lmr_researched),
@@ -604,7 +705,11 @@ impl AddAssign for SearchStats {
         self.qnodes += rhs.qnodes;
 
         self.beta_cutoffs += rhs.beta_cutoffs;
+        self.q_beta_cutoffs += rhs.q_beta_cutoffs;
         self.stand_pat_cutoffs += rhs.stand_pat_cutoffs;
+
+        self.first_move_beta_cutoffs += rhs.first_move_beta_cutoffs;
+        self.first_move_q_beta_cutoffs += rhs.first_move_q_beta_cutoffs;
 
         self.moves_searched += rhs.moves_searched;
         self.qmoves_searched += rhs.qmoves_searched;
@@ -620,6 +725,12 @@ impl AddAssign for SearchStats {
 
         self.killer_cutoffs += rhs.killer_cutoffs;
         self.history_cutoffs += rhs.history_cutoffs;
+
+        self.history_bonus_updates += rhs.history_bonus_updates;
+        self.history_malus_updates += rhs.history_malus_updates;
+
+        self.continuation_bonus_updates += rhs.continuation_bonus_updates;
+        self.continuation_malus_updates += rhs.continuation_malus_updates;
 
         self.lmr_attempts += rhs.lmr_attempts;
         self.lmr_researched += rhs.lmr_researched;

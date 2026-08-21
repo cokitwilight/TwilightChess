@@ -4,8 +4,11 @@ use std::{
     time::Duration,
 };
 
-use crate::tournament::{GameRecord, NotableGame};
 use crate::uci::pgn::{PgnMetadata, game_to_pgn};
+use crate::{
+    tournament::{GameRecord, NotableGame},
+    types::Color,
+};
 
 pub struct TournamentResult {
     // since the engines will swap between black and white keep track of engine wins not color
@@ -411,7 +414,10 @@ impl TournamentViewer {
             match command.to_ascii_lowercase().as_str() {
                 "help" => Self::print_help(),
                 "tournament" => self.tournament.print_compact_summary(),
-                "elo" => self.tournament.print_elo(),
+                "elo" => {
+                    let side = parts.next().unwrap_or("white");
+                    self.tournament.print_elo(side);
+                }
                 "games" => match parse_optional_usize(parts.next(), 1, "page") {
                     Ok(page) => self.print_games_page(page),
                     Err(message) => println!("{message}"),
@@ -470,8 +476,8 @@ impl TournamentViewer {
     fn print_help() {
         println!();
         println!("Commands");
-        println!("  tournament              Print compact tournament totals");
-        println!("  elo                      Print elo stats");
+        println!("  tournament               Print compact tournament totals");
+        println!("  elo [color]              Print elo stats for the engines original color");
         println!("  games [page]             List 10 regular games on a page");
         println!("  notables [limit]         List notable games by importance");
         println!("  game <number>            Select a regular game");
@@ -1033,8 +1039,13 @@ impl TournamentResult {
         );
     }
 
-    pub fn print_elo(&self) {
-        if let Some(elo) = self.elo_stats() {
+    pub fn print_elo(&self, color: &str) {
+        let side = match color.to_ascii_lowercase().as_str() {
+            "black" => Color::Black,
+            _ => Color::White,
+        };
+
+        if let Some(elo) = self.elo_stats(side) {
             println!();
             println!("Elo Estimate");
             println!("────────────────────────────────────────────");

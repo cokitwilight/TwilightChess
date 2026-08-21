@@ -359,6 +359,18 @@ impl Board {
 
         None
     }
+
+    pub fn piecetype_at(&self, sq: Square) -> Option<PieceType> {
+        let m = bit(sq);
+
+        for kind in PIECE_TYPES {
+            if self.pieces(Color::White, kind) & m != 0 || self.pieces(Color::Black, kind) & m != 0
+            {
+                return Some(kind);
+            }
+        }
+        None
+    }
     pub fn print_board(&self) {
         println!("  +-----------------+");
 

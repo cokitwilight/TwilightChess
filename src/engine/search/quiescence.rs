@@ -93,7 +93,7 @@ impl Engine {
 
         let in_check = board.in_check(board.side_to_move());
 
-        let mut best_score = NEG_INF;
+        let mut best_eval = NEG_INF;
         let mut stand_pat = NEG_INF;
         let mut best_move: Option<Move> = None;
 
@@ -140,10 +140,11 @@ impl Engine {
 
             stand_pat = evaluation_for_turn(board);
 
-            best_score = stand_pat;
+            best_eval = stand_pat;
 
             if stand_pat >= beta {
                 context.stats.stand_pat_cutoffs += 1;
+
                 context.stats.qtt.stores += 1;
                 self.tt.insert(
                     hash,
@@ -184,6 +185,8 @@ impl Engine {
             self.q_order_moves(board, &mut raw_moves, tt_best_move);
         }
 
+        let mut searched_moves = 0;
+
         for mv in raw_moves.iter() {
             let gives_check = board.move_gives_check(mv);
             let captured_value = match mv.kind {
@@ -222,8 +225,7 @@ impl Engine {
 
             let check_plies = if gives_check { check_plies + 1 } else { 0 };
 
-            let score =
-                -self.quiescence(board, context, depth, -beta, -alpha, ply + 1, check_plies);
+            let eval = -self.quiescence(board, context, depth, -beta, -alpha, ply + 1, check_plies);
 
             if context.stopped {
                 context.repetition_history.pop();
@@ -232,39 +234,44 @@ impl Engine {
             }
 
             context.stats.qmoves_searched += 1;
+            searched_moves += 1;
 
             context.repetition_history.pop();
 
             board.undo_move(undo);
 
-            if score > best_score {
-                best_score = score;
+            if eval > best_eval {
+                best_eval = eval;
                 best_move = Some(*mv);
             }
 
-            if score > alpha {
-                alpha = score;
-            }
+            alpha = alpha.max(eval);
 
-            if score >= beta {
+            if eval >= beta {
+                context.stats.q_beta_cutoffs += 1;
+
+                if searched_moves == 1 {
+                    context.stats.first_move_q_beta_cutoffs += 1;
+                }
+
                 context.stats.qtt.stores += 1;
                 self.tt.insert(
                     hash,
                     TTEntry {
                         depth,
-                        eval: score_to_tt(score, ply),
+                        eval: score_to_tt(eval, ply),
                         best_move,
                         flag: TTFlag::LowerBound,
                         node_type: TTNodeType::Quiescence,
                     },
                 );
-                return score;
+                return eval;
             }
         }
 
-        let flag = if best_score <= original_alpha {
+        let flag = if best_eval <= original_alpha {
             TTFlag::UpperBound
-        } else if best_score >= original_beta {
+        } else if best_eval >= original_beta {
             TTFlag::LowerBound
         } else {
             TTFlag::Exact
@@ -275,13 +282,13 @@ impl Engine {
             hash,
             TTEntry {
                 depth,
-                eval: score_to_tt(best_score, ply),
+                eval: score_to_tt(best_eval, ply),
                 best_move,
                 flag,
                 node_type: TTNodeType::Quiescence,
             },
         );
 
-        best_score
+        best_eval
     }
 }

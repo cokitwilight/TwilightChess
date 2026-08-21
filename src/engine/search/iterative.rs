@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
+use crate::engine::history::HistoryKey;
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
 use crate::engine::tt::entry::TTNodeType;
 use crate::engine::tt::{TTEntry, TTFlag, score_to_tt};
@@ -272,6 +273,10 @@ impl Engine {
                 break;
             }
 
+            let piece = board
+                .piecetype_at(mv.from())
+                .expect("No piece in board in Search Root!");
+
             let undo = board.make_move(*mv);
 
             let child_hash = board.hash();
@@ -318,7 +323,9 @@ impl Engine {
                 if (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
                     && mv.promotion.is_none()
                 {
-                    self.history.add_bonus(side_to_move, mv.from, mv.to, depth);
+                    self.history
+                        .main
+                        .add_bonus(HistoryKey::new(side_to_move, piece, mv.to), depth);
                 }
                 break;
             }

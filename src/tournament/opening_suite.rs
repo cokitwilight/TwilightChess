@@ -1,3 +1,5 @@
+use rand::RngExt;
+
 use crate::board::STARTPOS_FEN;
 use crate::game::Game;
 use crate::opening::book::find_legal_move_from_uci;
@@ -53,6 +55,26 @@ impl OpeningSuite {
     ) {
         let opening_position = OpeningPosition::from_uci(name, starting_fen.into(), uci_moves);
         self.openings.push(opening_position);
+    }
+
+    pub fn random_line(&self) -> Option<OpeningPosition> {
+        if self.openings.is_empty() {
+            return None;
+        }
+        let mut rng = rand::rng();
+
+        let index = rng.random_range(0..self.openings.len());
+
+        Some(self.openings[index].clone())
+    }
+
+    pub fn line_from_name(&mut self, name: &str) -> Option<OpeningPosition> {
+        for opening in self.openings.iter() {
+            if opening.name.clone() == name {
+                return Some(opening.clone());
+            }
+        }
+        None
     }
 }
 

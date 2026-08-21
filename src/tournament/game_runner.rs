@@ -147,6 +147,7 @@ pub fn run_game(
 mod tests {
     use crate::{
         board::STARTPOS_FEN,
+        tournament::opening_suite::build_opening_suite,
         uci::pgn::{PgnMetadata, game_to_pgn},
     };
 
@@ -233,9 +234,9 @@ mod tests {
         let mut players = MatchPlayers::from_depth(
             "Singular on".to_string(),
             "Singular off".to_string(),
-            10,
+            6,
             7,
-            10,
+            6,
             7,
         );
 
@@ -246,20 +247,14 @@ mod tests {
         players.black.config.limits.hard_time_limit_ms = Some(150000);
 
         players.white.config.search.singular.enabled = true;
-        players.black.config.search.singular.enabled = false;
+        players.black.config.search.singular.enabled = true;
 
-        let opening_line = OpeningPosition::from_uci(
-            // Solid but tactically rich central tension.
-            // King's Gambit Accepted
-            "King's Gambit Accepted",
-            STARTPOS_FEN.to_string(),
-            &[
-                "e2e4", "e7e5", "f2f4", "e5f4", "g1f3", "g7g5", "f1c4", "f8g7", "e1g1",
-            ],
-        );
+        let opening_suite = build_opening_suite();
+
+        let opening_line = opening_suite.random_line().unwrap();
 
         let game_record = match run_game(
-            STARTPOS_FEN.to_string(),
+            opening_line.game.starting_fen.to_string(),
             players.clone(),
             Color::White,
             Some(opening_line),

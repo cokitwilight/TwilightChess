@@ -1,9 +1,10 @@
-use crate::board::{Board, Move, MoveType, null_move_reduction};
+use crate::board::{Board, Move, MoveList, MoveType, null_move_reduction};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
+use crate::engine::history::HistoryKey;
 use crate::engine::pruning::lmr_reduction;
 use crate::engine::search::search::is_insufficient_material;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
-use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY};
+use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, SearchStackEntry};
 use crate::engine::{SearchContext, SearchOptions};
 use crate::eval::evaluation_for_turn;
 
@@ -173,6 +174,7 @@ impl Engine {
 
         if can_null_prune {
             context.stats.null_attempts += 1;
+
             let reduction = null_move_reduction(depth);
 
             let undo = board.make_null_move();
@@ -258,11 +260,34 @@ impl Engine {
             excluded_move: None,
         };
 
+        if let Some(eval) = static_eval {
+            context.stack[ply].static_eval = eval;
+        } else {
+            let eval = evaluation_for_turn(board);
+            context.stack[ply].static_eval = eval;
+            static_eval = Some(eval);
+        }
+
+        let mut searched_quiets: MoveList = MoveList::new();
+
         for mv in moves.iter() {
             // singular extension before make move
             if Some(*mv) == options.excluded_move {
                 continue;
             }
+
+            let piece = board
+                .piecetype_at(mv.from())
+                .expect("No piece in board in negamax!");
+
+            let curr_key = HistoryKey::new(side_to_move, piece, mv.to());
+
+            context.stack[ply + 1] = SearchStackEntry {
+                mv: Some(*mv),
+                piece: Some(piece),
+                history_index: Some(curr_key),
+                static_eval: 0,
+            };
 
             let mut extension: u16 = 0;
 
@@ -340,7 +365,7 @@ impl Engine {
 
             // for stats debugging
             let was_killer = context.killer_moves.contains(ply, *mv);
-            let history_score = self.history.get(side_to_move, mv.from, mv.to);
+            let history_score = self.history.main.get(curr_key);
 
             let reduction = if is_quiet
                 && !in_check
@@ -442,6 +467,7 @@ impl Engine {
             }
 
             searched_moves += 1;
+
             context.stats.moves_searched += 1;
 
             context.repetition_history.pop();
@@ -456,6 +482,11 @@ impl Engine {
 
             if alpha >= beta {
                 context.stats.beta_cutoffs += 1;
+
+                if searched_moves == 1 {
+                    context.stats.first_move_beta_cutoffs += 1;
+                }
+
                 did_cutoff = true;
 
                 if is_quiet && options.excluded_move.is_none() {
@@ -465,10 +496,75 @@ impl Engine {
                         context.stats.history_cutoffs += 1;
                     }
 
-                    self.history.add_bonus(side_to_move, mv.from, mv.to, depth);
+                    context.stats.history_bonus_updates += 1;
+                    self.history.main.add_bonus(curr_key, depth);
                     context.killer_moves.add(ply, *mv);
+
+                    if let Some(prev_key) = context.stack[ply].history_index {
+                        context.stats.continuation_bonus_updates += 1;
+
+                        self.history
+                            .continuation
+                            .add_bonus(1, prev_key, curr_key, depth);
+                    }
+
+                    if ply > 0 {
+                        if let Some(prev_key) = context.stack[ply - 1].history_index {
+                            context.stats.continuation_bonus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
+
+                            self.history
+                                .continuation
+                                .add_bonus(2, prev_key, curr_key, depth);
+                        }
+
+                        if ply > 2 {
+                            if let Some(prev_key) = context.stack[ply - 3].history_index {
+                                context.stats.continuation_bonus_updates += 1;
+
+                                self.history
+                                    .continuation
+                                    .add_bonus(4, prev_key, curr_key, depth);
+                            }
+                        }
+                    }
+
+                    for _ in searched_quiets.iter() {
+                        context.stats.history_malus_updates += 1;
+                        self.history.main.add_malus(curr_key, depth);
+
+                        if let Some(prev_key) = context.stack[ply].history_index {
+                            context.stats.continuation_malus_updates += 1;
+                            self.history
+                                .continuation
+                                .add_malus(1, prev_key, curr_key, depth);
+                        }
+
+                        if ply > 0 {
+                            if let Some(prev_key) = context.stack[ply - 1].history_index {
+                                context.stats.continuation_malus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
+
+                                self.history
+                                    .continuation
+                                    .add_malus(2, prev_key, curr_key, depth);
+                            }
+
+                            if ply > 2 {
+                                if let Some(prev_key) = context.stack[ply - 3].history_index {
+                                    context.stats.continuation_bonus_updates += 1;
+
+                                    self.history
+                                        .continuation
+                                        .add_malus(4, prev_key, curr_key, depth);
+                                }
+                            }
+                        }
+                    }
                 }
                 break;
+            }
+
+            if is_quiet {
+                searched_quiets.push(*mv);
             }
         }
 
