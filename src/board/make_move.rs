@@ -15,34 +15,34 @@ impl Board {
         let them = us.opposite();
 
         let piece = self
-            .piece_at(mv.from)
-            .unwrap_or_else(|| panic!("make_move: no piece on from-square {}", mv.from));
+            .piece_at(mv.from())
+            .unwrap_or_else(|| panic!("make_move: no piece on from-square {}", mv.from()));
 
         let moving_color = piece.color;
         let moving_piece = piece.kind;
 
         debug_assert_eq!(moving_color, us, "Tried to move wrong color");
 
-        if let Some(promo) = mv.promotion {
+        if let Some(promo) = mv.promotion() {
             debug_assert_eq!(moving_piece, PieceType::Pawn, "Only pawns should promote");
             debug_assert_ne!(promo, PieceType::King, "Cannot promote to king");
             debug_assert_ne!(promo, PieceType::Pawn, "Cannot promote to pawn");
         }
 
-        let captured_piece = if mv.kind == MoveType::EnPassant {
-            let cap_sq = square(file_of(mv.to), rank_of(mv.from));
+        let captured_piece = if mv.kind() == MoveType::EnPassant {
+            let cap_sq = square(file_of(mv.to()), rank_of(mv.from()));
 
             Some((them, PieceType::Pawn, cap_sq))
         } else {
-            self.piece_at(mv.to).map(|piece| {
+            self.piece_at(mv.to()).map(|piece| {
                 debug_assert_ne!(piece.color, us, "Tried to capture own piece");
                 if piece.kind == PieceType::King {
                     // print_all_bitboards(&self);
-                    panic!("Move illegally captures king. Move: from: {}, to: {}, kind: {:?}, promtion: {}", mv.from, mv.to, mv.kind, mv.is_promotion());
+                    panic!("Move illegally captures king. Move: from: {}, to: {}, kind: {:?}, promtion: {}", mv.from(), mv.to(), mv.kind(), mv.is_promotion());
                 }
                 // debug_assert_ne!(piece.kind, PieceType::King, "Move illegally captures king. Move: from: {}, to: {}, kind: {:?}, promtion: {}", mv.from, mv.to, mv.kind, mv.is_promotion());
 
-                (piece.color, piece.kind, mv.to)
+                (piece.color, piece.kind, mv.to())
             })
         };
 
@@ -67,8 +67,8 @@ impl Board {
         self.clear_en_passant_hashed();
 
         // Remove moving piece from its source square.
-        self.remove_piece_hashed(us, moving_piece, mv.from);
-        self.remove_piece_increment(us, moving_piece, mv.from);
+        self.remove_piece_hashed(us, moving_piece, mv.from());
+        self.remove_piece_increment(us, moving_piece, mv.from());
 
         // Remove captured piece, including en passant victim.
         if let Some((cap_color, cap_piece, cap_sq)) = captured_piece {
@@ -78,17 +78,17 @@ impl Board {
 
         // Handle castling rook movement.
         if moving_piece == PieceType::King
-            && (mv.kind == MoveType::Castle || file_distance(mv.from, mv.to) == 2)
+            && (mv.kind() == MoveType::Castle || file_distance(mv.from(), mv.to()) == 2)
         // file distance technically not needed if MoveType::Castle is always used for castling, but this is a safety check
         {
-            self.move_castling_rook_hashed(us, mv.from, mv.to);
-            self.move_castling_rook_increment(us, mv.from, mv.to);
+            self.move_castling_rook_hashed(us, mv.from(), mv.to());
+            self.move_castling_rook_increment(us, mv.from(), mv.to());
         }
 
         // Place piece on destination. Promotion replaces the pawn.
-        let placed_piece = mv.promotion.unwrap_or(moving_piece);
-        self.add_piece_hashed(us, placed_piece, mv.to);
-        self.add_piece_increment(us, placed_piece, mv.to);
+        let placed_piece = mv.promotion().unwrap_or(moving_piece);
+        self.add_piece_hashed(us, placed_piece, mv.to());
+        self.add_piece_increment(us, placed_piece, mv.to());
 
         // TODO: Add/remove piece increment compute phase and material despite the fact that after the move the total phase and material will be the same.
         // Additionally promotion could mess with material calculations. Ideally add a moved_piece_increment function that takes the from and to squares and handles promotion, but for now this is simpler.
@@ -96,7 +96,7 @@ impl Board {
         let old_castling_rights = self.castling_rights;
 
         // Update castling rights.
-        self.update_castling_rights_after_move(us, moving_piece, mv.from);
+        self.update_castling_rights_after_move(us, moving_piece, mv.from());
 
         if let Some((cap_color, cap_piece, cap_sq)) = captured_piece {
             self.update_castling_rights_after_capture(cap_color, cap_piece, cap_sq);
@@ -106,10 +106,10 @@ impl Board {
 
         // Set new en passant square after a double pawn push.
         if moving_piece == PieceType::Pawn
-            && same_file(mv.from, mv.to)
-            && square_distance(mv.from, mv.to) == 16
+            && same_file(mv.from(), mv.to())
+            && square_distance(mv.from(), mv.to()) == 16
         {
-            let ep = (mv.from + mv.to) / 2;
+            let ep = (mv.from() + mv.to()) / 2;
             self.set_en_passant_hashed(Some(ep));
         }
 

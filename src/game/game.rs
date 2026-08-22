@@ -151,8 +151,8 @@ impl Game {
 
 // HELPER
 fn moves_match_for_play(legal: Move, requested: Move) -> bool {
-    legal.from == requested.from
-        && legal.to == requested.to
-        && legal.kind == requested.kind
-        && legal.promotion == requested.promotion
+    legal.from() == requested.from()
+        && legal.to() == requested.to()
+        && legal.kind() == requested.kind()
+        && legal.promotion() == requested.promotion()
 }

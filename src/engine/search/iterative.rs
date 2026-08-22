@@ -320,12 +320,12 @@ impl Engine {
             }
 
             if alpha >= beta {
-                if (mv.kind == MoveType::Normal || mv.kind == MoveType::Castle)
-                    && mv.promotion.is_none()
+                if (mv.kind() == MoveType::Normal || mv.kind() == MoveType::Castle)
+                    && mv.promotion().is_none()
                 {
                     self.history
                         .main
-                        .add_bonus(HistoryKey::new(side_to_move, piece, mv.to), depth);
+                        .add_bonus(HistoryKey::new(side_to_move, piece, mv.to()), depth);
                 }
                 break;
             }

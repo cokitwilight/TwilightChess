@@ -13,10 +13,10 @@ pub enum MoveType {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Move {
-    pub from: Square,
-    pub to: Square,
-    pub kind: MoveType,
-    pub promotion: Option<PieceType>,
+    from: Square,
+    to: Square,
+    kind: MoveType,
+    promotion: Option<PieceType>,
 }
 
 impl Move {
@@ -26,6 +26,15 @@ impl Move {
         kind: MoveType::Normal,
         promotion: None,
     };
+
+    pub fn new(from: Square, to: Square, kind: MoveType, promotion: Option<PieceType>) -> Self {
+        Self {
+            from,
+            to,
+            kind,
+            promotion,
+        }
+    }
 
     pub fn is_capture(self) -> bool {
         matches!(self.kind, MoveType::Capture | MoveType::EnPassant)

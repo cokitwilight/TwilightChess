@@ -17,20 +17,10 @@ pub fn pseudo_bishop_moves(board: &Board, color: Color, moves: &mut MoveList) {
         let mut quiets = targets & empty;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
         while let Some(to) = pop_lsb(&mut quiets) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Normal,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Normal, None));
         }
     }
 }
@@ -52,20 +42,10 @@ pub fn legal_bishop_moves(board: &Board, color: Color, moves: &mut MoveList, inf
         let mut quiets = targets & empty;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
         while let Some(to) = pop_lsb(&mut quiets) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Normal,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Normal, None));
         }
     }
 }
@@ -90,21 +70,11 @@ pub fn pseudo_bishop_moves_at(board: &Board, color: Color, sq: Square, moves: &m
     let mut quiets = targets & empty;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
 
     while let Some(to) = pop_lsb(&mut quiets) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Normal,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Normal, None));
     }
 }
 
@@ -120,12 +90,7 @@ pub fn pseudo_bishop_capture_moves(board: &Board, color: Color, moves: &mut Move
         let mut captures = targets & enemies;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
     }
 }
@@ -150,12 +115,7 @@ pub fn legal_bishop_capture_moves(
         let mut captures = targets & enemies;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
     }
 }
@@ -183,12 +143,7 @@ pub fn pseudo_bishop_capture_moves_at(
     let mut captures = targets & enemies;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
 }
 
@@ -206,20 +161,10 @@ pub fn pseudo_rook_moves(board: &Board, color: Color, moves: &mut MoveList) {
         let mut quiets = targets & empty;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
         while let Some(to) = pop_lsb(&mut quiets) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Normal,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Normal, None));
         }
     }
 }
@@ -241,20 +186,10 @@ pub fn legal_rook_moves(board: &Board, color: Color, moves: &mut MoveList, info:
         let mut quiets = targets & empty;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
         while let Some(to) = pop_lsb(&mut quiets) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Normal,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Normal, None));
         }
     }
 }
@@ -279,21 +214,11 @@ pub fn pseudo_rook_moves_at(board: &Board, color: Color, sq: Square, moves: &mut
     let mut quiets = targets & empty;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
 
     while let Some(to) = pop_lsb(&mut quiets) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Normal,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Normal, None));
     }
 }
 
@@ -309,12 +234,7 @@ pub fn pseudo_rook_capture_moves(board: &Board, color: Color, moves: &mut MoveLi
         let mut captures = targets & enemies;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
     }
 }
@@ -339,12 +259,7 @@ pub fn legal_rook_capture_moves(
         let mut captures = targets & enemies;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
     }
 }
@@ -367,12 +282,7 @@ pub fn pseudo_rook_capture_moves_at(board: &Board, color: Color, sq: Square, mov
     let mut captures = targets & enemies;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
 }
 
@@ -390,20 +300,10 @@ pub fn pseudo_queen_moves(board: &Board, color: Color, moves: &mut MoveList) {
         let mut quiets = targets & empty;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
         while let Some(to) = pop_lsb(&mut quiets) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Normal,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Normal, None));
         }
     }
 }
@@ -425,20 +325,10 @@ pub fn legal_queen_moves(board: &Board, color: Color, moves: &mut MoveList, info
         let mut quiets = targets & empty;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
         while let Some(to) = pop_lsb(&mut quiets) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Normal,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Normal, None));
         }
     }
 }
@@ -463,21 +353,11 @@ pub fn pseudo_queen_moves_at(board: &Board, color: Color, sq: Square, moves: &mu
     let mut quiets = targets & empty;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
 
     while let Some(to) = pop_lsb(&mut quiets) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Normal,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Normal, None));
     }
 }
 
@@ -493,12 +373,7 @@ pub fn pseudo_queen_capture_moves(board: &Board, color: Color, moves: &mut MoveL
         let mut captures = targets & enemies;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
     }
 }
@@ -522,12 +397,7 @@ pub fn legal_queen_capture_moves(
         let mut captures = targets & enemies;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
     }
 }
@@ -555,11 +425,6 @@ pub fn pseudo_queen_capture_moves_at(
     let mut captures = targets & enemies;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
 }

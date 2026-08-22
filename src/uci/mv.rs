@@ -6,15 +6,15 @@ use std::fmt;
 
 impl Move {
     pub fn to_uci(&self) -> String {
-        debug_assert!(self.from < 64, "Invalid source square: {}", self.from);
-        debug_assert!(self.to < 64, "Invalid destination square: {}", self.to);
+        debug_assert!(self.from() < 64, "Invalid source square: {}", self.from());
+        debug_assert!(self.to() < 64, "Invalid destination square: {}", self.to());
 
-        let mut result = String::with_capacity(if self.promotion.is_some() { 5 } else { 4 });
+        let mut result = String::with_capacity(if self.promotion().is_some() { 5 } else { 4 });
 
-        push_square(&mut result, self.from);
-        push_square(&mut result, self.to);
+        push_square(&mut result, self.from());
+        push_square(&mut result, self.to());
 
-        if let Some(piece) = self.promotion {
+        if let Some(piece) = self.promotion() {
             let promotion_char = match piece {
                 PieceType::Knight => 'n',
                 PieceType::Bishop => 'b',

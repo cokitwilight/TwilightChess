@@ -17,6 +17,7 @@ pub struct EvalBreakdown {
     pub knights: i32,
     pub sliders: i32,
     pub king: i32,
+    pub tempo: i32,
     pub total: i32,
     pub side_to_move_total: i32,
     pub phase: i32,
@@ -40,7 +41,12 @@ pub fn evaluation_breakdown(board: &Board) -> EvalBreakdown {
     let sliders = sliders_eval(board, &eval_info);
     let king = king_eval(board, &eval_info);
 
-    let total = material + pst + mobility + pawns + knights + sliders + king;
+    let tempo = match board.side_to_move() {
+        Color::White => 15,
+        Color::Black => -15,
+    };
+
+    let total = material + pst + mobility + pawns + knights + sliders + king + tempo;
 
     let side_to_move_total = match board.side_to_move() {
         Color::White => total,
@@ -55,6 +61,7 @@ pub fn evaluation_breakdown(board: &Board) -> EvalBreakdown {
         knights,
         sliders,
         king,
+        tempo,
         total,
         side_to_move_total,
         phase,
@@ -211,7 +218,14 @@ mod eval_tests {
 
             assert_eq!(
                 b.total,
-                b.material + b.pst + b.mobility + b.pawns + b.knights + b.sliders + b.king,
+                b.material
+                    + b.pst
+                    + b.mobility
+                    + b.pawns
+                    + b.knights
+                    + b.sliders
+                    + b.king
+                    + b.tempo,
                 "eval breakdown components do not sum to total for {name}"
             );
 

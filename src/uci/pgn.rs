@@ -114,13 +114,13 @@ fn escape_pgn_tag_value(value: &str) -> String {
 pub fn play_move_as_san(game: &mut Game, mv: Move) -> Result<String, MoveError> {
     let moving_piece = game
         .board
-        .piece_at(mv.from)
+        .piece_at(mv.from())
         .expect("Move source square contains no piece");
 
     let mut san = String::new();
 
-    if mv.kind == MoveType::Castle {
-        if file_of(mv.to) > file_of(mv.from) {
+    if mv.kind() == MoveType::Castle {
+        if file_of(mv.to()) > file_of(mv.from()) {
             san.push_str("O-O");
         } else {
             san.push_str("O-O-O");
@@ -131,11 +131,11 @@ pub fn play_move_as_san(game: &mut Game, mv: Move) -> Result<String, MoveError> 
         match moving_piece.kind {
             PieceType::Pawn => {
                 if is_capture {
-                    san.push(file_char(mv.from));
+                    san.push(file_char(mv.from()));
                     san.push('x');
                 }
 
-                san.push_str(&square_to_algebraic(mv.to));
+                san.push_str(&square_to_algebraic(mv.to()));
             }
 
             PieceType::Knight
@@ -153,11 +153,11 @@ pub fn play_move_as_san(game: &mut Game, mv: Move) -> Result<String, MoveError> 
                     san.push('x');
                 }
 
-                san.push_str(&square_to_algebraic(mv.to));
+                san.push_str(&square_to_algebraic(mv.to()));
             }
         }
 
-        if let Some(promotion) = mv.promotion {
+        if let Some(promotion) = mv.promotion() {
             san.push('=');
             san.push(promotion_letter(promotion));
         }
@@ -188,11 +188,11 @@ fn san_disambiguation(board: &mut Board, mv: Move, moving_piece: Piece) -> Strin
     let mut has_other_candidate = false;
 
     for &candidate in legal_moves.iter() {
-        if candidate.from == mv.from || candidate.to != mv.to {
+        if candidate.from() == mv.from() || candidate.to() != mv.to() {
             continue;
         }
 
-        let Some(candidate_piece) = board.piece_at(candidate.from) else {
+        let Some(candidate_piece) = board.piece_at(candidate.from()) else {
             continue;
         };
 
@@ -203,11 +203,11 @@ fn san_disambiguation(board: &mut Board, mv: Move, moving_piece: Piece) -> Strin
 
         has_other_candidate = true;
 
-        if file_of(candidate.from) == file_of(mv.from) {
+        if file_of(candidate.from()) == file_of(mv.from()) {
             same_file_conflict = true;
         }
 
-        if rank_of(candidate.from) == rank_of(mv.from) {
+        if rank_of(candidate.from()) == rank_of(mv.from()) {
             same_rank_conflict = true;
         }
     }
@@ -217,20 +217,20 @@ fn san_disambiguation(board: &mut Board, mv: Move, moving_piece: Piece) -> Strin
     }
 
     if !same_file_conflict {
-        return file_char(mv.from).to_string();
+        return file_char(mv.from()).to_string();
     }
 
     if !same_rank_conflict {
-        return rank_char(mv.from).to_string();
+        return rank_char(mv.from()).to_string();
     }
 
-    square_to_algebraic(mv.from)
+    square_to_algebraic(mv.from())
 }
 
 fn is_capture_move(board: &Board, mv: Move) -> bool {
-    mv.kind == MoveType::Capture
-        || mv.kind == MoveType::EnPassant
-        || board.piece_at(mv.to).is_some()
+    mv.kind() == MoveType::Capture
+        || mv.kind() == MoveType::EnPassant
+        || board.piece_at(mv.to()).is_some()
 }
 
 fn piece_letter(piece: PieceType) -> char {

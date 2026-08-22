@@ -270,10 +270,10 @@ fn draw_move_markers(
     moves: &MoveList,
 ) {
     for mv in moves.iter().copied() {
-        let rect = square_to_rect(mv.to, board_rect, orientation);
+        let rect = square_to_rect(mv.to(), board_rect, orientation);
         let center = rect.center();
 
-        let is_capture = matches!(mv.kind, MoveType::Capture);
+        let is_capture = matches!(mv.kind(), MoveType::Capture);
 
         if is_capture {
             // Hollow circle / ring for captures.

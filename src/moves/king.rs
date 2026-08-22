@@ -25,20 +25,10 @@ pub fn pseudo_king_moves(board: &Board, color: Color, moves: &mut MoveList) {
     let mut quiets = targets & empty;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(from, to, MoveType::Capture, None));
     }
     while let Some(to) = pop_lsb(&mut quiets) {
-        moves.push(Move {
-            from,
-            to,
-            kind: MoveType::Normal,
-            promotion: None,
-        });
+        moves.push(Move::new(from, to, MoveType::Normal, None));
     }
     pseudo_castling_moves(board, color, moves);
 }
@@ -62,21 +52,11 @@ pub fn pseudo_king_moves_at(board: &Board, color: Color, sq: Square, moves: &mut
     let mut quiets = targets & empty;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
 
     while let Some(to) = pop_lsb(&mut quiets) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Normal,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Normal, None));
     }
 
     // Only produces castles if this king is actually on E1/E8.
@@ -98,12 +78,7 @@ pub fn pseudo_king_capture_moves(board: &Board, color: Color, moves: &mut MoveLi
     let mut captures = targets & enemies;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(from, to, MoveType::Capture, None));
     }
 }
 
@@ -124,12 +99,7 @@ pub fn pseudo_king_capture_moves_at(board: &Board, color: Color, sq: Square, mov
     let mut captures = targets & enemies;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
 }
 
@@ -163,12 +133,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
                     !board.square_attacked_by(F1, enemy) && !board.square_attacked_by(G1, enemy);
 
                 if rook_on_h1 && path_empty && path_safe {
-                    moves.push(Move {
-                        from: E1,
-                        to: G1,
-                        kind: MoveType::Castle,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(E1, G1, MoveType::Castle, None));
                 }
             }
 
@@ -188,12 +153,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
                     !board.square_attacked_by(D1, enemy) && !board.square_attacked_by(C1, enemy);
 
                 if rook_on_a1 && path_empty && path_safe {
-                    moves.push(Move {
-                        from: E1,
-                        to: C1,
-                        kind: MoveType::Castle,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(E1, C1, MoveType::Castle, None));
                 }
             }
         }
@@ -223,12 +183,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
                     !board.square_attacked_by(F8, enemy) && !board.square_attacked_by(G8, enemy);
 
                 if rook_on_h8 && path_empty && path_safe {
-                    moves.push(Move {
-                        from: E8,
-                        to: G8,
-                        kind: MoveType::Castle,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(E8, G8, MoveType::Castle, None));
                 }
             }
 
@@ -248,12 +203,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
                     !board.square_attacked_by(D8, enemy) && !board.square_attacked_by(C8, enemy);
 
                 if rook_on_a8 && path_empty && path_safe {
-                    moves.push(Move {
-                        from: E8,
-                        to: C8,
-                        kind: MoveType::Castle,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(E8, C8, MoveType::Castle, None));
                 }
             }
         }

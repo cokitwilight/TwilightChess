@@ -1,7 +1,7 @@
 use crate::board::{Board, Move, MoveList, MoveType, null_move_reduction};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::history::HistoryKey;
-use crate::engine::pruning::lmr_reduction;
+use crate::engine::pruning::lmr::LMR_SCALE_I32;
 use crate::engine::search::search::is_insufficient_material;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, SearchStackEntry};
@@ -276,11 +276,21 @@ impl Engine {
                 continue;
             }
 
+            let is_quiet = mv.kind() == MoveType::Normal && mv.promotion().is_none();
+            let gives_check = board.move_gives_check(mv);
+
             let piece = board
                 .piecetype_at(mv.from())
                 .expect("No piece in board in negamax!");
 
             let curr_key = HistoryKey::new(side_to_move, piece, mv.to());
+
+            let was_killer = context.killer_moves.contains(ply, *mv);
+            let history_score = if is_quiet {
+                self.history.get_quiet_score(&context.stack, ply, curr_key)
+            } else {
+                0
+            };
 
             context.stack[ply + 1] = SearchStackEntry {
                 mv: Some(*mv),
@@ -336,9 +346,6 @@ impl Engine {
 
             let full_child_depth = depth.saturating_sub(1).saturating_add(extension);
 
-            let is_quiet = mv.kind == MoveType::Normal && mv.promotion.is_none();
-            let gives_check = board.move_gives_check(mv);
-
             let undo = board.make_move(*mv);
 
             if can_fut
@@ -349,7 +356,15 @@ impl Engine {
                 && Some(*mv) != tt_best_move
             {
                 context.stats.fut_attempts += 1;
-                let margin = depth * self.config.search.fut.margin;
+                let mut margin = depth * self.config.search.fut.margin;
+
+                if self.config.search.fut.history_enabled {
+                    if history_score > self.config.search.fut.good_history {
+                        margin += depth * self.config.search.fut.history_margin;
+                    } else if history_score < self.config.search.fut.bad_history {
+                        margin += depth * self.config.search.fut.history_margin;
+                    }
+                }
 
                 let eval = static_eval.expect("No available static eval in negamax!");
 
@@ -363,24 +378,45 @@ impl Engine {
             let child_hash = board.hash();
             context.repetition_history.push(child_hash); // only store if valid move
 
-            // for stats debugging
-            let was_killer = context.killer_moves.contains(ply, *mv);
-            let history_score = self.history.main.get(curr_key);
-
-            let reduction = if is_quiet
+            let can_lmr = is_quiet
                 && !in_check
                 && !gives_check
                 && self.config.search.lmr.enabled
                 && options.excluded_move.is_none()
                 && extension == 0
-                && Some(*mv) == tt_best_move
-            {
-                lmr_reduction(depth, searched_moves)
+                && Some(*mv) != tt_best_move
+                && depth >= 3
+                && searched_moves >= 3;
+
+            let reduction = if can_lmr {
+                let mut current_reduction = self
+                    .lmr_table
+                    .get(depth as usize, searched_moves as usize + 1);
+
+                if self.config.search.lmr.history_enabled {
+                    let baseline_red = current_reduction / LMR_SCALE_I32;
+
+                    let history_adjustement = history_score / self.config.search.lmr.history_scale;
+
+                    current_reduction -= history_adjustement;
+
+                    let history_red = current_reduction / LMR_SCALE_I32;
+
+                    if history_red < baseline_red {
+                        context.stats.lmr_history_improved += 1;
+                    } else if history_red > baseline_red {
+                        context.stats.lmr_history_reduced += 1;
+                    }
+                }
+
+                let red = current_reduction / LMR_SCALE_I32;
+
+                red.clamp(0, depth as i32 - 2)
             } else {
                 0
             };
 
-            let reduced_child_depth = full_child_depth.saturating_sub(reduction);
+            let reduced_child_depth = full_child_depth.saturating_sub(reduction as u16);
 
             let mut eval: i32;
 
@@ -401,7 +437,7 @@ impl Engine {
                     return 0;
                 }
             } else {
-                if reduction > 0 {
+                if can_lmr {
                     context.stats.lmr_attempts += 1;
                 }
 
@@ -496,70 +532,14 @@ impl Engine {
                         context.stats.history_cutoffs += 1;
                     }
 
-                    context.stats.history_bonus_updates += 1;
-                    self.history.main.add_bonus(curr_key, depth);
                     context.killer_moves.add(ply, *mv);
-
-                    if let Some(prev_key) = context.stack[ply].history_index {
-                        context.stats.continuation_bonus_updates += 1;
-
-                        self.history
-                            .continuation
-                            .add_bonus(1, prev_key, curr_key, depth);
-                    }
-
-                    if ply > 0 {
-                        if let Some(prev_key) = context.stack[ply - 1].history_index {
-                            context.stats.continuation_bonus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
-
-                            self.history
-                                .continuation
-                                .add_bonus(2, prev_key, curr_key, depth);
-                        }
-
-                        if ply > 2 {
-                            if let Some(prev_key) = context.stack[ply - 3].history_index {
-                                context.stats.continuation_bonus_updates += 1;
-
-                                self.history
-                                    .continuation
-                                    .add_bonus(4, prev_key, curr_key, depth);
-                            }
-                        }
-                    }
+                    self.history.add_quiet_bonus(context, ply, depth, curr_key);
 
                     for _ in searched_quiets.iter() {
-                        context.stats.history_malus_updates += 1;
-                        self.history.main.add_malus(curr_key, depth);
-
-                        if let Some(prev_key) = context.stack[ply].history_index {
-                            context.stats.continuation_malus_updates += 1;
-                            self.history
-                                .continuation
-                                .add_malus(1, prev_key, curr_key, depth);
-                        }
-
-                        if ply > 0 {
-                            if let Some(prev_key) = context.stack[ply - 1].history_index {
-                                context.stats.continuation_malus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
-
-                                self.history
-                                    .continuation
-                                    .add_malus(2, prev_key, curr_key, depth);
-                            }
-
-                            if ply > 2 {
-                                if let Some(prev_key) = context.stack[ply - 3].history_index {
-                                    context.stats.continuation_bonus_updates += 1;
-
-                                    self.history
-                                        .continuation
-                                        .add_malus(4, prev_key, curr_key, depth);
-                                }
-                            }
-                        }
+                        self.history.add_quiet_malus(context, ply, depth, curr_key);
                     }
                 }
+
                 break;
             }
 

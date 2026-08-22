@@ -1,9 +1,11 @@
 use crate::bitboard::Square;
 use crate::engine::history::{ContinuationHistory, MainHistory};
-use crate::engine::{Engine, SearchContext};
+use crate::engine::{Engine, MAX_PLY, SearchContext, SearchStackEntry};
 use crate::types::{Color, PieceType};
 
 const HISTORY_MAX: i32 = 16_384;
+
+pub const HISTORY_KEY_COUNT: usize = 768;
 
 #[derive(Clone, Copy, Debug)]
 pub struct HistoryKey(u16);
@@ -30,6 +32,99 @@ pub struct HistoryTables {
 impl HistoryTables {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn get_quiet_score(
+        &self,
+        stack: &[SearchStackEntry; MAX_PLY as usize],
+        ply: usize,
+        curr_key: HistoryKey,
+    ) -> i32 {
+        let mut score = self.main.get(curr_key);
+
+        if let Some(prev_key) = stack[ply].history_index {
+            score += self.continuation.get(1, prev_key, curr_key);
+        }
+
+        if ply > 0 {
+            if let Some(prev_key) = stack[ply - 1].history_index {
+                score += self.continuation.get(2, prev_key, curr_key) / 2;
+            }
+
+            if ply > 2 {
+                if let Some(prev_key) = stack[ply - 3].history_index {
+                    score += self.continuation.get(4, prev_key, curr_key) / 2;
+                }
+            }
+        }
+
+        score
+    }
+
+    pub fn add_quiet_bonus(
+        &mut self,
+        context: &mut SearchContext,
+        ply: usize,
+        depth: u16,
+        curr_key: HistoryKey,
+    ) {
+        context.stats.history_bonus_updates += 1;
+        self.main.add_bonus(curr_key, depth);
+
+        if let Some(prev_key) = context.stack[ply].history_index {
+            context.stats.continuation_bonus_updates += 1;
+
+            self.continuation.add_bonus(1, prev_key, curr_key, depth);
+        }
+
+        if ply > 0 {
+            if let Some(prev_key) = context.stack[ply - 1].history_index {
+                context.stats.continuation_bonus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
+
+                self.continuation.add_bonus(2, prev_key, curr_key, depth);
+            }
+
+            if ply > 2 {
+                if let Some(prev_key) = context.stack[ply - 3].history_index {
+                    context.stats.continuation_bonus_updates += 1;
+
+                    self.continuation.add_bonus(4, prev_key, curr_key, depth);
+                }
+            }
+        }
+    }
+
+    pub fn add_quiet_malus(
+        &mut self,
+        context: &mut SearchContext,
+        ply: usize,
+        depth: u16,
+        curr_key: HistoryKey,
+    ) {
+        context.stats.history_malus_updates += 1;
+        self.main.add_malus(curr_key, depth);
+
+        if let Some(prev_key) = context.stack[ply].history_index {
+            context.stats.continuation_malus_updates += 1;
+
+            self.continuation.add_malus(1, prev_key, curr_key, depth);
+        }
+
+        if ply > 0 {
+            if let Some(prev_key) = context.stack[ply - 1].history_index {
+                context.stats.continuation_malus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
+
+                self.continuation.add_malus(2, prev_key, curr_key, depth);
+            }
+
+            if ply > 2 {
+                if let Some(prev_key) = context.stack[ply - 3].history_index {
+                    context.stats.continuation_malus_updates += 1;
+
+                    self.continuation.add_malus(4, prev_key, curr_key, depth);
+                }
+            }
+        }
     }
 }
 

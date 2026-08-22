@@ -231,23 +231,20 @@ mod tests {
     #[test]
     #[ignore]
     pub fn test_game_2() {
-        let mut players = MatchPlayers::from_depth(
-            "Singular on".to_string(),
-            "Singular off".to_string(),
-            6,
-            7,
-            6,
-            7,
-        );
+        let mut players =
+            MatchPlayers::from_depth("LMR Off".to_string(), "LMR On".to_string(), 16, 7, 16, 7);
 
-        // players.white.config.limits.soft_time_limit_ms = Some(1000);
-        // players.black.config.limits.soft_time_limit_ms = Some(1000);
+        players.white.config.limits.soft_time_limit_ms = Some(500);
+        players.black.config.limits.soft_time_limit_ms = Some(500);
 
         players.white.config.limits.hard_time_limit_ms = Some(250000);
         players.black.config.limits.hard_time_limit_ms = Some(150000);
 
         players.white.config.search.singular.enabled = true;
         players.black.config.search.singular.enabled = true;
+
+        players.white.config.search.lmr.enabled = false;
+        players.black.config.search.lmr.enabled = true;
 
         let opening_suite = build_opening_suite();
 
@@ -256,7 +253,7 @@ mod tests {
         let game_record = match run_game(
             opening_line.game.starting_fen.to_string(),
             players.clone(),
-            Color::White,
+            Color::Black,
             Some(opening_line),
         ) {
             Ok(g) => g,

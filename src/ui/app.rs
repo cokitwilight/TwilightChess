@@ -895,7 +895,7 @@ impl ChessApp {
             .moves
             .iter()
             .copied()
-            .find(|mv| mv.promotion == Some(promotion))
+            .find(|mv| mv.promotion() == Some(promotion))
         else {
             self.clear_selection();
             return;
@@ -1032,7 +1032,7 @@ impl ChessApp {
             let promotion_moves: Vec<Move> = target_moves
                 .iter()
                 .copied()
-                .filter(|mv| mv.promotion.is_some())
+                .filter(|mv| mv.promotion().is_some())
                 .collect();
 
             if !promotion_moves.is_empty() {
@@ -1084,7 +1084,7 @@ impl ChessApp {
         self.selected_moves
             .iter()
             .copied()
-            .filter(|mv| mv.to == sq)
+            .filter(|mv| mv.to() == sq)
             .collect()
     }
 

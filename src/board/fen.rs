@@ -321,7 +321,7 @@ mod tests {
             let mut saw_expected_move = false;
 
             for mv in moves.iter().copied() {
-                if mv.kind != expected_kind {
+                if mv.kind() != expected_kind {
                     continue;
                 }
 

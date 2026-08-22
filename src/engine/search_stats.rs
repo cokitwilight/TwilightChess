@@ -38,6 +38,8 @@ pub struct SearchStats {
     pub continuation_malus_updates: u64,
 
     pub lmr_attempts: u64,
+    pub lmr_history_improved: u64,
+    pub lmr_history_reduced: u64,
     pub lmr_researched: u64,
 
     pub rfp_attempts: u64,
@@ -369,6 +371,16 @@ impl SearchStats {
             "Re-searches:",
             Self::fmt(self.lmr_researched)
         );
+        println!(
+            "    {:<20} {:>14}",
+            "History Impovements:",
+            Self::fmt(self.lmr_history_improved)
+        );
+        println!(
+            "    {:<20} {:>14}",
+            "History Reductions:",
+            Self::fmt(self.lmr_history_reduced)
+        );
 
         if self.lmr_attempts > 0 {
             println!(
@@ -662,6 +674,13 @@ impl Sub for SearchStats {
             lmr_attempts: self.lmr_attempts.saturating_sub(rhs.lmr_attempts),
             lmr_researched: self.lmr_researched.saturating_sub(rhs.lmr_researched),
 
+            lmr_history_improved: self
+                .lmr_history_improved
+                .saturating_sub(rhs.lmr_history_improved),
+            lmr_history_reduced: self
+                .lmr_history_reduced
+                .saturating_sub(rhs.lmr_history_reduced),
+
             rfp_attempts: self.rfp_attempts.saturating_sub(rhs.rfp_attempts),
             rfp_cutoffs: self.rfp_cutoffs.saturating_sub(rhs.rfp_cutoffs),
 
@@ -734,6 +753,9 @@ impl AddAssign for SearchStats {
 
         self.lmr_attempts += rhs.lmr_attempts;
         self.lmr_researched += rhs.lmr_researched;
+
+        self.lmr_history_improved += rhs.lmr_history_improved;
+        self.lmr_history_reduced += rhs.lmr_history_reduced;
 
         self.rfp_attempts += rhs.rfp_attempts;
         self.rfp_cutoffs += rhs.rfp_cutoffs;

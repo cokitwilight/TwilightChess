@@ -38,20 +38,20 @@ impl Board {
         self.mg_pst = undo.old_mg_pst_bonus;
         self.eg_pst = undo.old_eg_pst_bonus;
 
-        let placed_piece = mv.promotion.unwrap_or(undo.moved_piece);
+        let placed_piece = mv.promotion().unwrap_or(undo.moved_piece);
 
         // Remove moved/promoted piece from destination.
-        self.remove_piece(us, placed_piece, mv.to);
+        self.remove_piece(us, placed_piece, mv.to());
 
         // Undo castling rook movement.
         if undo.moved_piece == PieceType::King
-            && (mv.kind == MoveType::Castle || file_distance(mv.from, mv.to) == 2)
+            && (mv.kind() == MoveType::Castle || file_distance(mv.from(), mv.to()) == 2)
         {
-            self.undo_castling_rook(us, mv.from, mv.to);
+            self.undo_castling_rook(us, mv.from(), mv.to());
         }
 
         // Put original moving piece back.
-        self.add_piece(us, undo.moved_piece, mv.from);
+        self.add_piece(us, undo.moved_piece, mv.from());
 
         // Restore captured piece.
         if let Some((cap_color, cap_piece, cap_sq)) = undo.captured_piece {

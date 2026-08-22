@@ -50,11 +50,11 @@ impl Engine {
             return 1_500_000;
         }
 
-        let is_capture = matches!(mv.kind, MoveType::Capture | MoveType::EnPassant);
+        let is_capture = matches!(mv.kind(), MoveType::Capture | MoveType::EnPassant);
 
         if is_capture {
             let see_score = see(board, mv);
-            let promo_bonus = mv.promotion.map_or(0, promotion_score);
+            let promo_bonus = mv.promotion().map_or(0, promotion_score);
 
             return if see_score >= 0 {
                 // Winning/equal captures: one tier, ranked by SEE (+ promo bonus for capture-promotions)
@@ -68,7 +68,7 @@ impl Engine {
         }
 
         // Quiet promotions (no capture involved)
-        if let Some(promo) = mv.promotion {
+        if let Some(promo) = mv.promotion() {
             // Queen promotions are strong enough to rank with good captures;
             // under-promotions are almost always worse than a quiet move
             return match promo {
@@ -87,29 +87,7 @@ impl Engine {
 
         let curr_key = HistoryKey::new(side_to_move, piece, mv.to());
 
-        let mut score = self.history.main.get(curr_key);
-
-        let mut plies_ago = 1;
-
-        if let Some(prev_key) = context.stack[ply].history_index {
-            score += self.history.continuation.get(plies_ago, prev_key, curr_key);
-        }
-
-        if ply > 0 {
-            plies_ago += 1;
-            if let Some(prev_key) = context.stack[ply - 1].history_index {
-                score += self.history.continuation.get(plies_ago, prev_key, curr_key) / 2;
-            }
-
-            if ply > 2 {
-                plies_ago += 2;
-                if let Some(prev_key) = context.stack[ply - 3].history_index {
-                    score += self.history.continuation.get(plies_ago, prev_key, curr_key) / 2;
-                }
-            }
-        }
-
-        score
+        self.history.get_quiet_score(&context.stack, ply, curr_key)
     }
     pub fn q_move_order_score(&self, board: &Board, mv: Move, tt_best_move: Option<Move>) -> i32 {
         if Some(mv) == tt_best_move {
@@ -119,7 +97,7 @@ impl Engine {
         // qsearch move lists are captures/promotions only by construction —
         // no killers, no history, no quiet-move tier needed
         let see_score = see(board, mv);
-        let promo_bonus = mv.promotion.map_or(0, promotion_score);
+        let promo_bonus = mv.promotion().map_or(0, promotion_score);
 
         see_score + promo_bonus
     }
@@ -132,10 +110,10 @@ fn mvv_lva_score(board: &Board, mv: Move) -> i32 {
         .expect("move_order_score called with no attacker on mv.from()")
         .kind;
 
-    let victim = match mv.kind {
+    let victim = match mv.kind() {
         MoveType::Capture => {
             board
-                .piece_at(mv.to)
+                .piece_at(mv.to())
                 .expect("capture move has no victim on mv.to")
                 .kind
         }
@@ -155,7 +133,7 @@ fn mvv_lva_score(board: &Board, mv: Move) -> i32 {
     // Multiply victim value so victim importance dominates attacker penalty.
     let mut score = victim_value * 10 - attacker_value;
 
-    if let Some(promo) = mv.promotion {
+    if let Some(promo) = mv.promotion() {
         score += promotion_score(promo);
     }
 

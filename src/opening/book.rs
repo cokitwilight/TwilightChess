@@ -739,19 +739,19 @@ fn square_from_uci(file_char: u8, rank_char: u8) -> Option<Square> {
 }
 
 fn move_matches_uci(mv: Move, parsed: ParsedUciMove) -> bool {
-    mv.from == parsed.from && mv.to == parsed.to && mv.promotion == parsed.promotion
+    mv.from() == parsed.from && mv.to() == parsed.to && mv.promotion() == parsed.promotion
 }
 
 #[allow(dead_code)]
 fn move_to_uci(mv: Move) -> String {
     let mut out = String::new();
 
-    out.push(file_char(file_of(mv.from)));
-    out.push(rank_char(rank_of(mv.from)));
-    out.push(file_char(file_of(mv.to)));
-    out.push(rank_char(rank_of(mv.to)));
+    out.push(file_char(file_of(mv.from())));
+    out.push(rank_char(rank_of(mv.from())));
+    out.push(file_char(file_of(mv.to())));
+    out.push(rank_char(rank_of(mv.to())));
 
-    if let Some(promo) = mv.promotion {
+    if let Some(promo) = mv.promotion() {
         out.push(match promo {
             PieceType::Queen => 'q',
             PieceType::Rook => 'r',

@@ -30,12 +30,7 @@ pub fn pseudo_pawn_moves(board: &Board, color: Color, moves: &mut MoveList) {
             while let Some(to) = pop_lsb(&mut double_pushes) {
                 let from = to - 16;
 
-                moves.push(Move {
-                    from,
-                    to,
-                    kind: MoveType::Normal,
-                    promotion: None,
-                });
+                moves.push(Move::new(from, to, MoveType::Normal, None));
             }
 
             while let Some(to) = pop_lsb(&mut captures_left) {
@@ -58,23 +53,13 @@ pub fn pseudo_pawn_moves(board: &Board, color: Color, moves: &mut MoveList) {
 
                 if en_left != 0 {
                     // there is a pawn to the left
-                    let mv = Move {
-                        from: en_pass_to - 7,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to - 7, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
 
                 if en_right != 0 {
                     // there is a pawn to the right
-                    let mv = Move {
-                        from: en_pass_to - 9,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to - 9, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
             }
@@ -98,12 +83,7 @@ pub fn pseudo_pawn_moves(board: &Board, color: Color, moves: &mut MoveList) {
             while let Some(to) = pop_lsb(&mut double_pushes) {
                 let from = to + 16;
 
-                moves.push(Move {
-                    from,
-                    to,
-                    kind: MoveType::Normal,
-                    promotion: None,
-                });
+                moves.push(Move::new(from, to, MoveType::Normal, None));
             }
 
             while let Some(to) = pop_lsb(&mut captures_left) {
@@ -126,23 +106,13 @@ pub fn pseudo_pawn_moves(board: &Board, color: Color, moves: &mut MoveList) {
 
                 if en_left != 0 {
                     // there is a pawn to the left
-                    let mv = Move {
-                        from: en_pass_to + 9,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to + 9, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
 
                 if en_right != 0 {
                     // there is a pawn to the right
-                    let mv = Move {
-                        from: en_pass_to + 7,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to + 7, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
             }
@@ -178,12 +148,7 @@ pub fn legal_pawn_moves(board: &Board, color: Color, moves: &mut MoveList, info:
                 let from = to - 16;
 
                 if is_legal_pawn_move(to, from, info) {
-                    moves.push(Move {
-                        from,
-                        to,
-                        kind: MoveType::Normal,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(from, to, MoveType::Normal, None));
                 }
             }
 
@@ -211,23 +176,13 @@ pub fn legal_pawn_moves(board: &Board, color: Color, moves: &mut MoveList, info:
 
                 if en_left != 0 {
                     // there is a pawn to the left
-                    let mv = Move {
-                        from: en_pass_to - 7,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to - 7, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
 
                 if en_right != 0 {
                     // there is a pawn to the right
-                    let mv = Move {
-                        from: en_pass_to - 9,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to - 9, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
             }
@@ -253,12 +208,7 @@ pub fn legal_pawn_moves(board: &Board, color: Color, moves: &mut MoveList, info:
             while let Some(to) = pop_lsb(&mut double_pushes) {
                 let from = to + 16;
                 if is_legal_pawn_move(to, from, info) {
-                    moves.push(Move {
-                        from,
-                        to,
-                        kind: MoveType::Normal,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(from, to, MoveType::Normal, None));
                 }
             }
 
@@ -286,23 +236,13 @@ pub fn legal_pawn_moves(board: &Board, color: Color, moves: &mut MoveList, info:
 
                 if en_left != 0 {
                     // there is a pawn to the left
-                    let mv = Move {
-                        from: en_pass_to + 9,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to + 9, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
 
                 if en_right != 0 {
                     // there is a pawn to the right
-                    let mv = Move {
-                        from: en_pass_to + 7,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to + 7, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
             }
@@ -338,12 +278,7 @@ pub fn pseudo_pawn_moves_at(board: &Board, color: Color, sq: Square, moves: &mut
             }
 
             while let Some(to) = pop_lsb(&mut double_push) {
-                moves.push(Move {
-                    from: sq,
-                    to,
-                    kind: MoveType::Normal,
-                    promotion: None,
-                });
+                moves.push(Move::new(sq, to, MoveType::Normal, None));
             }
 
             while let Some(to) = pop_lsb(&mut captures_left) {
@@ -360,12 +295,7 @@ pub fn pseudo_pawn_moves_at(board: &Board, color: Color, sq: Square, moves: &mut
                 let en_right = ((pawn & !FILE_H) << 9) & en_passant_to_bb;
 
                 if en_left != 0 || en_right != 0 {
-                    moves.push(Move {
-                        from: sq,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(sq, en_pass_to, MoveType::EnPassant, None));
                 }
             }
         }
@@ -382,12 +312,7 @@ pub fn pseudo_pawn_moves_at(board: &Board, color: Color, sq: Square, moves: &mut
             }
 
             while let Some(to) = pop_lsb(&mut double_push) {
-                moves.push(Move {
-                    from: sq,
-                    to,
-                    kind: MoveType::Normal,
-                    promotion: None,
-                });
+                moves.push(Move::new(sq, to, MoveType::Normal, None));
             }
 
             while let Some(to) = pop_lsb(&mut captures_left) {
@@ -404,12 +329,7 @@ pub fn pseudo_pawn_moves_at(board: &Board, color: Color, sq: Square, moves: &mut
                 let en_right = ((pawn & !FILE_H) >> 7) & en_passant_to_bb;
 
                 if en_left != 0 || en_right != 0 {
-                    moves.push(Move {
-                        from: sq,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(sq, en_pass_to, MoveType::EnPassant, None));
                 }
             }
         }
@@ -442,12 +362,7 @@ pub fn pseudo_pawn_capture_moves(board: &Board, color: Color, moves: &mut MoveLi
                         PieceType::Bishop,
                         PieceType::Knight,
                     ] {
-                        moves.push(Move {
-                            from,
-                            to,
-                            kind: MoveType::Normal,
-                            promotion: Some(promotion),
-                        });
+                        moves.push(Move::new(from, to, MoveType::Normal, Some(promotion)));
                     }
                 }
             }
@@ -472,23 +387,13 @@ pub fn pseudo_pawn_capture_moves(board: &Board, color: Color, moves: &mut MoveLi
 
                 if en_left != 0 {
                     // there is a pawn to the left
-                    let mv = Move {
-                        from: en_pass_to - 7,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to - 7, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
 
                 if en_right != 0 {
                     // there is a pawn to the right
-                    let mv = Move {
-                        from: en_pass_to - 9,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to - 9, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
             }
@@ -510,12 +415,7 @@ pub fn pseudo_pawn_capture_moves(board: &Board, color: Color, moves: &mut MoveLi
                         PieceType::Bishop,
                         PieceType::Knight,
                     ] {
-                        moves.push(Move {
-                            from,
-                            to,
-                            kind: MoveType::Normal,
-                            promotion: Some(promotion),
-                        });
+                        moves.push(Move::new(from, to, MoveType::Normal, Some(promotion)));
                     }
                 }
             }
@@ -540,23 +440,13 @@ pub fn pseudo_pawn_capture_moves(board: &Board, color: Color, moves: &mut MoveLi
 
                 if en_left != 0 {
                     // there is a pawn to the left
-                    let mv = Move {
-                        from: en_pass_to + 9,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to + 9, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
 
                 if en_right != 0 {
                     // there is a pawn to the right
-                    let mv = Move {
-                        from: en_pass_to + 7,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to + 7, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
             }
@@ -596,12 +486,7 @@ pub fn legal_pawn_capture_moves(
                         PieceType::Bishop,
                         PieceType::Knight,
                     ] {
-                        moves.push(Move {
-                            from,
-                            to,
-                            kind: MoveType::Normal,
-                            promotion: Some(promotion),
-                        });
+                        moves.push(Move::new(from, to, MoveType::Normal, Some(promotion)));
                     }
                 }
             }
@@ -628,23 +513,13 @@ pub fn legal_pawn_capture_moves(
 
                 if en_left != 0 {
                     // there is a pawn to the left
-                    let mv = Move {
-                        from: en_pass_to - 7,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to - 7, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
 
                 if en_right != 0 {
                     // there is a pawn to the right
-                    let mv = Move {
-                        from: en_pass_to - 9,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to - 9, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
             }
@@ -666,12 +541,7 @@ pub fn legal_pawn_capture_moves(
                         PieceType::Bishop,
                         PieceType::Knight,
                     ] {
-                        moves.push(Move {
-                            from,
-                            to,
-                            kind: MoveType::Normal,
-                            promotion: Some(promotion),
-                        });
+                        moves.push(Move::new(from, to, MoveType::Normal, Some(promotion)));
                     }
                 }
             }
@@ -698,23 +568,13 @@ pub fn legal_pawn_capture_moves(
 
                 if en_left != 0 {
                     // there is a pawn to the left
-                    let mv = Move {
-                        from: en_pass_to + 9,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to + 9, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
 
                 if en_right != 0 {
                     // there is a pawn to the right
-                    let mv = Move {
-                        from: en_pass_to + 7,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    };
+                    let mv = Move::new(en_pass_to + 7, en_pass_to, MoveType::EnPassant, None);
                     moves.push(mv);
                 }
             }
@@ -754,12 +614,7 @@ pub fn pseudo_pawn_capture_moves_at(board: &Board, color: Color, sq: Square, mov
                 let en_right = ((pawn & !FILE_H) << 9) & en_passant_to_bb;
 
                 if en_left != 0 || en_right != 0 {
-                    moves.push(Move {
-                        from: sq,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(sq, en_pass_to, MoveType::EnPassant, None));
                 }
             }
         }
@@ -782,12 +637,7 @@ pub fn pseudo_pawn_capture_moves_at(board: &Board, color: Color, sq: Square, mov
                 let en_right = ((pawn & !FILE_H) >> 7) & en_passant_to_bb;
 
                 if en_left != 0 || en_right != 0 {
-                    moves.push(Move {
-                        from: sq,
-                        to: en_pass_to,
-                        kind: MoveType::EnPassant,
-                        promotion: None,
-                    });
+                    moves.push(Move::new(sq, en_pass_to, MoveType::EnPassant, None));
                 }
             }
         }
@@ -808,20 +658,10 @@ fn add_pawn_move(moves: &mut MoveList, from: Square, to: Square, kind: MoveType,
             PieceType::Bishop,
             PieceType::Knight,
         ] {
-            moves.push(Move {
-                from,
-                to,
-                kind,
-                promotion: Some(promotion),
-            });
+            moves.push(Move::new(from, to, kind, Some(promotion)));
         }
     } else {
-        moves.push(Move {
-            from,
-            to,
-            kind,
-            promotion: None,
-        });
+        moves.push(Move::new(from, to, kind, None));
     }
 }
 

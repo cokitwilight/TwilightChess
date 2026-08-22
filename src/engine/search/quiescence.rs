@@ -189,15 +189,15 @@ impl Engine {
 
         for mv in raw_moves.iter() {
             let gives_check = board.move_gives_check(mv);
-            let captured_value = match mv.kind {
+            let captured_value = match mv.kind() {
                 MoveType::EnPassant => PieceType::Pawn.value(),
 
-                _ => board.piece_at(mv.to).map(|p| p.kind.value()).unwrap_or(0),
+                _ => board.piece_at(mv.to()).map(|p| p.kind.value()).unwrap_or(0),
             };
 
             let can_prune = !in_check
                 && board.phase > 8
-                && mv.promotion.is_none()
+                && mv.promotion().is_none()
                 && alpha.abs() < MATE_THRESHOLD
                 && !gives_check;
 

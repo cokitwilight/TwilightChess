@@ -16,20 +16,10 @@ pub fn pseudo_knight_moves(board: &Board, color: Color, moves: &mut MoveList) {
         let mut quiets = targets & empty;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
         while let Some(to) = pop_lsb(&mut quiets) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Normal,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Normal, None));
         }
     }
 }
@@ -48,20 +38,10 @@ pub fn legal_knight_moves(board: &Board, color: Color, moves: &mut MoveList, inf
         let mut quiets = targets & empty;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
         while let Some(to) = pop_lsb(&mut quiets) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Normal,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Normal, None));
         }
     }
 }
@@ -86,20 +66,10 @@ pub fn pseudo_knight_moves_at(board: &Board, color: Color, sq: Square, moves: &m
     let mut quiets = targets & !enemies;
 
     while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Capture,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
     while let Some(to) = pop_lsb(&mut quiets) {
-        moves.push(Move {
-            from: sq,
-            to,
-            kind: MoveType::Normal,
-            promotion: None,
-        });
+        moves.push(Move::new(sq, to, MoveType::Normal, None));
     }
 }
 
@@ -114,12 +84,7 @@ pub fn pseudo_knight_capture_moves(board: &Board, color: Color, moves: &mut Move
         let mut captures = targets & enemies;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
     }
 }
@@ -141,12 +106,7 @@ pub fn legal_knight_capture_moves(
         let mut captures = targets & enemies;
 
         while let Some(to) = pop_lsb(&mut captures) {
-            moves.push(Move {
-                from,
-                to,
-                kind: MoveType::Capture,
-                promotion: None,
-            });
+            moves.push(Move::new(from, to, MoveType::Capture, None));
         }
     }
 }

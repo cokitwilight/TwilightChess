@@ -720,12 +720,7 @@ mod tests {
     fn make_and_undo_double_pawn_push_sets_en_passant() {
         let board = board_from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
-        let mv = Move {
-            from: e2(),
-            to: e4(),
-            kind: MoveType::Normal,
-            promotion: None,
-        };
+        let mv = Move::new(e2(), e4(), MoveType::Normal, None);
 
         make_check_undo(board, mv, |board| {
             assert_piece(board, e2(), None);
@@ -749,12 +744,7 @@ mod tests {
     fn make_and_undo_quiet_piece_move_clears_en_passant_and_increments_halfmove() {
         let board = board_from_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1");
 
-        let mv = Move {
-            from: g8(),
-            to: f6(),
-            kind: MoveType::Normal,
-            promotion: None,
-        };
+        let mv = Move::new(g8(), f6(), MoveType::Normal, None);
 
         make_check_undo(board, mv, |board| {
             assert_piece(board, g8(), None);
@@ -780,12 +770,7 @@ mod tests {
     fn make_and_undo_capture_removes_captured_piece_and_resets_halfmove() {
         let board = board_from_fen("8/8/8/3p4/4P3/8/8/4K2k w - - 7 15");
 
-        let mv = Move {
-            from: e4(),
-            to: d5(),
-            kind: MoveType::Capture,
-            promotion: None,
-        };
+        let mv = Move::new(e4(), d5(), MoveType::Capture, None);
 
         make_check_undo(board, mv, |board| {
             assert_piece(board, e4(), None);
@@ -809,12 +794,7 @@ mod tests {
     fn make_and_undo_en_passant_capture() {
         let board = board_from_fen("8/8/8/3pP3/8/8/8/4K2k w - d6 0 1");
 
-        let mv = Move {
-            from: e5(),
-            to: d6(),
-            kind: MoveType::EnPassant,
-            promotion: None,
-        };
+        let mv = Move::new(e5(), d6(), MoveType::EnPassant, None);
 
         make_check_undo(board, mv, |board| {
             assert_piece(board, e5(), None);
@@ -842,12 +822,7 @@ mod tests {
     fn make_and_undo_white_kingside_castle_moves_rook_too() {
         let board = board_from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 3 1");
 
-        let mv = Move {
-            from: e1(),
-            to: g1(),
-            kind: MoveType::Castle,
-            promotion: None,
-        };
+        let mv = Move::new(e1(), g1(), MoveType::Castle, None);
 
         make_check_undo(board, mv, |board| {
             assert_piece(board, e1(), None);
@@ -888,12 +863,7 @@ mod tests {
     fn make_and_undo_rook_move_removes_only_that_rooks_castling_right() {
         let board = board_from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
 
-        let mv = Move {
-            from: h1(),
-            to: h2(),
-            kind: MoveType::Normal,
-            promotion: None,
-        };
+        let mv = Move::new(h1(), h2(), MoveType::Normal, None);
 
         make_check_undo(board, mv, |board| {
             assert_piece(board, h1(), None);
@@ -918,12 +888,7 @@ mod tests {
     fn make_and_undo_rook_capture_removes_enemy_castling_right() {
         let board = board_from_fen("r3k2r/8/8/8/8/8/8/4K2R w Kkq - 0 1");
 
-        let mv = Move {
-            from: h1(),
-            to: h8(),
-            kind: MoveType::Capture,
-            promotion: None,
-        };
+        let mv = Move::new(h1(), h8(), MoveType::Capture, None);
 
         make_check_undo(board, mv, |board| {
             assert_piece(board, h1(), None);
@@ -951,12 +916,7 @@ mod tests {
     fn make_and_undo_quiet_promotion() {
         let board = board_from_fen("4k3/P7/8/8/8/8/8/4K3 w - - 0 1");
 
-        let mv = Move {
-            from: a7(),
-            to: a8(),
-            kind: MoveType::Normal,
-            promotion: Some(PieceType::Queen),
-        };
+        let mv = Move::new(a7(), a8(), MoveType::Normal, Some(PieceType::Queen));
 
         make_check_undo(board, mv, |board| {
             assert_piece(board, a7(), None);
@@ -983,12 +943,7 @@ mod tests {
     fn make_and_undo_capture_promotion() {
         let board = board_from_fen("1n2k3/P7/8/8/8/8/8/4K3 w - - 0 1");
 
-        let mv = Move {
-            from: a7(),
-            to: b8(),
-            kind: MoveType::Capture,
-            promotion: Some(PieceType::Queen),
-        };
+        let mv = Move::new(a7(), b8(), MoveType::Capture, Some(PieceType::Queen));
 
         make_check_undo(board, mv, |board| {
             assert_piece(board, a7(), None);
@@ -1017,30 +972,30 @@ mod tests {
         board.assert_hash();
 
         let moves = [
-            Move {
-                from: sq(4, 1), // e2
-                to: sq(4, 3),   // e4
-                kind: MoveType::Normal,
-                promotion: None,
-            },
-            Move {
-                from: sq(4, 6), // e7
-                to: sq(4, 4),   // e5
-                kind: MoveType::Normal,
-                promotion: None,
-            },
-            Move {
-                from: sq(6, 0), // g1
-                to: sq(5, 2),   // f3
-                kind: MoveType::Normal,
-                promotion: None,
-            },
-            Move {
-                from: sq(1, 7), // b8
-                to: sq(2, 5),   // c6
-                kind: MoveType::Normal,
-                promotion: None,
-            },
+            Move::new(
+                sq(4, 1), // e2
+                sq(4, 3), // e4
+                MoveType::Normal,
+                None,
+            ),
+            Move::new(
+                sq(4, 6), // e7
+                sq(4, 4), // e5
+                MoveType::Normal,
+                None,
+            ),
+            Move::new(
+                sq(6, 0), // g1
+                sq(5, 2), // f3
+                MoveType::Normal,
+                None,
+            ),
+            Move::new(
+                sq(1, 7), // b8
+                sq(2, 5), // c6
+                MoveType::Normal,
+                None,
+            ),
         ];
 
         let mut undos = Vec::new();

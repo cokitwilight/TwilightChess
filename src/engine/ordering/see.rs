@@ -9,22 +9,22 @@ use crate::types::{Color, PieceType};
 
 pub fn see(board: &Board, mv: Move) -> i32 {
     let moving_piece = board
-        .piece_at(mv.from)
+        .piece_at(mv.from())
         .expect("SEE called with no piece at mv.from");
 
-    let target = mv.to; // this also includes en passant
+    let target = mv.to(); // this also includes en passant
 
     debug_assert_eq!(board.side_to_move(), moving_piece.color);
 
-    let victim_square = match mv.kind {
-        MoveType::EnPassant => square(file_of(mv.to), rank_of(mv.from)),
+    let victim_square = match mv.kind() {
+        MoveType::EnPassant => square(file_of(mv.to()), rank_of(mv.from())),
         _ => target,
     };
 
     let victim_value = match board.piece_at(victim_square) {
         Some(piece) => piece.kind.value(),
         None => {
-            if mv.promotion.is_none() {
+            if mv.promotion().is_none() {
                 return 0;
             }
             0
@@ -35,13 +35,13 @@ pub fn see(board: &Board, mv: Move) -> i32 {
 
     let mut initial_gain = victim_value;
 
-    if let Some(promotion) = mv.promotion {
+    if let Some(promotion) = mv.promotion() {
         initial_gain += promotion.value() - PieceType::Pawn.value();
     }
 
     gains.push(initial_gain);
 
-    let from_mask = bit(mv.from);
+    let from_mask = bit(mv.from());
 
     let mut occupied = board.all_occupancy();
     let mut all_pieces = board.all_pieces();
@@ -52,7 +52,7 @@ pub fn see(board: &Board, mv: Move) -> i32 {
         all_pieces[victim_piece.color.idx()][victim_piece.kind.idx()] &= !victim_mask;
     }
 
-    if mv.kind == MoveType::EnPassant {
+    if mv.kind() == MoveType::EnPassant {
         occupied &= !victim_mask; // remove captured pawn
     }
 
@@ -65,7 +65,7 @@ pub fn see(board: &Board, mv: Move) -> i32 {
 
     let mut side_to_move = board.side_to_move().opposite();
 
-    let mut captured_value = mv.promotion.unwrap_or(moving_piece.kind).value();
+    let mut captured_value = mv.promotion().unwrap_or(moving_piece.kind).value();
 
     let mut all_diagonals = all_pieces[Color::White.idx()][PieceType::Bishop.idx()]
         | all_pieces[Color::Black.idx()][PieceType::Bishop.idx()]
@@ -506,12 +506,12 @@ mod see_tests {
             */
             let fen = "4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1";
 
-            let capture_move = Move {
-                from: 28, // e4
-                to: 35,   // d5
-                kind: MoveType::Capture,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                28, // e4
+                35, // d5
+                MoveType::Capture,
+                None,
+            );
 
             let expected_see = PieceType::Pawn.value();
 
@@ -536,12 +536,12 @@ mod see_tests {
             */
             let fen = "4k3/8/2p5/3p4/4P3/8/8/4K3 w - - 0 1";
 
-            let capture_move = Move {
-                from: 28, // e4
-                to: 35,   // d5
-                kind: MoveType::Capture,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                28, // e4
+                35, // d5
+                MoveType::Capture,
+                None,
+            );
 
             let expected_see = 0;
 
@@ -566,12 +566,12 @@ mod see_tests {
             */
             let fen = "4k3/8/2p5/3p4/4Q3/8/8/4K3 w - - 0 1";
 
-            let capture_move = Move {
-                from: 28, // e4
-                to: 35,   // d5
-                kind: MoveType::Capture,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                28, // e4
+                35, // d5
+                MoveType::Capture,
+                None,
+            );
 
             let expected_see = PieceType::Pawn.value() - PieceType::Queen.value();
 
@@ -606,12 +606,12 @@ mod see_tests {
             */
             let fen = "5k2/8/5n2/3p4/4P3/8/8/4KR2 w - - 0 1";
 
-            let capture_move = Move {
-                from: 28, // e4
-                to: 35,   // d5
-                kind: MoveType::Capture,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                28, // e4
+                35, // d5
+                MoveType::Capture,
+                None,
+            );
 
             let expected_see = PieceType::Pawn.value();
 
@@ -647,12 +647,12 @@ mod see_tests {
             */
             let fen = "1k6/8/1n3n2/3p4/4P3/8/8/1R2K3 w - - 0 1";
 
-            let capture_move = Move {
-                from: 28, // e4
-                to: 35,   // d5
-                kind: MoveType::Capture,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                28, // e4
+                35, // d5
+                MoveType::Capture,
+                None,
+            );
 
             let expected_see = 0;
 
@@ -680,12 +680,12 @@ mod see_tests {
             */
             let fen = "4k3/8/8/8/8/5n2/4Q3/4K3 w - - 0 1";
 
-            let capture_move = Move {
-                from: 12, // e2
-                to: 21,   // f3
-                kind: MoveType::Capture,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                12, // e2
+                21, // f3
+                MoveType::Capture,
+                None,
+            );
 
             let expected_see = PieceType::Knight.value();
 
@@ -727,12 +727,12 @@ mod see_tests {
             */
             let fen = "7k/8/5n2/3p4/4Q3/8/6B1/7K w - - 0 1";
 
-            let capture_move = Move {
-                from: 28, // e4
-                to: 35,   // d5
-                kind: MoveType::Capture,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                28, // e4
+                35, // d5
+                MoveType::Capture,
+                None,
+            );
 
             let expected_see =
                 PieceType::Pawn.value() - PieceType::Queen.value() + PieceType::Knight.value();
@@ -764,12 +764,12 @@ mod see_tests {
             */
             let fen = "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1";
 
-            let capture_move = Move {
-                from: 36, // e5
-                to: 43,   // d6
-                kind: MoveType::EnPassant,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                36, // e5
+                43, // d6
+                MoveType::EnPassant,
+                None,
+            );
 
             let expected_see = PieceType::Pawn.value();
 
@@ -796,12 +796,12 @@ mod see_tests {
             */
             let fen = "4k3/2p5/8/3pP3/8/8/8/4K3 w - d6 0 1";
 
-            let capture_move = Move {
-                from: 36, // e5
-                to: 43,   // d6
-                kind: MoveType::EnPassant,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                36, // e5
+                43, // d6
+                MoveType::EnPassant,
+                None,
+            );
 
             let expected_see = 0;
 
@@ -841,12 +841,12 @@ mod see_tests {
             */
             let fen = "k7/8/8/4KPpr/8/8/8/8 w - g6 0 1";
 
-            let capture_move = Move {
-                from: 37, // f5
-                to: 46,   // g6
-                kind: MoveType::EnPassant,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                37, // f5
+                46, // g6
+                MoveType::EnPassant,
+                None,
+            );
 
             assert_move_is_illegal(fen, capture_move);
         }
@@ -878,12 +878,12 @@ mod see_tests {
             */
             let fen = "4k3/3r4/8/8/6B1/8/8/K2R4 w - - 0 1";
 
-            let capture_move = Move {
-                from: 3, // d1
-                to: 51,  // d7
-                kind: MoveType::Capture,
-                promotion: None,
-            };
+            let capture_move = Move::new(
+                3,  // d1
+                51, // d7
+                MoveType::Capture,
+                None,
+            );
 
             let expected_see = PieceType::Rook.value();
 
@@ -919,12 +919,12 @@ mod see_tests {
             */
             let fen = "k6r/6P1/8/8/8/8/8/K7 w - - 0 1";
 
-            let capture_move = Move {
-                from: 54, // g7
-                to: 63,   // h8
-                kind: MoveType::Capture,
-                promotion: Some(PieceType::Queen),
-            };
+            let capture_move = Move::new(
+                54, // g7
+                63, // h8
+                MoveType::Capture,
+                Some(PieceType::Queen),
+            );
 
             let expected_see =
                 PieceType::Rook.value() + PieceType::Queen.value() - PieceType::Pawn.value();

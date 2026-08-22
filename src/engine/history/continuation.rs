@@ -1,6 +1,8 @@
-use crate::engine::history::{HistoryKey, history_bonus, history_malus, update};
+use crate::engine::history::{
+    HistoryKey, history::HISTORY_KEY_COUNT, history_bonus, history_malus, update,
+};
 
-const CONTINUATION_SIZE: usize = 589824; // for continuation it is color(2) * prev_piece(6) * prev_to(64) * color(2) * current_piece(6) * current_to(64) = 589824
+const CONTINUATION_SIZE: usize = HISTORY_KEY_COUNT * HISTORY_KEY_COUNT; // for continuation it is color(2) * prev_piece(6) * prev_to(64) * color(2) * current_piece(6) * current_to(64) = 589824
 // Indexed as [color_prev][prev_piece][prev_to][color_cur ][curr_piece][curr_to]
 
 #[derive(Clone, Debug)]
@@ -72,5 +74,5 @@ impl ContinuationHistory {
 
 #[inline]
 fn index(prev_key: HistoryKey, curr_key: HistoryKey) -> usize {
-    prev_key.idx() * 768 + curr_key.idx()
+    prev_key.idx() * HISTORY_KEY_COUNT + curr_key.idx()
 }
