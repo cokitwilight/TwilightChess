@@ -68,25 +68,25 @@ impl HistoryTables {
         depth: u16,
         curr_key: HistoryKey,
     ) {
-        context.stats.history_bonus_updates += 1;
+        context.stats.history_stats.bonus_updates += 1;
         self.main.add_bonus(curr_key, depth);
 
         if let Some(prev_key) = context.stack[ply].history_index {
-            context.stats.continuation_bonus_updates += 1;
+            context.stats.history_stats.continuation_bonus_updates += 1;
 
             self.continuation.add_bonus(1, prev_key, curr_key, depth);
         }
 
         if ply > 0 {
             if let Some(prev_key) = context.stack[ply - 1].history_index {
-                context.stats.continuation_bonus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
+                context.stats.history_stats.continuation_bonus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
 
                 self.continuation.add_bonus(2, prev_key, curr_key, depth);
             }
 
             if ply > 2 {
                 if let Some(prev_key) = context.stack[ply - 3].history_index {
-                    context.stats.continuation_bonus_updates += 1;
+                    context.stats.history_stats.continuation_bonus_updates += 1;
 
                     self.continuation.add_bonus(4, prev_key, curr_key, depth);
                 }
@@ -101,25 +101,25 @@ impl HistoryTables {
         depth: u16,
         curr_key: HistoryKey,
     ) {
-        context.stats.history_malus_updates += 1;
+        context.stats.history_stats.malus_updates += 1;
         self.main.add_malus(curr_key, depth);
 
         if let Some(prev_key) = context.stack[ply].history_index {
-            context.stats.continuation_malus_updates += 1;
+            context.stats.history_stats.continuation_malus_updates += 1;
 
             self.continuation.add_malus(1, prev_key, curr_key, depth);
         }
 
         if ply > 0 {
             if let Some(prev_key) = context.stack[ply - 1].history_index {
-                context.stats.continuation_malus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
+                context.stats.history_stats.continuation_malus_updates += 1; // LATER CHANGE TO PRE PLY CHANGES NOT JUST ONE GROUPED ONE
 
                 self.continuation.add_malus(2, prev_key, curr_key, depth);
             }
 
             if ply > 2 {
                 if let Some(prev_key) = context.stack[ply - 3].history_index {
-                    context.stats.continuation_malus_updates += 1;
+                    context.stats.history_stats.continuation_malus_updates += 1;
 
                     self.continuation.add_malus(4, prev_key, curr_key, depth);
                 }

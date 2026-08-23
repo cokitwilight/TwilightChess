@@ -62,6 +62,10 @@ impl Engine {
             let use_aspiration =
                 depth > 1 && !previous_is_mate_score && self.config.search.aspiration.enabled;
 
+            if use_aspiration {
+                ctx.stats.aspiration_stats.searches += 1;
+            }
+
             let mut window = aspiration_start;
 
             let mut alpha = if use_aspiration {
@@ -76,9 +80,18 @@ impl Engine {
                 full_beta
             };
 
+            let mut aspiration_attempt = 0;
+
             let result = loop {
+                let nodes_before_attempt = ctx.stats.total_nodes();
                 let result =
                     self.search_root(board, ctx, best_result.best_move, depth, alpha, beta);
+                let attempt_nodes = ctx.stats.total_nodes() - nodes_before_attempt;
+
+                if use_aspiration && aspiration_attempt > 0 {
+                    ctx.stats.aspiration_stats.research_nodes += attempt_nodes;
+                }
+                aspiration_attempt += 1;
 
                 if ctx.should_stop() {
                     break 'depth_loop;
@@ -88,6 +101,9 @@ impl Engine {
 
                 // Exact score.
                 if result.eval > alpha && result.eval < beta {
+                    if use_aspiration && aspiration_attempt == 1 {
+                        ctx.stats.aspiration_stats.successful_first_windows += 1;
+                    }
                     break result;
                 }
 
@@ -97,9 +113,16 @@ impl Engine {
                     break result;
                 }
 
+                if result.eval <= alpha {
+                    ctx.stats.aspiration_stats.fail_low += 1;
+                } else if result.eval >= beta {
+                    ctx.stats.aspiration_stats.fail_high += 1;
+                }
+
                 // Mate scores can jump far outside the aspiration window.
                 // Immediately fall back to full window instead of slowly widening.
                 if result_is_mate_score {
+                    ctx.stats.aspiration_stats.full_window_fallbacks += 1;
                     alpha = full_alpha;
                     beta = full_beta;
                     continue;
@@ -107,16 +130,14 @@ impl Engine {
 
                 // Avoid infinite widening if something behaves unexpectedly.
                 if window >= aspiration_max {
+                    ctx.stats.aspiration_stats.full_window_fallbacks += 1;
                     alpha = full_alpha;
                     beta = full_beta;
                     continue;
                 }
-
                 window = window.saturating_mul(window_growth).min(aspiration_max);
 
                 if result.eval <= alpha {
-                    ctx.stats.aspiration_w_fail_low += 1;
-
                     // Widen downward.
                     alpha = result.eval.saturating_sub(window).max(full_alpha);
 
@@ -129,8 +150,6 @@ impl Engine {
                 }
 
                 if result.eval >= beta {
-                    ctx.stats.aspiration_w_fail_high += 1;
-
                     // Widen upward.
                     beta = result.eval.saturating_add(window).min(full_beta);
 
@@ -149,7 +168,7 @@ impl Engine {
 
             let elapsed_secs = elapsed.as_secs_f64();
             let depth_stats = ctx.stats - stats_before;
-            let depth_nodes = depth_stats.nodes + depth_stats.qnodes;
+            let depth_nodes = depth_stats.total_nodes();
 
             let depth_nps = if elapsed_secs > 0.0 {
                 depth_nodes as f64 / elapsed_secs
@@ -204,7 +223,7 @@ impl Engine {
         total_time = full_start.elapsed().as_secs_f64();
 
         let total_nps = if total_time > 0.0 {
-            (ctx.stats.nodes + ctx.stats.qnodes) as f64 / total_time
+            ctx.stats.total_nodes() as f64 / total_time
         } else {
             0.0
         };
@@ -231,11 +250,16 @@ impl Engine {
         mut alpha: i32,
         beta: i32,
     ) -> SearchResult {
-        ctx.stats.nodes += 1;
+        ctx.stats.node_stats.main += 1;
+        ctx.stats.node_stats.pv += 1;
+        ctx.stats.node_stats.root += 1;
 
         let original_alpha = alpha;
         let root_hash = board.hash();
         let side_to_move = board.side_to_move();
+        if board.in_check(side_to_move) {
+            ctx.stats.node_stats.in_check += 1;
+        }
 
         let mut best_eval = NEG_INF;
         let mut best_move = None;
@@ -331,6 +355,7 @@ impl Engine {
             }
         }
         if stopped {
+            ctx.stats.terminal_stats.stopped_returns += 1;
             // return early before affecting logic with incomplete results
             return SearchResult {
                 best_move,
@@ -344,8 +369,10 @@ impl Engine {
 
         if legal_moves == 0 {
             let eval = if board.in_check(side_to_move) {
+                ctx.stats.terminal_stats.checkmates += 1;
                 -CHECKMATE_SCORE
             } else {
+                ctx.stats.terminal_stats.stalemates += 1;
                 0
             };
             return SearchResult {
@@ -365,7 +392,8 @@ impl Engine {
         } else {
             TTFlag::Exact
         };
-        self.tt.insert(
+        ctx.stats.tt_stats.main.stores += 1;
+        let insert_result = self.tt.insert(
             root_hash,
             TTEntry {
                 eval: score_to_tt(best_eval, 1),
@@ -375,6 +403,7 @@ impl Engine {
                 node_type: TTNodeType::Main,
             },
         );
+        ctx.stats.tt_stats.main.record_insert(insert_result);
 
         SearchResult {
             best_move,

@@ -23,32 +23,41 @@ impl Engine {
         ply: usize,
         check_plies: usize,
     ) -> i32 {
-        if context.stopped
-            || (context.stats.nodes + context.stats.qnodes & 2047 == 0 && context.should_stop())
-        {
+        if context.stopped || (context.stats.total_nodes() & 2047 == 0 && context.should_stop()) {
+            context.stats.terminal_stats.stopped_returns += 1;
             return 0;
         }
 
-        context.stats.qnodes += 1;
+        context.stats.node_stats.quiescence += 1;
 
         // NOTE: These will never be true in the first call to quiescence since negamax does this check first before calling if depth == 0 -> quiescence
         // this is why quiescence qtt probes always equals qnodes.
         if Engine::repetition_in_search(context, board.hash(), board.halfmove_clock() as usize) {
-            context.stats.repetition_returns += 1;
+            context.stats.draw_stats.repetition_returns += 1;
             return 0;
         }
         if board.halfmove_clock() >= 100 {
-            context.stats.fifty_returns += 1;
+            context.stats.draw_stats.fifty_move_returns += 1;
             return 0;
         }
 
         if board.phase() < 8 && is_insufficient_material(&board) {
-            context.stats.insufficient_returns += 1;
+            context.stats.draw_stats.insufficient_material_returns += 1;
             return 0;
         }
 
         if ply >= MAX_PLY as usize - 1 {
+            context.stats.quiescence_stats.max_ply_returns += 1;
+            context.stats.terminal_stats.max_ply_returns += 1;
             return evaluation_for_turn(board);
+        }
+
+        let in_check = board.in_check(board.side_to_move());
+        if in_check {
+            context.stats.quiescence_stats.in_check_nodes += 1;
+            context.stats.node_stats.in_check += 1;
+        } else {
+            context.stats.quiescence_stats.normal_nodes += 1;
         }
 
         let original_alpha = alpha;
@@ -58,20 +67,32 @@ impl Engine {
 
         let mut tt_best_move: Option<Move> = None;
 
-        context.stats.qtt.probes += 1;
+        context.stats.tt_stats.quiescence.probes += 1;
 
         if let Some(entry) = self.tt.get(hash, TTNodeType::Quiescence) {
-            context.stats.qtt.hits += 1;
+            context.stats.tt_stats.quiescence.hits += 1;
+
+            match entry.flag {
+                TTFlag::Exact => context.stats.tt_stats.quiescence.exact_hits += 1,
+                TTFlag::LowerBound => context.stats.tt_stats.quiescence.lower_bound_hits += 1,
+                TTFlag::UpperBound => context.stats.tt_stats.quiescence.upper_bound_hits += 1,
+            }
+            if entry.best_move.is_some() {
+                context.stats.tt_stats.quiescence.move_hits += 1;
+            }
+            if entry.depth < depth {
+                context.stats.tt_stats.quiescence.depth_rejected_hits += 1;
+            }
             tt_best_move = entry.best_move;
 
             let tt_score = score_from_tt(entry.eval, ply);
 
             if entry.depth >= depth {
-                context.stats.qtt.usable += 1;
+                context.stats.tt_stats.quiescence.usable += 1;
 
                 match entry.flag {
                     TTFlag::Exact => {
-                        context.stats.qtt.exact_returns += 1;
+                        context.stats.tt_stats.quiescence.exact_returns += 1;
                         return tt_score;
                     }
 
@@ -85,13 +106,11 @@ impl Engine {
                 }
 
                 if alpha >= beta {
-                    context.stats.qtt.bound_cutoffs += 1;
+                    context.stats.tt_stats.quiescence.bound_cutoffs += 1;
                     return tt_score;
                 }
             }
         }
-
-        let in_check = board.in_check(board.side_to_move());
 
         let mut best_eval = NEG_INF;
         let mut stand_pat = NEG_INF;
@@ -101,9 +120,10 @@ impl Engine {
             let evasions = board.all_legal_moves();
 
             if evasions.is_empty() {
+                context.stats.terminal_stats.checkmates += 1;
                 let score = -CHECKMATE_SCORE + ply as i32;
-                context.stats.qtt.stores += 1;
-                self.tt.insert(
+                context.stats.tt_stats.quiescence.stores += 1;
+                let insert_result = self.tt.insert(
                     hash,
                     TTEntry {
                         depth,
@@ -113,11 +133,17 @@ impl Engine {
                         node_type: TTNodeType::Quiescence,
                     },
                 );
+                context
+                    .stats
+                    .tt_stats
+                    .quiescence
+                    .record_insert(insert_result);
                 return score;
             }
 
             // too many consecutive checks. Most likely a draw anyways.
             if check_plies > MAX_CHECK_Q_PLIES {
+                context.stats.quiescence_stats.check_ply_limit_returns += 1;
                 // TODO: Later keep searching regardless since in check.
 
                 // since this is an awkward node do not store in tt.
@@ -143,10 +169,10 @@ impl Engine {
             best_eval = stand_pat;
 
             if stand_pat >= beta {
-                context.stats.stand_pat_cutoffs += 1;
+                context.stats.cutoff_stats.stand_pat += 1;
 
-                context.stats.qtt.stores += 1;
-                self.tt.insert(
+                context.stats.tt_stats.quiescence.stores += 1;
+                let insert_result = self.tt.insert(
                     hash,
                     TTEntry {
                         depth,
@@ -156,6 +182,11 @@ impl Engine {
                         node_type: TTNodeType::Quiescence,
                     },
                 );
+                context
+                    .stats
+                    .tt_stats
+                    .quiescence
+                    .record_insert(insert_result);
 
                 return stand_pat;
             }
@@ -167,6 +198,12 @@ impl Engine {
             board.all_legal_capture_moves()
             // includes promotions and quiet promotions
         };
+
+        if in_check {
+            context.stats.quiescence_stats.check_evasion_candidates += raw_moves.len() as u64;
+        } else {
+            context.stats.quiescence_stats.capture_candidates += raw_moves.len() as u64;
+        }
 
         // do move ordering here
         if in_check {
@@ -203,18 +240,20 @@ impl Engine {
 
             if can_prune {
                 // delta pruning
-                if self.config.search.delta.enabled
-                    && stand_pat + captured_value + self.config.search.delta.margin < alpha
-                {
-                    context.stats.delta_prunes += 1;
-                    continue;
+                if self.config.search.delta.enabled {
+                    context.stats.q_pruning_stats.delta_attempts += 1;
+                    if stand_pat + captured_value + self.config.search.delta.margin < alpha {
+                        context.stats.q_pruning_stats.delta_prunes += 1;
+                        continue;
+                    }
                 }
 
-                if self.config.search.see.enabled
-                    && see(board, *mv) < -self.config.search.see.margin
-                {
-                    context.stats.see_prunes += 1;
-                    continue;
+                if self.config.search.see.enabled {
+                    context.stats.q_pruning_stats.see_attempts += 1;
+                    if see(board, *mv) < -self.config.search.see.margin {
+                        context.stats.q_pruning_stats.see_prunes += 1;
+                        continue;
+                    }
                 }
             }
 
@@ -233,7 +272,7 @@ impl Engine {
                 return 0;
             }
 
-            context.stats.qmoves_searched += 1;
+            context.stats.move_stats.quiescence_searched += 1;
             searched_moves += 1;
 
             context.repetition_history.pop();
@@ -248,14 +287,14 @@ impl Engine {
             alpha = alpha.max(eval);
 
             if eval >= beta {
-                context.stats.q_beta_cutoffs += 1;
+                context.stats.cutoff_stats.quiescence_beta += 1;
 
                 if searched_moves == 1 {
-                    context.stats.first_move_q_beta_cutoffs += 1;
+                    context.stats.cutoff_stats.first_move_quiescence_beta += 1;
                 }
 
-                context.stats.qtt.stores += 1;
-                self.tt.insert(
+                context.stats.tt_stats.quiescence.stores += 1;
+                let insert_result = self.tt.insert(
                     hash,
                     TTEntry {
                         depth,
@@ -265,6 +304,11 @@ impl Engine {
                         node_type: TTNodeType::Quiescence,
                     },
                 );
+                context
+                    .stats
+                    .tt_stats
+                    .quiescence
+                    .record_insert(insert_result);
                 return eval;
             }
         }
@@ -277,8 +321,8 @@ impl Engine {
             TTFlag::Exact
         };
 
-        context.stats.qtt.stores += 1;
-        self.tt.insert(
+        context.stats.tt_stats.quiescence.stores += 1;
+        let insert_result = self.tt.insert(
             hash,
             TTEntry {
                 depth,
@@ -288,6 +332,11 @@ impl Engine {
                 node_type: TTNodeType::Quiescence,
             },
         );
+        context
+            .stats
+            .tt_stats
+            .quiescence
+            .record_insert(insert_result);
 
         best_eval
     }

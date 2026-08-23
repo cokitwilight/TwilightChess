@@ -1,8 +1,10 @@
 use crate::board::{Board, Move, MoveList, MoveType, null_move_reduction};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::history::HistoryKey;
+use crate::engine::ordering::see;
 use crate::engine::pruning::lmr::LMR_SCALE_I32;
 use crate::engine::search::search::is_insufficient_material;
+use crate::engine::search_stats::{MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS};
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, SearchStackEntry};
 use crate::engine::{SearchContext, SearchOptions};
@@ -21,15 +23,23 @@ impl Engine {
         options: SearchOptions,
     ) -> i32 {
         // every 2048 nodes check if it should stop rather than expensively checking each time.
-        if context.stopped
-            || (context.stats.nodes + context.stats.qnodes & 2047 == 0 && context.should_stop())
-        {
+        if context.stopped || (context.stats.total_nodes() & 2047 == 0 && context.should_stop()) {
+            context.stats.terminal_stats.stopped_returns += 1;
             return 0;
         }
 
-        context.stats.nodes += 1;
+        context.stats.node_stats.main += 1;
+
+        // Classify the original window before the TT potentially narrows it.
+        let is_pv = beta != alpha + 1;
+        if is_pv {
+            context.stats.node_stats.pv += 1;
+        } else {
+            context.stats.node_stats.non_pv += 1;
+        }
 
         if ply >= MAX_PLY as usize - 1 {
+            context.stats.terminal_stats.max_ply_returns += 1;
             return evaluation_for_turn(board);
         }
 
@@ -50,48 +60,60 @@ impl Engine {
         // ADD DRAWING LOGIC HERE
 
         if Engine::repetition_in_search(context, board.hash(), board.halfmove_clock() as usize) {
-            context.stats.repetition_returns += 1;
+            context.stats.draw_stats.repetition_returns += 1;
             return 0;
         }
 
         if board.halfmove_clock() >= 100 {
             // 50 move rule
-            context.stats.fifty_returns += 1;
+            context.stats.draw_stats.fifty_move_returns += 1;
             return 0;
         }
 
         if board.phase() < 8 && is_insufficient_material(&board) {
-            context.stats.insufficient_returns += 1;
+            context.stats.draw_stats.insufficient_material_returns += 1;
             return 0;
         }
 
         let original_alpha = alpha;
         // let original_beta = beta;
 
-        // before the tt modifies the windows
-        let is_pv = beta != alpha + 1;
-
         let in_check = board.in_check(board.side_to_move());
+        if in_check {
+            context.stats.node_stats.in_check += 1;
+        }
 
         let mut tt_best_move: Option<Move> = None;
 
         let mut candidate_move: Option<(Move, i32)> = None;
 
-        context.stats.tt.probes += 1;
+        context.stats.tt_stats.main.probes += 1;
 
         if let Some(entry) = self.tt.get(board.hash, TTNodeType::Main) {
-            context.stats.tt.hits += 1;
+            context.stats.tt_stats.main.hits += 1;
+
+            match entry.flag {
+                TTFlag::Exact => context.stats.tt_stats.main.exact_hits += 1,
+                TTFlag::LowerBound => context.stats.tt_stats.main.lower_bound_hits += 1,
+                TTFlag::UpperBound => context.stats.tt_stats.main.upper_bound_hits += 1,
+            }
+            if entry.best_move.is_some() {
+                context.stats.tt_stats.main.move_hits += 1;
+            }
+            if entry.depth < depth && options.excluded_move.is_none() {
+                context.stats.tt_stats.main.depth_rejected_hits += 1;
+            }
 
             let tt_score = score_from_tt(entry.eval, ply);
 
             tt_best_move = entry.best_move;
 
             if entry.depth >= depth && options.excluded_move.is_none() {
-                context.stats.tt.usable += 1;
+                context.stats.tt_stats.main.usable += 1;
 
                 match entry.flag {
                     TTFlag::Exact => {
-                        context.stats.tt.exact_returns += 1;
+                        context.stats.tt_stats.main.exact_returns += 1;
                         return tt_score;
                     }
                     TTFlag::LowerBound => {
@@ -102,7 +124,7 @@ impl Engine {
                     }
                 }
                 if alpha >= beta {
-                    context.stats.tt.bound_cutoffs += 1;
+                    context.stats.tt_stats.main.bound_cutoffs += 1;
                     return tt_score;
                 }
             }
@@ -136,7 +158,9 @@ impl Engine {
 
         // reverse futility pruning
         if can_rfp {
-            context.stats.rfp_attempts += 1;
+            context.stats.rfp_stats.attempts += 1;
+            let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
+            context.stats.rfp_stats.attempts_by_depth.bins[depth_bucket] += 1;
 
             let margin = self.config.search.rfp.margin_factor * depth as i32;
             // dynamic RFP margin
@@ -144,7 +168,8 @@ impl Engine {
             let eval = evaluation_for_turn(board);
 
             if eval - margin >= beta {
-                context.stats.rfp_cutoffs += 1;
+                context.stats.rfp_stats.cutoffs += 1;
+                context.stats.rfp_stats.cutoffs_by_depth.bins[depth_bucket] += 1;
                 return beta;
             } else {
                 static_eval = Some(eval);
@@ -173,7 +198,9 @@ impl Engine {
         }
 
         if can_null_prune {
-            context.stats.null_attempts += 1;
+            context.stats.null_move_stats.attempts += 1;
+            let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
+            context.stats.null_move_stats.attempts_by_depth.bins[depth_bucket] += 1;
 
             let reduction = null_move_reduction(depth);
 
@@ -200,7 +227,8 @@ impl Engine {
             }
 
             if score >= beta {
-                context.stats.null_cutoffs += 1;
+                context.stats.null_move_stats.cutoffs += 1;
+                context.stats.null_move_stats.cutoffs_by_depth.bins[depth_bucket] += 1;
                 return beta;
             }
         }
@@ -211,8 +239,10 @@ impl Engine {
 
         if moves.is_empty() {
             if in_check {
+                context.stats.terminal_stats.checkmates += 1;
                 return -CHECKMATE_SCORE + ply as i32;
             } else {
+                context.stats.terminal_stats.stalemates += 1;
                 return 0; // Stalemate
             }
         }
@@ -303,7 +333,7 @@ impl Engine {
 
             if let Some(candidate) = candidate_move {
                 if candidate.0 == *mv {
-                    context.stats.singular_attempts += 1;
+                    context.stats.singular_stats.attempts += 1;
 
                     let margin = self.config.search.singular.base_margin
                         + self.config.search.singular.depth_margin * depth as i32;
@@ -311,7 +341,7 @@ impl Engine {
                     let singular_beta = candidate.1 - margin;
                     let verification_depth = depth.saturating_sub(1) / 2;
 
-                    let nodes_before = context.stats.nodes + context.stats.qnodes;
+                    let nodes_before = context.stats.total_nodes();
 
                     let verification_score = self.negamax(
                         board,
@@ -327,9 +357,9 @@ impl Engine {
                         },
                     );
 
-                    let nodes_after = context.stats.nodes + context.stats.qnodes;
+                    let nodes_after = context.stats.total_nodes();
 
-                    context.stats.singular_verification_nodes += nodes_after - nodes_before;
+                    context.stats.singular_stats.verification_nodes += nodes_after - nodes_before;
 
                     if context.stopped {
                         return 0;
@@ -337,9 +367,9 @@ impl Engine {
 
                     if verification_score < singular_beta {
                         extension = 1;
-                        context.stats.singular_extensions += 1;
+                        context.stats.singular_stats.extensions += 1;
                     } else {
-                        context.stats.singular_fail_highs += 1;
+                        context.stats.singular_stats.fail_highs += 1;
                     }
                 }
             }
@@ -355,7 +385,9 @@ impl Engine {
                 && extension == 0
                 && Some(*mv) != tt_best_move
             {
-                context.stats.fut_attempts += 1;
+                context.stats.fut_stats.attempts += 1;
+                let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
+                context.stats.fut_stats.attempts_by_depth.bins[depth_bucket] += 1;
                 let mut margin = depth * self.config.search.fut.margin;
 
                 if self.config.search.fut.history_enabled {
@@ -369,7 +401,8 @@ impl Engine {
                 let eval = static_eval.expect("No available static eval in negamax!");
 
                 if eval + margin as i32 <= alpha {
-                    context.stats.fut_cutoffs += 1;
+                    context.stats.fut_stats.pruned_moves += 1;
+                    context.stats.fut_stats.pruned_moves_by_depth.bins[depth_bucket] += 1;
                     board.undo_move(undo);
                     continue;
                 }
@@ -403,9 +436,9 @@ impl Engine {
                     let history_red = current_reduction / LMR_SCALE_I32;
 
                     if history_red < baseline_red {
-                        context.stats.lmr_history_improved += 1;
+                        context.stats.lmr_stats.history_improvements += 1;
                     } else if history_red > baseline_red {
-                        context.stats.lmr_history_reduced += 1;
+                        context.stats.lmr_stats.history_reductions += 1;
                     }
                 }
 
@@ -438,10 +471,25 @@ impl Engine {
                 }
             } else {
                 if can_lmr {
-                    context.stats.lmr_attempts += 1;
+                    context.stats.lmr_stats.attempts += 1;
+                    context.stats.lmr_stats.eligible_moves += 1;
+                    context.stats.lmr_stats.reduction_plies += reduction as u64;
+
+                    let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
+                    context.stats.lmr_stats.attempts_by_depth.bins[depth_bucket] += 1;
+
+                    let reduction_bucket = (reduction as usize).min(REDUCTION_BUCKETS - 1);
+                    context.stats.lmr_stats.reduction_histogram.bins[reduction_bucket] += 1;
+
+                    if reduction > 0 {
+                        context.stats.lmr_stats.reduced_moves += 1;
+                    } else {
+                        context.stats.lmr_stats.zero_reduction_moves += 1;
+                    }
                 }
 
                 // null window search reduced depth
+                context.stats.pvs_stats.null_window_searches += 1;
                 eval = -self.negamax(
                     board,
                     context,
@@ -459,8 +507,12 @@ impl Engine {
                 }
 
                 if eval > alpha {
+                    context.stats.pvs_stats.alpha_improvements += 1;
+
                     if reduction > 0 {
-                        context.stats.lmr_researched += 1;
+                        context.stats.lmr_stats.researches += 1;
+                        let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
+                        context.stats.lmr_stats.researches_by_depth.bins[depth_bucket] += 1;
 
                         // null window search full depth
                         eval = -self.negamax(
@@ -478,11 +530,19 @@ impl Engine {
                             board.undo_move(undo);
                             return 0;
                         }
+
+                        if eval > alpha {
+                            context.stats.lmr_stats.research_alpha_improvements += 1;
+                        }
+                        if eval >= beta {
+                            context.stats.lmr_stats.research_cutoffs += 1;
+                        }
                     }
 
                     if eval > alpha && eval < beta {
                         // this move might improve alpha, research it at full depth
                         // full window search, full depth
+                        context.stats.pvs_stats.full_window_researches += 1;
                         eval = -self.negamax(
                             board,
                             context,
@@ -498,13 +558,17 @@ impl Engine {
                             board.undo_move(undo);
                             return 0;
                         }
+
+                        if eval >= beta {
+                            context.stats.pvs_stats.research_cutoffs += 1;
+                        }
                     }
                 }
             }
 
             searched_moves += 1;
 
-            context.stats.moves_searched += 1;
+            context.stats.move_stats.main_searched += 1;
 
             context.repetition_history.pop();
             board.undo_move(undo);
@@ -517,19 +581,47 @@ impl Engine {
             alpha = alpha.max(eval);
 
             if alpha >= beta {
-                context.stats.beta_cutoffs += 1;
+                context.stats.cutoff_stats.beta += 1;
+
+                let cutoff_index = searched_moves as usize;
+                let cutoff_bucket = cutoff_index.saturating_sub(1).min(MOVE_INDEX_BUCKETS - 1);
+                context
+                    .stats
+                    .move_ordering_stats
+                    .cutoff_move_index_histogram
+                    .bins[cutoff_bucket] += 1;
+                context.stats.move_ordering_stats.cutoff_move_index_sum += cutoff_index as u64;
+                context.stats.move_ordering_stats.cutoff_move_index_max = context
+                    .stats
+                    .move_ordering_stats
+                    .cutoff_move_index_max
+                    .max(cutoff_index as u64);
+
+                if Some(*mv) == tt_best_move {
+                    context.stats.move_ordering_stats.tt_move_cutoffs += 1;
+                } else if matches!(mv.kind(), MoveType::Capture | MoveType::EnPassant) {
+                    if see(board, *mv) >= 0 {
+                        context.stats.move_ordering_stats.winning_capture_cutoffs += 1;
+                    } else {
+                        context.stats.move_ordering_stats.losing_capture_cutoffs += 1;
+                    }
+                } else if was_killer {
+                    context.stats.move_ordering_stats.killer_move_cutoffs += 1;
+                } else if history_score > 0 {
+                    context.stats.move_ordering_stats.history_move_cutoffs += 1;
+                }
 
                 if searched_moves == 1 {
-                    context.stats.first_move_beta_cutoffs += 1;
+                    context.stats.cutoff_stats.first_move_beta += 1;
                 }
 
                 did_cutoff = true;
 
                 if is_quiet && options.excluded_move.is_none() {
                     if was_killer {
-                        context.stats.killer_cutoffs += 1;
+                        context.stats.history_stats.killer_cutoffs += 1;
                     } else if history_score > 0 {
-                        context.stats.history_cutoffs += 1;
+                        context.stats.history_stats.history_cutoffs += 1;
                     }
 
                     context.killer_moves.add(ply, *mv);
@@ -551,7 +643,7 @@ impl Engine {
         if searched_moves == 0 {
             debug_assert!(options.excluded_move.is_some());
 
-            context.stats.singular_no_alternatives += 1;
+            context.stats.singular_stats.no_alternatives += 1;
 
             // This is the lower edge of the null window:
             // singular_beta - 1.
@@ -569,8 +661,8 @@ impl Engine {
         };
 
         if options.excluded_move.is_none() {
-            context.stats.tt.stores += 1;
-            self.tt.insert(
+            context.stats.tt_stats.main.stores += 1;
+            let insert_result = self.tt.insert(
                 board.hash,
                 TTEntry {
                     depth,
@@ -580,6 +672,7 @@ impl Engine {
                     node_type: TTNodeType::Main,
                 },
             );
+            context.stats.tt_stats.main.record_insert(insert_result);
         }
 
         max_eval

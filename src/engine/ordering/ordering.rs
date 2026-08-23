@@ -25,6 +25,8 @@ impl Engine {
                 context,
                 previous_best_move,
                 tt_best_move,
+                None,
+                None,
             )
         });
     }
@@ -42,6 +44,8 @@ impl Engine {
         context: &SearchContext,
         previous_best_move: Option<Move>,
         tt_best_move: Option<Move>,
+        see_value: Option<i32>,
+        history_key: Option<HistoryKey>,
     ) -> i32 {
         if Some(mv) == previous_best_move {
             return 2_000_000;
@@ -53,7 +57,11 @@ impl Engine {
         let is_capture = matches!(mv.kind(), MoveType::Capture | MoveType::EnPassant);
 
         if is_capture {
-            let see_score = see(board, mv);
+            let see_score = if let Some(value) = see_value {
+                value
+            } else {
+                see(board, mv)
+            };
             let promo_bonus = mv.promotion().map_or(0, promotion_score);
 
             return if see_score >= 0 {
@@ -73,7 +81,7 @@ impl Engine {
             // under-promotions are almost always worse than a quiet move
             return match promo {
                 PieceType::Queen => 800_000 + promotion_score(promo),
-                _ => -700_000 + promotion_score(promo),
+                _ => -500_000 + promotion_score(promo),
             };
         }
 
@@ -85,7 +93,11 @@ impl Engine {
             .piecetype_at(mv.from())
             .expect("No piece in board in move ordering!");
 
-        let curr_key = HistoryKey::new(side_to_move, piece, mv.to());
+        let curr_key = if let Some(key) = history_key {
+            key
+        } else {
+            HistoryKey::new(side_to_move, piece, mv.to())
+        };
 
         self.history.get_quiet_score(&context.stack, ply, curr_key)
     }
@@ -140,7 +152,7 @@ fn mvv_lva_score(board: &Board, mv: Move) -> i32 {
     score
 }
 
-fn promotion_score(piece: PieceType) -> i32 {
+pub fn promotion_score(piece: PieceType) -> i32 {
     match piece {
         PieceType::Queen => 8_000,
         PieceType::Rook => 4_000,

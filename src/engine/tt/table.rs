@@ -6,6 +6,12 @@ const TT_CLUSTER_SIZE: usize = 4;
 
 const AGE_PENALTY: i32 = 4;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TTInsertResult {
+    pub replaced: bool,
+    pub collision: bool,
+}
+
 pub trait TTReplace {
     type Domain: Copy + Eq;
 
@@ -140,7 +146,7 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
     }
 
     #[inline(always)]
-    pub fn insert(&mut self, key: u64, entry: Entry) {
+    pub fn insert(&mut self, key: u64, entry: Entry) -> TTInsertResult {
         let index = self.index(key);
         let generation = self.generation;
         let cluster = &mut self.table[index];
@@ -158,17 +164,24 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
             }
 
             if should_replace(&old_slot.entry, &entry) {
+                let collision = old_slot.key != key;
                 *slot = Some(TTSlot {
                     key,
                     generation,
                     entry,
                 });
+                return TTInsertResult {
+                    replaced: true,
+                    collision,
+                };
             } else {
                 // the old entry is better but still useful
                 old_slot.generation = generation;
+                return TTInsertResult {
+                    replaced: false,
+                    collision: old_slot.key != key,
+                };
             }
-
-            return;
         }
 
         // empty cluster
@@ -180,7 +193,7 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
                     generation,
                     entry,
                 });
-                return;
+                return TTInsertResult::default();
             }
         }
 
@@ -206,6 +219,11 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
             generation,
             entry,
         });
+
+        TTInsertResult {
+            replaced: true,
+            collision: true,
+        }
     }
 
     pub fn new_search(&mut self) {

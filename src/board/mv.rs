@@ -61,7 +61,7 @@ impl Move {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct MoveList {
     moves: [Move; 256],
     len: usize,
@@ -83,6 +83,22 @@ impl MoveList {
 
         self.moves[self.len] = mv;
         self.len += 1;
+    }
+
+    pub fn swap_remove(&mut self, index: usize) -> Move {
+        if self.len() == 0 || index >= self.len() {
+            panic!("Invalid index in swap_remove in MoveList");
+        }
+        let temp_mv = self.moves[index];
+        self.moves[index] = self.moves[self.len() - 1];
+        self.moves[self.len() - 1] = temp_mv;
+        self.len -= 1;
+
+        temp_mv
+    }
+
+    pub fn get(&self, index: usize) -> Move {
+        self.moves[index]
     }
 
     pub fn len(&self) -> usize {

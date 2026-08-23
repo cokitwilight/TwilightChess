@@ -33,7 +33,7 @@ impl SearchContext {
         }
 
         if let Some(max_nodes) = self.limits.max_nodes
-            && self.stats.nodes + self.stats.qnodes >= max_nodes
+            && self.stats.total_nodes() >= max_nodes
         {
             self.stopped = true;
             return true;

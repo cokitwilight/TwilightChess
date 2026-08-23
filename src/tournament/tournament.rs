@@ -437,14 +437,22 @@ mod tests {
     #[test]
     #[ignore]
     pub fn test_tournament_lmr() {
-        let mut match_players =
-            MatchPlayers::from_depth("LMR on".to_string(), "LMR off".to_string(), 10, 6, 10, 6);
+        let mut match_players = MatchPlayers::from_depth(
+            "LMR History on".to_string(),
+            "LMR History off".to_string(),
+            14,
+            6,
+            14,
+            6,
+        );
 
         match_players.white.config = EngineConfig::standard();
         match_players.black.config = EngineConfig::standard();
 
         match_players.white.config.search.lmr.enabled = true;
-        match_players.black.config.search.lmr.enabled = false;
+        match_players.white.config.search.lmr.history_enabled = true;
+        match_players.black.config.search.lmr.enabled = true;
+        match_players.black.config.search.lmr.history_enabled = false;
 
         let opening_suite = build_opening_suite();
 

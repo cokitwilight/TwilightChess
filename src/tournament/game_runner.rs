@@ -231,11 +231,17 @@ mod tests {
     #[test]
     #[ignore]
     pub fn test_game_2() {
-        let mut players =
-            MatchPlayers::from_depth("LMR Off".to_string(), "LMR On".to_string(), 16, 7, 16, 7);
+        let mut players = MatchPlayers::from_depth(
+            "LMR History Off".to_string(),
+            "LMR History On".to_string(),
+            16,
+            7,
+            16,
+            7,
+        );
 
-        players.white.config.limits.soft_time_limit_ms = Some(500);
-        players.black.config.limits.soft_time_limit_ms = Some(500);
+        players.white.config.limits.soft_time_limit_ms = Some(100);
+        players.black.config.limits.soft_time_limit_ms = Some(100);
 
         players.white.config.limits.hard_time_limit_ms = Some(250000);
         players.black.config.limits.hard_time_limit_ms = Some(150000);
@@ -243,8 +249,10 @@ mod tests {
         players.white.config.search.singular.enabled = true;
         players.black.config.search.singular.enabled = true;
 
-        players.white.config.search.lmr.enabled = false;
+        players.white.config.search.lmr.enabled = true;
+        players.white.config.search.lmr.history_enabled = false;
         players.black.config.search.lmr.enabled = true;
+        players.black.config.search.lmr.history_enabled = true;
 
         let opening_suite = build_opening_suite();
 
