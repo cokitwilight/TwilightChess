@@ -457,7 +457,7 @@ mod tests {
 
         let opening_suite = build_opening_suite();
 
-        let result = play_games(opening_suite, 3, 330, match_players, Color::White);
+        let result = play_games(opening_suite, 8, 880, match_players, Color::White);
 
         result.review().expect("IO Error");
     }
