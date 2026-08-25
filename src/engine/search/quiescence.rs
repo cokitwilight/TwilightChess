@@ -194,7 +194,6 @@ impl Engine {
             if alpha < stand_pat {
                 alpha = stand_pat;
             }
-
             board.all_legal_capture_moves()
             // includes promotions and quiet promotions
         };
@@ -205,10 +204,30 @@ impl Engine {
             context.stats.quiescence_stats.capture_candidates += raw_moves.len() as u64;
         }
 
-        // do move ordering here
+        /*
         if in_check {
-            self.order_moves(
-                // includes quiet moves and history heuristics
+            // self.order_moves(
+            //     // includes quiet moves and history heuristics
+            //     board,
+            //     &mut raw_moves,
+            //     side_to_move,
+            //     ply,
+            //     context,
+            //     None,
+            //     tt_best_move,
+            // );
+        } else {
+            self.q_order_moves
+        }
+
+
+
+         */
+
+        // do move ordering here
+        let mut move_picker = if in_check {
+            self.new_staged_move_selecter(
+                0,
                 board,
                 &mut raw_moves,
                 side_to_move,
@@ -216,15 +235,25 @@ impl Engine {
                 context,
                 None,
                 tt_best_move,
-            );
+            )
         } else {
             // only tt and see ordering
-            self.q_order_moves(board, &mut raw_moves, tt_best_move);
-        }
+            self.new_staged_move_selecter(
+                1,
+                board,
+                &mut raw_moves,
+                side_to_move,
+                ply,
+                context,
+                None,
+                tt_best_move,
+            )
+        };
 
         let mut searched_moves = 0;
 
-        for mv in raw_moves.iter() {
+        while let Some(scored_mv) = move_picker.get_next(board, context, &self.history) {
+            let mv = &scored_mv.mv;
             let gives_check = board.move_gives_check(mv);
             let captured_value = match mv.kind() {
                 MoveType::EnPassant => PieceType::Pawn.value(),
@@ -250,7 +279,12 @@ impl Engine {
 
                 if self.config.search.see.enabled {
                     context.stats.q_pruning_stats.see_attempts += 1;
-                    if see(board, *mv) < -self.config.search.see.margin {
+                    let see_value = if let Some(value) = scored_mv.see {
+                        value
+                    } else {
+                        see(board, *mv)
+                    };
+                    if see_value < -self.config.search.see.margin {
                         context.stats.q_pruning_stats.see_prunes += 1;
                         continue;
                     }

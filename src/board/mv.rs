@@ -85,16 +85,25 @@ impl MoveList {
         self.len += 1;
     }
 
+    pub fn pop(&mut self) -> Option<Move> {
+        if self.len == 0 {
+            return None;
+        }
+
+        let mv = self.moves[self.len - 1];
+        self.len -= 1;
+        Some(mv)
+    }
+
     pub fn swap_remove(&mut self, index: usize) -> Move {
         if self.len() == 0 || index >= self.len() {
             panic!("Invalid index in swap_remove in MoveList");
         }
-        let temp_mv = self.moves[index];
+        let removed = self.moves[index];
         self.moves[index] = self.moves[self.len() - 1];
-        self.moves[self.len() - 1] = temp_mv;
         self.len -= 1;
 
-        temp_mv
+        removed
     }
 
     pub fn get(&self, index: usize) -> Move {

@@ -1,7 +1,8 @@
-use crate::board::{Board, Move, MoveList, MoveType, null_move_reduction};
+use crate::board::{Board, Move, MoveType, null_move_reduction};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::history::HistoryKey;
 use crate::engine::ordering::see;
+use crate::engine::ordering::staged::ScoredMove;
 use crate::engine::pruning::lmr::LMR_SCALE_I32;
 use crate::engine::search::search::is_insufficient_material;
 use crate::engine::search_stats::{MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS};
@@ -246,6 +247,7 @@ impl Engine {
                 return 0; // Stalemate
             }
         }
+
         let mut searched_moves = 0;
 
         let side_to_move = board.side_to_move();
@@ -256,7 +258,8 @@ impl Engine {
             tt_best_move
         };
 
-        self.order_moves(
+        let mut move_picker = self.new_staged_move_selecter(
+            0,
             board,
             &mut moves,
             side_to_move,
@@ -265,6 +268,16 @@ impl Engine {
             None,
             ordering_tt_move,
         );
+
+        // self.order_moves(
+        //     board,
+        //     &mut moves,
+        //     side_to_move,
+        //     ply,
+        //     context,
+        //     None,
+        //     ordering_tt_move,
+        // );
 
         let mut max_eval = NEG_INF;
         let mut best_move: Option<Move> = None;
@@ -298,10 +311,12 @@ impl Engine {
             static_eval = Some(eval);
         }
 
-        let mut searched_quiets: MoveList = MoveList::new();
+        let mut searched_quiets: Vec<ScoredMove> = Vec::with_capacity(5); // 99% of cutoffs happen in the first 5 moves
 
-        for mv in moves.iter() {
+        // for mv in moves.iter() {
+        while let Some(scored_mv) = move_picker.get_next(board, context, &self.history) {
             // singular extension before make move
+            let mv = &scored_mv.mv;
             if Some(*mv) == options.excluded_move {
                 continue;
             }
@@ -313,7 +328,13 @@ impl Engine {
                 .piecetype_at(mv.from())
                 .expect("No piece in board in negamax!");
 
-            let curr_key = HistoryKey::new(side_to_move, piece, mv.to());
+            // let curr_key = HistoryKey::new(side_to_move, piece, mv.to());
+
+            let curr_key = if let Some(key) = scored_mv.history_key {
+                key
+            } else {
+                HistoryKey::new(side_to_move, piece, mv.to())
+            };
 
             let was_killer = context.killer_moves.contains(ply, *mv);
             let history_score = if is_quiet {
@@ -600,7 +621,12 @@ impl Engine {
                 if Some(*mv) == tt_best_move {
                     context.stats.move_ordering_stats.tt_move_cutoffs += 1;
                 } else if matches!(mv.kind(), MoveType::Capture | MoveType::EnPassant) {
-                    if see(board, *mv) >= 0 {
+                    let see_value = if let Some(value) = scored_mv.see {
+                        value
+                    } else {
+                        see(board, *mv)
+                    };
+                    if see_value >= 0 {
                         context.stats.move_ordering_stats.winning_capture_cutoffs += 1;
                     } else {
                         context.stats.move_ordering_stats.losing_capture_cutoffs += 1;
@@ -627,8 +653,19 @@ impl Engine {
                     context.killer_moves.add(ply, *mv);
                     self.history.add_quiet_bonus(context, ply, depth, curr_key);
 
-                    for _ in searched_quiets.iter() {
-                        self.history.add_quiet_malus(context, ply, depth, curr_key);
+                    for scored_mv in searched_quiets.iter() {
+                        let history_key = if let Some(key) = scored_mv.history_key {
+                            key
+                        } else {
+                            let mv = &scored_mv.mv;
+                            let piece = board
+                                .piecetype_at(mv.from())
+                                .expect("No piece in board in move ordering!");
+                            HistoryKey::new(side_to_move, piece, mv.to())
+                        };
+
+                        self.history
+                            .add_quiet_malus(context, ply, depth, history_key);
                     }
                 }
 
@@ -636,7 +673,7 @@ impl Engine {
             }
 
             if is_quiet {
-                searched_quiets.push(*mv);
+                searched_quiets.push(scored_mv);
             }
         }
 

@@ -1,4 +1,7 @@
-use super::{NodeStats, count, pct};
+use super::{
+    NodeStats,
+    formatting::{metric, metric_count, metric_pct, section},
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MoveStats {
@@ -17,49 +20,32 @@ impl MoveStats {
             return;
         }
 
-        println!("Moves");
-        println!(
-            "  {:<22} {:>14}",
-            "Main searched:",
-            count(self.main_searched)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Q searched:",
-            count(self.quiescence_searched)
-        );
-        println!("  {:<22} {:>14}", "Total searched:", count(total_moves));
-        println!(
-            "  {:<22} {:>14}",
-            "Illegal pseudo:",
-            count(self.illegal_main)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Illegal Q pseudo:",
-            count(self.illegal_quiescence)
-        );
+        section("Moves");
+        metric_count("Main searched", self.main_searched);
+        metric_count("Quiescence searched", self.quiescence_searched);
+        metric_count("Total searched", total_moves);
+        if illegal_total > 0 {
+            metric_count("Illegal main pseudo-moves", self.illegal_main);
+            metric_count("Illegal q pseudo-moves", self.illegal_quiescence);
+        }
 
         let pseudo_total = total_moves + illegal_total;
         if pseudo_total > 0 {
-            println!(
-                "  {:<22} {:>14}",
-                "Illegal rate:",
-                pct(illegal_total, pseudo_total)
-            );
+            metric_pct("Illegal pseudo-move rate", illegal_total, pseudo_total);
         }
         if nodes.main > 0 {
-            println!(
-                "  {:<22} {:>14.2}",
-                "Moves / node:",
-                self.main_searched as f64 / nodes.main as f64
+            metric(
+                "Moves per main node",
+                format!("{:.2}", self.main_searched as f64 / nodes.main as f64),
             );
         }
         if nodes.quiescence > 0 {
-            println!(
-                "  {:<22} {:>14.2}",
-                "Q moves / qnode:",
-                self.quiescence_searched as f64 / nodes.quiescence as f64
+            metric(
+                "Moves per qnode",
+                format!(
+                    "{:.2}",
+                    self.quiescence_searched as f64 / nodes.quiescence as f64
+                ),
             );
         }
     }

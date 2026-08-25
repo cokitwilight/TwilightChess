@@ -1,4 +1,4 @@
-use super::count;
+use super::formatting::{metric_count, section};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DrawStats {
@@ -16,22 +16,10 @@ impl DrawStats {
             return;
         }
 
-        println!("Draw Returns");
-        println!(
-            "  {:<22} {:>14}",
-            "Repetition:",
-            count(self.repetition_returns)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Fifty move:",
-            count(self.fifty_move_returns)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Insufficient:",
-            count(self.insufficient_material_returns)
-        );
+        section("Draw Returns");
+        metric_count("Repetition", self.repetition_returns);
+        metric_count("Fifty-move rule", self.fifty_move_returns);
+        metric_count("Insufficient material", self.insufficient_material_returns);
     }
 }
 

@@ -1,4 +1,7 @@
-use super::{DepthHistogram, count, formatting::print_depth_histogram, pct};
+use super::{
+    DepthHistogram,
+    formatting::{print_depth_histogram, submetric_count, submetric_pct, subsection},
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NullMoveStats {
@@ -10,7 +13,10 @@ pub struct NullMoveStats {
 
 impl NullMoveStats {
     pub(super) fn has_data(&self) -> bool {
-        self.attempts > 0 || self.cutoffs > 0
+        self.attempts > 0
+            || self.cutoffs > 0
+            || self.attempts_by_depth.total() > 0
+            || self.cutoffs_by_depth.total() > 0
     }
 
     pub(super) fn print(&self) {
@@ -18,17 +24,16 @@ impl NullMoveStats {
             return;
         }
 
-        println!("  Null-Move Pruning");
-        println!("    {:<20} {:>14}", "Attempts:", count(self.attempts));
-        println!("    {:<20} {:>14}", "Cutoffs:", count(self.cutoffs));
+        subsection("Null-move pruning");
+        submetric_count("Attempts", self.attempts);
+        submetric_count("Cutoffs", self.cutoffs);
         if self.attempts > 0 {
-            println!(
-                "    {:<20} {:>14}",
-                "Cutoff rate:",
-                pct(self.cutoffs, self.attempts)
-            );
+            submetric_pct("Cutoff rate", self.cutoffs, self.attempts);
         }
-        print_depth_histogram(&self.attempts_by_depth, &self.cutoffs_by_depth, "Cutoffs");
+        if self.attempts_by_depth.total() > 0 || self.cutoffs_by_depth.total() > 0 {
+            subsection("Attempts and cutoffs by depth");
+            print_depth_histogram(&self.attempts_by_depth, &self.cutoffs_by_depth, "Cutoffs");
+        }
     }
 }
 

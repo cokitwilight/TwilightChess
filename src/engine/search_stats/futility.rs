@@ -1,4 +1,7 @@
-use super::{DepthHistogram, count, formatting::print_depth_histogram, pct};
+use super::{
+    DepthHistogram,
+    formatting::{print_depth_histogram, submetric_count, submetric_pct, subsection},
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FutilityStats {
@@ -10,7 +13,10 @@ pub struct FutilityStats {
 
 impl FutilityStats {
     pub(super) fn has_data(&self) -> bool {
-        self.attempts > 0 || self.pruned_moves > 0
+        self.attempts > 0
+            || self.pruned_moves > 0
+            || self.attempts_by_depth.total() > 0
+            || self.pruned_moves_by_depth.total() > 0
     }
 
     pub(super) fn print(&self) {
@@ -18,25 +24,20 @@ impl FutilityStats {
             return;
         }
 
-        println!("  Futility Pruning");
-        println!("    {:<20} {:>14}", "Attempts:", count(self.attempts));
-        println!(
-            "    {:<20} {:>14}",
-            "Pruned moves:",
-            count(self.pruned_moves)
-        );
+        subsection("Futility pruning");
+        submetric_count("Attempts", self.attempts);
+        submetric_count("Pruned moves", self.pruned_moves);
         if self.attempts > 0 {
-            println!(
-                "    {:<20} {:>14}",
-                "Prune rate:",
-                pct(self.pruned_moves, self.attempts)
+            submetric_pct("Prune rate", self.pruned_moves, self.attempts);
+        }
+        if self.attempts_by_depth.total() > 0 || self.pruned_moves_by_depth.total() > 0 {
+            subsection("Attempts and prunes by depth");
+            print_depth_histogram(
+                &self.attempts_by_depth,
+                &self.pruned_moves_by_depth,
+                "Pruned",
             );
         }
-        print_depth_histogram(
-            &self.attempts_by_depth,
-            &self.pruned_moves_by_depth,
-            "Pruned",
-        );
     }
 }
 

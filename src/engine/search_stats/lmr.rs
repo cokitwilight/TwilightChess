@@ -1,6 +1,9 @@
 use super::{
-    DepthHistogram, REDUCTION_BUCKETS, ReductionHistogram, count,
-    formatting::print_depth_histogram, pct,
+    DepthHistogram, REDUCTION_BUCKETS, ReductionHistogram,
+    formatting::{
+        count, metric_count, metric_pct, pct, print_depth_histogram, section, submetric_count,
+        subsection,
+    },
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -22,66 +25,48 @@ pub struct LmrStats {
 
 impl LmrStats {
     pub(super) fn print(&self) {
-        if self.attempts == 0 && self.researches == 0 {
+        let depth_attempts = self.attempts_by_depth.total();
+        let depth_researches = self.researches_by_depth.total();
+        if self.eligible_moves == 0
+            && self.attempts == 0
+            && self.researches == 0
+            && self.reduction_histogram.total() == 0
+            && depth_attempts == 0
+            && depth_researches == 0
+        {
             return;
         }
 
-        println!("Search Reductions");
-        println!("  Late Move Reductions");
-        println!("    {:<20} {:>14}", "Attempts:", count(self.attempts));
-        println!(
-            "    {:<20} {:>14}",
-            "Eligible moves:",
-            count(self.eligible_moves)
+        section("Late Move Reductions");
+        metric_count("Eligible moves", self.eligible_moves.max(self.attempts));
+        metric_count("Reduced moves", self.reduced_moves);
+        metric_count("Zero-ply reductions", self.zero_reduction_moves);
+        metric_count("Total reduction plies", self.reduction_plies);
+        metric_count("Re-searches", self.researches);
+        metric_count(
+            "Re-search alpha improvements",
+            self.research_alpha_improvements,
         );
-        println!(
-            "    {:<20} {:>14}",
-            "Reduced moves:",
-            count(self.reduced_moves)
+        metric_count("Re-search cutoffs", self.research_cutoffs);
+        metric_pct(
+            "Reduced-move rate",
+            self.reduced_moves,
+            self.eligible_moves.max(self.attempts),
         );
-        println!(
-            "    {:<20} {:>14}",
-            "Zero reductions:",
-            count(self.zero_reduction_moves)
-        );
-        println!(
-            "    {:<20} {:>14}",
-            "Reduction plies:",
-            count(self.reduction_plies)
-        );
-        println!("    {:<20} {:>14}", "Re-searches:", count(self.researches));
-        println!(
-            "    {:<20} {:>14}",
-            "Research improves:",
-            count(self.research_alpha_improvements)
-        );
-        println!(
-            "    {:<20} {:>14}",
-            "Research cutoffs:",
-            count(self.research_cutoffs)
-        );
-        println!(
-            "    {:<20} {:>14}",
-            "History Improvements:",
-            count(self.history_improvements)
-        );
-        println!(
-            "    {:<20} {:>14}",
-            "History Reductions:",
-            count(self.history_reductions)
-        );
-        if self.attempts > 0 {
-            println!(
-                "    {:<20} {:>14}",
-                "Re-search rate:",
-                pct(self.researches, self.attempts)
-            );
+        if self.reduced_moves > 0 {
+            metric_pct("Re-search rate", self.researches, self.reduced_moves);
+        }
+
+        if self.history_improvements > 0 || self.history_reductions > 0 {
+            subsection("History adjustment effects");
+            submetric_count("Smaller reductions", self.history_improvements);
+            submetric_count("Larger reductions", self.history_reductions);
         }
 
         let total_reductions = self.reduction_histogram.total();
         if total_reductions > 0 {
-            println!("  Reduction Sizes");
-            println!("    {:>10} {:>14} {:>10}", "Reduction", "Moves", "Share");
+            subsection("Reduction-size distribution");
+            println!("    {:>10} {:>12} {:>10}", "Plies", "Moves", "Share");
             for reduction in 0..REDUCTION_BUCKETS {
                 let moves = self.reduction_histogram.bins[reduction];
                 if moves == 0 {
@@ -94,7 +79,7 @@ impl LmrStats {
                     reduction.to_string()
                 };
                 println!(
-                    "    {:>10} {:>14} {:>10}",
+                    "    {:>10} {:>12} {:>10}",
                     label,
                     count(moves),
                     pct(moves, total_reductions),
@@ -102,8 +87,8 @@ impl LmrStats {
             }
         }
 
-        if self.attempts_by_depth.total() > 0 {
-            println!("  LMR by Depth");
+        if depth_attempts > 0 || depth_researches > 0 {
+            subsection("Re-searches by depth");
             print_depth_histogram(
                 &self.attempts_by_depth,
                 &self.researches_by_depth,

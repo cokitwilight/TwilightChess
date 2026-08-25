@@ -14,33 +14,13 @@ impl QuiescenceStats {
             return;
         }
 
-        println!("Quiescence Search");
-        println!("  {:<22} {:>14}", "Normal nodes:", count(self.normal_nodes));
-        println!(
-            "  {:<22} {:>14}",
-            "In-check nodes:",
-            count(self.in_check_nodes)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Capture candidates:",
-            count(self.capture_candidates)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Evasion candidates:",
-            count(self.check_evasion_candidates)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Max-ply returns:",
-            count(self.max_ply_returns)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Check-ply limits:",
-            count(self.check_ply_limit_returns)
-        );
+        section("Quiescence Search");
+        metric_count("Normal nodes", self.normal_nodes);
+        metric_count("In-check nodes", self.in_check_nodes);
+        metric_count("Capture candidates", self.capture_candidates);
+        metric_count("Check-evasion candidates", self.check_evasion_candidates);
+        metric_count("Max-ply returns", self.max_ply_returns);
+        metric_count("Check-ply-limit returns", self.check_ply_limit_returns);
     }
 }
 
@@ -53,4 +33,4 @@ impl_counter_stats_ops!(
     max_ply_returns,
     check_ply_limit_returns,
 );
-use super::count;
+use super::formatting::{metric_count, section};

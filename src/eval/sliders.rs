@@ -430,6 +430,7 @@ fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo) -> i32 {
     score
 }
 
+#[allow(dead_code)]
 fn open_file_mask(pawns: Bitboard) -> Bitboard {
     let mut open_files = 0u64;
 

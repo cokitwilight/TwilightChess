@@ -16,19 +16,11 @@ impl TerminalStats {
             return;
         }
 
-        println!("Terminal Nodes");
-        println!("  {:<22} {:>14}", "Checkmates:", count(self.checkmates));
-        println!("  {:<22} {:>14}", "Stalemates:", count(self.stalemates));
-        println!(
-            "  {:<22} {:>14}",
-            "Max-ply returns:",
-            count(self.max_ply_returns)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Stopped returns:",
-            count(self.stopped_returns)
-        );
+        section("Terminal Nodes");
+        metric_count("Checkmates", self.checkmates);
+        metric_count("Stalemates", self.stalemates);
+        metric_count("Max-ply returns", self.max_ply_returns);
+        metric_count("Stopped returns", self.stopped_returns);
     }
 }
 
@@ -39,4 +31,4 @@ impl_counter_stats_ops!(
     max_ply_returns,
     stopped_returns,
 );
-use super::count;
+use super::formatting::{metric_count, section};

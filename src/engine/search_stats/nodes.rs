@@ -1,4 +1,4 @@
-use super::{count, nps};
+use super::formatting::{metric_count, nps, section};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NodeStats {
@@ -19,15 +19,15 @@ impl NodeStats {
     pub(super) fn print(&self, elapsed_secs: f64) {
         let total = self.total();
 
-        println!("Nodes");
-        println!("  {:<22} {:>14}", "Main:", count(self.main));
-        println!("  {:<22} {:>14}", "Quiescence:", count(self.quiescence));
-        println!("  {:<22} {:>14}", "Total:", count(total));
-        println!("  {:<22} {:>14}", "NPS:", nps(total, elapsed_secs));
-        println!("  {:<22} {:>14}", "PV:", count(self.pv));
-        println!("  {:<22} {:>14}", "Non-PV:", count(self.non_pv));
-        println!("  {:<22} {:>14}", "In check:", count(self.in_check));
-        println!("  {:<22} {:>14}", "Root:", count(self.root));
+        section("Nodes");
+        metric_count("Main search", self.main);
+        metric_count("Quiescence", self.quiescence);
+        metric_count("Total", total);
+        super::formatting::metric("Nodes per second", nps(total, elapsed_secs));
+        metric_count("PV", self.pv);
+        metric_count("Non-PV", self.non_pv);
+        metric_count("In check", self.in_check);
+        metric_count("Root", self.root);
     }
 }
 

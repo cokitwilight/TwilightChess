@@ -12,36 +12,20 @@ impl PvsStats {
             return;
         }
 
-        println!("Principal Variation Search");
-        println!(
-            "  {:<22} {:>14}",
-            "Null-window searches:",
-            count(self.null_window_searches)
+        section("Principal Variation Search");
+        metric_count("Null-window searches", self.null_window_searches);
+        metric_count("Alpha improvements", self.alpha_improvements);
+        metric_count("Full-window re-searches", self.full_window_researches);
+        metric_count("Re-search cutoffs", self.research_cutoffs);
+        metric_pct(
+            "Alpha-improvement rate",
+            self.alpha_improvements,
+            self.null_window_searches,
         );
-        println!(
-            "  {:<22} {:>14}",
-            "Alpha improvements:",
-            count(self.alpha_improvements)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Full-window searches:",
-            count(self.full_window_researches)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Re-search cutoffs:",
-            count(self.research_cutoffs)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Alpha-improve rate:",
-            pct(self.alpha_improvements, self.null_window_searches)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Full-window rate:",
-            pct(self.full_window_researches, self.null_window_searches)
+        metric_pct(
+            "Full-window re-search rate",
+            self.full_window_researches,
+            self.null_window_searches,
         );
     }
 }
@@ -53,4 +37,4 @@ impl_counter_stats_ops!(
     full_window_researches,
     research_cutoffs,
 );
-use super::{count, pct};
+use super::formatting::{metric_count, metric_pct, section};

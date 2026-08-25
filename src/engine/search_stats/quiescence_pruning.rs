@@ -1,4 +1,4 @@
-use super::{count, pct};
+use super::formatting::{metric_count, section, submetric_count, submetric_pct, subsection};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct QuiescencePruningStats {
@@ -14,36 +14,20 @@ impl QuiescencePruningStats {
             return;
         }
 
-        println!("Quiescence Pruning");
+        section("Quiescence Pruning");
         if self.delta_attempts > 0 {
-            println!("  Delta Pruning");
-            println!("    {:<20} {:>14}", "Attempts:", count(self.delta_attempts));
-            println!(
-                "    {:<20} {:>14}",
-                "Pruned moves:",
-                count(self.delta_prunes)
-            );
-            println!(
-                "    {:<20} {:>14}",
-                "Prune rate:",
-                pct(self.delta_prunes, self.delta_attempts)
-            );
+            subsection("Delta pruning");
+            submetric_count("Attempts", self.delta_attempts);
+            submetric_count("Pruned moves", self.delta_prunes);
+            submetric_pct("Prune rate", self.delta_prunes, self.delta_attempts);
         }
         if self.see_attempts > 0 {
-            println!("  SEE Pruning");
-            println!("    {:<20} {:>14}", "Attempts:", count(self.see_attempts));
-            println!("    {:<20} {:>14}", "Pruned moves:", count(self.see_prunes));
-            println!(
-                "    {:<20} {:>14}",
-                "Prune rate:",
-                pct(self.see_prunes, self.see_attempts)
-            );
+            subsection("SEE pruning");
+            submetric_count("Attempts", self.see_attempts);
+            submetric_count("Pruned moves", self.see_prunes);
+            submetric_pct("Prune rate", self.see_prunes, self.see_attempts);
         }
-        println!(
-            "  {:<22} {:>14}",
-            "Total q prunes:",
-            count(self.delta_prunes + self.see_prunes)
-        );
+        metric_count("Total pruned moves", self.delta_prunes + self.see_prunes);
     }
 }
 

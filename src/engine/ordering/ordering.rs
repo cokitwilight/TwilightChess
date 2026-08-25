@@ -1,7 +1,7 @@
 use crate::board::{Board, Move, MoveList, MoveType};
 use crate::engine::Engine;
 use crate::engine::SearchContext;
-use crate::engine::history::HistoryKey;
+use crate::engine::history::{HistoryKey, HistoryTables};
 use crate::engine::ordering::see;
 use crate::types::{Color, PieceType};
 
@@ -17,12 +17,13 @@ impl Engine {
         tt_best_move: Option<Move>,
     ) {
         moves.sort_by_score(|mv| {
-            self.move_order_score(
+            move_order_score(
                 board,
                 mv,
                 side_to_move,
                 ply,
                 context,
+                &self.history,
                 previous_best_move,
                 tt_best_move,
                 None,
@@ -35,72 +36,6 @@ impl Engine {
         moves.sort_by_score(|mv| self.q_move_order_score(board, mv, tt_best_move));
     }
 
-    pub fn move_order_score(
-        &self,
-        board: &Board,
-        mv: Move,
-        side_to_move: Color,
-        ply: usize,
-        context: &SearchContext,
-        previous_best_move: Option<Move>,
-        tt_best_move: Option<Move>,
-        see_value: Option<i32>,
-        history_key: Option<HistoryKey>,
-    ) -> i32 {
-        if Some(mv) == previous_best_move {
-            return 2_000_000;
-        }
-        if Some(mv) == tt_best_move {
-            return 1_500_000;
-        }
-
-        let is_capture = matches!(mv.kind(), MoveType::Capture | MoveType::EnPassant);
-
-        if is_capture {
-            let see_score = if let Some(value) = see_value {
-                value
-            } else {
-                see(board, mv)
-            };
-            let promo_bonus = mv.promotion().map_or(0, promotion_score);
-
-            return if see_score >= 0 {
-                // Winning/equal captures: one tier, ranked by SEE (+ promo bonus for capture-promotions)
-                900_000 + see_score + promo_bonus
-            } else {
-                // Losing captures: still below killers/history, ranked so "least bad" goes first
-                -600_000 + see_score
-            };
-            // FOR BENCHMARKING
-            // return 1_000_000;
-        }
-
-        // Quiet promotions (no capture involved)
-        if let Some(promo) = mv.promotion() {
-            // Queen promotions are strong enough to rank with good captures;
-            // under-promotions are almost always worse than a quiet move
-            return match promo {
-                PieceType::Queen => 800_000 + promotion_score(promo),
-                _ => -500_000 + promotion_score(promo),
-            };
-        }
-
-        if context.killer_moves.contains(ply, mv) {
-            return 700_000;
-        }
-
-        let piece = board
-            .piecetype_at(mv.from())
-            .expect("No piece in board in move ordering!");
-
-        let curr_key = if let Some(key) = history_key {
-            key
-        } else {
-            HistoryKey::new(side_to_move, piece, mv.to())
-        };
-
-        self.history.get_quiet_score(&context.stack, ply, curr_key)
-    }
     pub fn q_move_order_score(&self, board: &Board, mv: Move, tt_best_move: Option<Move>) -> i32 {
         if Some(mv) == tt_best_move {
             return 1_500_000;
@@ -150,6 +85,73 @@ fn mvv_lva_score(board: &Board, mv: Move) -> i32 {
     }
 
     score
+}
+
+pub fn move_order_score(
+    board: &Board,
+    mv: Move,
+    side_to_move: Color,
+    ply: usize,
+    context: &SearchContext,
+    history: &HistoryTables,
+    previous_best_move: Option<Move>,
+    tt_best_move: Option<Move>,
+    history_key: Option<HistoryKey>,
+    see_value: Option<i32>,
+) -> i32 {
+    if Some(mv) == previous_best_move {
+        return 2_000_000;
+    }
+    if Some(mv) == tt_best_move {
+        return 1_500_000;
+    }
+
+    let is_capture = matches!(mv.kind(), MoveType::Capture | MoveType::EnPassant);
+
+    if is_capture {
+        let see_score = if let Some(value) = see_value {
+            value
+        } else {
+            see(board, mv)
+        };
+        let promo_bonus = mv.promotion().map_or(0, promotion_score);
+
+        return if see_score >= 0 {
+            // Winning/equal captures: one tier, ranked by SEE (+ promo bonus for capture-promotions)
+            900_000 + see_score + promo_bonus
+        } else {
+            // Losing captures: still below killers/history, ranked so "least bad" goes first
+            -600_000 + see_score
+        };
+        // FOR BENCHMARKING
+        // return 1_000_000;
+    }
+
+    // Quiet promotions (no capture involved)
+    if let Some(promo) = mv.promotion() {
+        // Queen promotions are strong enough to rank with good captures;
+        // under-promotions are almost always worse than a quiet move
+        return match promo {
+            PieceType::Queen => 800_000 + promotion_score(promo),
+            _ => -500_000 + promotion_score(promo),
+        };
+    }
+
+    if context.killer_moves.contains(ply, mv) {
+        return 700_000;
+    }
+
+    let curr_key = if let Some(key) = history_key {
+        key
+    } else {
+        let piece = board
+            .piecetype_at(mv.from())
+            .expect("No piece in board in move ordering!");
+
+        HistoryKey::new(side_to_move, piece, mv.to())
+    };
+
+    history.get_quiet_score(&context.stack, ply, curr_key)
 }
 
 pub fn promotion_score(piece: PieceType) -> i32 {

@@ -451,12 +451,13 @@ mod tests {
 
         match_players.white.config.search.lmr.enabled = true;
         match_players.white.config.search.lmr.history_enabled = true;
+        match_players.white.config.search.lmr.history_scale = 94;
         match_players.black.config.search.lmr.enabled = true;
         match_players.black.config.search.lmr.history_enabled = false;
 
         let opening_suite = build_opening_suite();
 
-        let result = play_games(opening_suite, 8, 880, match_players, Color::White);
+        let result = play_games(opening_suite, 3, 330, match_players, Color::White);
 
         result.review().expect("IO Error");
     }

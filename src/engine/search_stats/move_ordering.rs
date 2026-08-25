@@ -1,6 +1,11 @@
 use std::ops::{AddAssign, Sub};
 
-use super::{MOVE_INDEX_BUCKETS, MoveIndexHistogram, count, pct};
+use super::{
+    MOVE_INDEX_BUCKETS, MoveIndexHistogram,
+    formatting::{
+        count, metric, metric_count, metric_pct, pct, section, submetric_count, subsection,
+    },
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MoveOrderingStats {
@@ -21,47 +26,47 @@ impl MoveOrderingStats {
             return;
         }
 
-        println!("Move Ordering");
-        println!(
-            "  {:<22} {:>14}",
-            "TT-move cutoffs:",
-            count(self.tt_move_cutoffs)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Winning captures:",
-            count(self.winning_capture_cutoffs)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Killer moves:",
-            count(self.killer_move_cutoffs)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "History moves:",
-            count(self.history_move_cutoffs)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Losing captures:",
-            count(self.losing_capture_cutoffs)
-        );
-        println!(
-            "  {:<22} {:>14.2}",
-            "Average cutoff move:",
-            self.cutoff_move_index_sum as f64 / total_cutoffs as f64
+        section("Move Ordering");
+        subsection("Beta-cutoff sources");
+        submetric_count("TT move", self.tt_move_cutoffs);
+        submetric_count("Winning/equal capture", self.winning_capture_cutoffs);
+        submetric_count("Killer move", self.killer_move_cutoffs);
+        submetric_count("Positive-history move", self.history_move_cutoffs);
+        submetric_count("Losing capture", self.losing_capture_cutoffs);
+
+        let classified_cutoffs = self.tt_move_cutoffs
+            + self.winning_capture_cutoffs
+            + self.killer_move_cutoffs
+            + self.history_move_cutoffs
+            + self.losing_capture_cutoffs;
+        submetric_count("Other", total_cutoffs.saturating_sub(classified_cutoffs));
+
+        metric(
+            "Average cutoff move",
+            format!(
+                "{:.2}",
+                self.cutoff_move_index_sum as f64 / total_cutoffs as f64
+            ),
         );
 
         let maximum = self
             .cutoff_move_index_histogram
             .highest_nonzero_bucket()
             .map_or(0, |bucket| bucket + 1);
-        println!("  {:<22} {:>14}", "Maximum cutoff move:", maximum);
+        metric("Maximum cutoff move", maximum);
+        metric_count(
+            "First-move beta cutoffs",
+            self.cutoff_move_index_histogram.bins[0],
+        );
+        metric_pct(
+            "First-move cutoff rate",
+            self.cutoff_move_index_histogram.bins[0],
+            total_cutoffs,
+        );
 
-        println!("  Cutoff Position");
+        subsection("Cutoff position distribution");
         println!(
-            "    {:>7} {:>14} {:>10} {:>12}",
+            "    {:>7} {:>12} {:>10} {:>12}",
             "Move", "Cutoffs", "Share", "Cumulative"
         );
 
@@ -80,7 +85,7 @@ impl MoveOrderingStats {
             };
 
             println!(
-                "    {:>7} {:>14} {:>10} {:>12}",
+                "    {:>7} {:>12} {:>10} {:>12}",
                 move_label,
                 count(cutoffs),
                 pct(cutoffs, total_cutoffs),

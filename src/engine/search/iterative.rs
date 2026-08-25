@@ -281,6 +281,45 @@ impl Engine {
                     .and_then(|entry| entry.best_move)
             });
 
+        // SELECTOR TESTING
+        //
+
+        // let expected = board.all_legal_moves();
+        // let mut selector = self.new_staged_move_selecter(
+        //     &board,
+        //     &mut expected.clone(),
+        //     board.side_to_move(),
+        //     0,
+        //     ctx,
+        //     previous_best_move,
+        //     tt_best_move,
+        // );
+        // let mut returned = Vec::new();
+
+        // while let Some(scored) = selector.get_next(
+        //     &board,
+        //     board.side_to_move(),
+        //     0,
+        //     ctx,
+        //     &self.history,
+        //     previous_best_move,
+        //     tt_best_move,
+        // ) {
+        //     returned.push(scored.mv);
+        // }
+
+        // assert_eq!(returned.len(), expected.len());
+
+        // for mv in expected.iter() {
+        //     assert_eq!(
+        //         returned.iter().filter(|&&found| found == *mv).count(),
+        //         1,
+        //         "move must be returned exactly once: {mv:?}",
+        //     );
+        // }
+
+        // SELECTOR TESTING
+
         self.order_moves(
             board,
             &mut all_moves,

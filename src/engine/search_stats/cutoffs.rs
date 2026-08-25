@@ -1,4 +1,7 @@
-use super::{MoveStats, NodeStats, count, pct};
+use super::{
+    MoveStats, NodeStats,
+    formatting::{metric_count, metric_pct, section, submetric_count, submetric_pct, subsection},
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CutoffStats {
@@ -11,81 +14,47 @@ pub struct CutoffStats {
 
 impl CutoffStats {
     pub(super) fn print(&self, nodes: &NodeStats, moves: &MoveStats) {
-        if self.beta == 0 && self.stand_pat == 0 {
+        if self.beta == 0 && self.quiescence_beta == 0 && self.stand_pat == 0 {
             return;
         }
 
-        println!("Cutoffs");
-        println!("  {:<22} {:>14}", "Beta cutoffs:", count(self.beta));
-        if self.first_move_beta > 0 && self.beta > 0 {
-            println!(
-                "  {:<22} {:>14}",
-                "First Move Beta cutoffs:",
-                count(self.first_move_beta)
-            );
-            println!(
-                "  {:<22} {:>14}",
-                "First Move Beta / Beta:",
-                pct(self.first_move_beta, self.beta)
-            );
-        }
-
-        println!(
-            "  {:<22} {:>14}",
-            "Q Beta cutoffs:",
-            count(self.quiescence_beta)
-        );
-        if self.first_move_quiescence_beta > 0 && self.quiescence_beta > 0 {
-            println!(
-                "  {:<22} {:>14}",
-                "First Q Move Beta cutoffs:",
-                count(self.first_move_quiescence_beta)
-            );
-            println!(
-                "  {:<22} {:>14}",
-                "First Move Q Beta / Q Beta:",
-                pct(self.first_move_quiescence_beta, self.quiescence_beta)
-            );
-        }
-
-        println!(
-            "  {:<22} {:>14}",
-            "Stand-pat cutoffs:",
-            count(self.stand_pat)
-        );
+        section("Cutoffs");
+        subsection("Main search");
+        submetric_count("Beta cutoffs", self.beta);
         if moves.main_searched > 0 {
-            println!(
-                "  {:<22} {:>14}",
-                "Beta / main moves:",
-                pct(self.beta, moves.main_searched)
-            );
-        }
-        if nodes.quiescence > 0 {
-            println!(
-                "  {:<22} {:>14}",
-                "Q-Beta / q moves:",
-                pct(self.quiescence_beta, moves.quiescence_searched)
-            );
-            println!(
-                "  {:<22} {:>14}",
-                "Stand-pat / qnodes:",
-                pct(self.stand_pat, nodes.quiescence)
+            submetric_pct(
+                "Cutoff rate / searched moves",
+                self.beta,
+                moves.main_searched,
             );
         }
 
-        println!("Total");
-        println!(
-            "  {:<22} {:>14}",
-            "Beta cutoffs:",
-            count(self.beta + self.quiescence_beta)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Beta / Move",
-            pct(
-                self.beta + self.quiescence_beta,
-                moves.main_searched + moves.quiescence_searched,
-            )
+        subsection("Quiescence");
+        submetric_count("Beta cutoffs", self.quiescence_beta);
+        submetric_count("First-move beta cutoffs", self.first_move_quiescence_beta);
+        submetric_count("Stand-pat cutoffs", self.stand_pat);
+        if nodes.quiescence > 0 {
+            submetric_pct(
+                "Beta rate / searched moves",
+                self.quiescence_beta,
+                moves.quiescence_searched,
+            );
+            submetric_pct("Stand-pat rate / qnodes", self.stand_pat, nodes.quiescence);
+        }
+        if self.quiescence_beta > 0 {
+            submetric_pct(
+                "First-move beta rate",
+                self.first_move_quiescence_beta,
+                self.quiescence_beta,
+            );
+        }
+
+        let total_beta = self.beta + self.quiescence_beta;
+        metric_count("Combined beta cutoffs", total_beta);
+        metric_pct(
+            "Combined beta rate",
+            total_beta,
+            moves.main_searched + moves.quiescence_searched,
         );
     }
 }

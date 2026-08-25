@@ -1,4 +1,4 @@
-use super::{count, pct};
+use super::formatting::{metric, metric_count, metric_pct, section};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SingularExtensionStats {
@@ -20,48 +20,30 @@ impl SingularExtensionStats {
             return;
         }
 
-        println!("Singular Extensions");
-        println!("  {:<22} {:>14}", "Attempts:", count(self.attempts));
-        println!("  {:<22} {:>14}", "Extensions:", count(self.extensions));
-        println!("  {:<22} {:>14}", "Alt fail-highs:", count(self.fail_highs));
-        println!(
-            "  {:<22} {:>14}",
-            "No alternatives:",
-            count(self.no_alternatives)
-        );
-        println!(
-            "  {:<22} {:>14}",
-            "Verification nodes:",
-            count(self.verification_nodes)
-        );
+        section("Singular Extensions");
+        metric_count("Attempts", self.attempts);
+        metric_count("Extensions", self.extensions);
+        metric_count("Alternative fail-highs", self.fail_highs);
+        metric_count("No alternatives", self.no_alternatives);
+        metric_count("Verification nodes", self.verification_nodes);
 
         if self.attempts > 0 {
-            println!(
-                "  {:<22} {:>14}",
-                "Extension rate:",
-                pct(self.extensions, self.attempts)
-            );
-            println!(
-                "  {:<22} {:>14}",
-                "Fail-high rate:",
-                pct(self.fail_highs, self.attempts)
-            );
-            println!(
-                "  {:<22} {:>14}",
-                "No-alt rate:",
-                pct(self.no_alternatives, self.attempts)
-            );
-            println!(
-                "  {:<22} {:>14.2}",
-                "Nodes / attempt:",
-                self.verification_nodes as f64 / self.attempts as f64
+            metric_pct("Extension rate", self.extensions, self.attempts);
+            metric_pct("Alternative fail-high rate", self.fail_highs, self.attempts);
+            metric_pct("No-alternative rate", self.no_alternatives, self.attempts);
+            metric(
+                "Verification nodes / attempt",
+                format!(
+                    "{:.2}",
+                    self.verification_nodes as f64 / self.attempts as f64
+                ),
             );
         }
         if total_nodes > 0 {
-            println!(
-                "  {:<22} {:>14}",
-                "Verification share:",
-                pct(self.verification_nodes, total_nodes)
+            metric_pct(
+                "Verification-node share",
+                self.verification_nodes,
+                total_nodes,
             );
         }
     }

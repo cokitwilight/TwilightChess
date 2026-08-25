@@ -62,7 +62,7 @@ pub use singular_extensions::SingularExtensionStats;
 pub use terminal::TerminalStats;
 pub use transposition_table::TranspositionTableStats;
 
-use formatting::{count, nps, pct};
+use formatting::{count, report_footer, report_header, section};
 
 /// Statistics collected during a search, grouped by the feature that owns them.
 ///
@@ -96,9 +96,7 @@ impl SearchStats {
     }
 
     pub fn print_all(&self, depth: u16, elapsed_secs: f64) {
-        println!();
-        println!("Depth {}", depth);
-        println!("────────────────────────────────────────────");
+        report_header(depth);
 
         self.print_nodes(elapsed_secs);
         self.print_moves();
@@ -116,7 +114,7 @@ impl SearchStats {
         self.print_returns();
         self.print_tts();
 
-        println!("────────────────────────────────────────────");
+        report_footer();
     }
 
     pub fn print_nodes(&self, elapsed_secs: f64) {
@@ -144,7 +142,7 @@ impl SearchStats {
     }
 
     pub fn print_history(&self) {
-        self.history_stats.print(self.cutoff_stats.beta);
+        self.history_stats.print();
     }
 
     pub fn print_reductions(&self) {
@@ -159,7 +157,7 @@ impl SearchStats {
             return;
         }
 
-        println!("Main Search Pruning");
+        section("Main-Search Pruning");
         self.rfp_stats.print();
         self.fut_stats.print();
         self.null_move_stats.print();
@@ -318,8 +316,20 @@ mod tests {
         stats.aspiration_stats.successful_first_windows = 1;
         stats.pvs_stats.null_window_searches = 4;
         stats.pvs_stats.full_window_researches = 1;
-        stats.move_ordering_stats.cutoff_move_index_sum = 3;
+        stats.move_stats.main_searched = 8;
+        stats.move_stats.quiescence_searched = 4;
+        stats.cutoff_stats.beta = 2;
+        stats.cutoff_stats.quiescence_beta = 2;
+        stats.cutoff_stats.first_move_beta = 1;
+        stats.cutoff_stats.first_move_quiescence_beta = 1;
+        stats.cutoff_stats.stand_pat = 1;
+        stats.move_ordering_stats.cutoff_move_index_sum = 4;
+        stats.move_ordering_stats.cutoff_move_index_histogram.bins[0] = 1;
         stats.move_ordering_stats.cutoff_move_index_histogram.bins[2] = 1;
+        stats.move_ordering_stats.killer_move_cutoffs = 1;
+        stats.history_stats.bonus_updates = 2;
+        stats.history_stats.malus_updates = 1;
+        stats.history_stats.continuation_bonus_updates = 1;
         stats.lmr_stats.attempts = 2;
         stats.lmr_stats.reduction_histogram.bins[1] = 2;
         stats.lmr_stats.attempts_by_depth.bins[4] = 2;
