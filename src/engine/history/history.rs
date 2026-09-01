@@ -52,10 +52,10 @@ impl HistoryTables {
                 score += self.continuation.get(2, prev_key, curr_key) / 2;
             }
 
-            if ply > 2 {
-                if let Some(prev_key) = stack[ply - 3].history_index {
-                    score += self.continuation.get(4, prev_key, curr_key) / 2;
-                }
+            if ply > 2
+                && let Some(prev_key) = stack[ply - 3].history_index
+            {
+                score += self.continuation.get(4, prev_key, curr_key) / 2;
             }
         }
 
@@ -89,12 +89,12 @@ impl HistoryTables {
                 self.continuation.add_bonus(2, prev_key, curr_key, depth);
             }
 
-            if ply > 2 {
-                if let Some(prev_key) = context.stack[ply - 3].history_index {
-                    context.stats.history_stats.continuation_bonus_updates += 1;
+            if ply > 2
+                && let Some(prev_key) = context.stack[ply - 3].history_index
+            {
+                context.stats.history_stats.continuation_bonus_updates += 1;
 
-                    self.continuation.add_bonus(4, prev_key, curr_key, depth);
-                }
+                self.continuation.add_bonus(4, prev_key, curr_key, depth);
             }
         }
     }
@@ -126,12 +126,12 @@ impl HistoryTables {
                 self.continuation.add_malus(2, prev_key, curr_key, depth);
             }
 
-            if ply > 2 {
-                if let Some(prev_key) = context.stack[ply - 3].history_index {
-                    context.stats.history_stats.continuation_malus_updates += 1;
+            if ply > 2
+                && let Some(prev_key) = context.stack[ply - 3].history_index
+            {
+                context.stats.history_stats.continuation_malus_updates += 1;
 
-                    self.continuation.add_malus(4, prev_key, curr_key, depth);
-                }
+                self.continuation.add_malus(4, prev_key, curr_key, depth);
             }
         }
     }

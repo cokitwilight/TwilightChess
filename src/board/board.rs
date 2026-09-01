@@ -1,14 +1,9 @@
-use crate::bitboard::{
-    Bitboard, Square, bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square,
-    rook_attacks, square_to_algebraic,
-};
+use crate::bitboard::{Bitboard, Square, bit, king_in_check, square_attacked, square_to_algebraic};
 use crate::board::MoveList;
-use crate::engine::search::search::is_insufficient_material;
-use crate::eval::phase::MAX_PHASE;
+use crate::engine::search::is_insufficient_material;
+use crate::eval::MAX_PHASE;
 use crate::game::GameState;
-use crate::moves::legal::{all_legal_capture_moves, all_legal_moves_at};
-use crate::moves::pseudo::all_pseudo_capture_moves;
-use crate::moves::{all_legal_moves, all_pseudo_moves};
+use crate::moves::{all_legal_capture_moves, all_legal_moves, all_legal_moves_at};
 use crate::types::{COLORS, Color, PIECE_TYPES, Piece, PieceType};
 
 pub const WHITE_KINGSIDE: u8 = 0b0001;
@@ -203,40 +198,16 @@ impl Board {
     // **** MOVE GENERATION ****
     // *************************
 
-    pub fn legal_moves(&mut self, color: Color) -> MoveList {
-        let mut legal_moves = MoveList::new();
-        all_legal_moves(self, color, &mut legal_moves);
-        legal_moves
-    }
-
     pub fn all_legal_moves(&mut self) -> MoveList {
         let mut legal_moves = MoveList::new();
         all_legal_moves(self, self.side_to_move, &mut legal_moves);
         legal_moves
     }
 
-    pub fn all_pseudo_moves(&mut self) -> MoveList {
-        let mut pseudo_moves = MoveList::new();
-        all_pseudo_moves(self, self.side_to_move, &mut pseudo_moves);
-        pseudo_moves
-    }
-
     pub fn all_legal_capture_moves(&mut self) -> MoveList {
         let mut captures = MoveList::new();
         all_legal_capture_moves(self, self.side_to_move, &mut captures);
         captures
-    }
-
-    pub fn all_pseudo_capture_moves(&mut self) -> MoveList {
-        let mut pseudo_moves = MoveList::new();
-        all_pseudo_capture_moves(self, self.side_to_move, &mut pseudo_moves);
-        pseudo_moves
-    }
-
-    pub fn legal_moves_at(&mut self, sq: Square, color: Color) -> MoveList {
-        let mut legal_moves = MoveList::new();
-        all_legal_moves_at(self, color, sq, &mut legal_moves);
-        legal_moves
     }
 
     pub fn all_legal_moves_at(&mut self, sq: Square) -> MoveList {
@@ -250,7 +221,7 @@ impl Board {
 
     pub fn game_state_basic(&mut self) -> GameState {
         let side_to_move = self.side_to_move;
-        let legal_moves = self.legal_moves(side_to_move);
+        let legal_moves = self.all_legal_moves();
 
         if legal_moves.is_empty() {
             if self.in_check(side_to_move) {
@@ -278,71 +249,11 @@ impl Board {
     // *************************
 
     pub fn in_check(&self, color: Color) -> bool {
-        let king = self.pieces[color.idx()][PieceType::King.idx()];
-        debug_assert!(king != 0, "No king found for {:?}", color);
-
-        debug_assert!(
-            king.count_ones() == 1,
-            "Expected exactly one king for {:?}, found {}",
-            color,
-            king.count_ones()
-        );
-
-        let king_sq = king.trailing_zeros() as Square;
-        self.square_attacked_by(king_sq, color.opposite())
+        king_in_check(&self.pieces, self.all_occupancy(), color)
     }
 
-    pub fn square_attacked_by(&self, sq: Square, by: Color) -> bool {
-        let occupied = self.all_occupancy();
-
-        let pawns = self.pieces(by, PieceType::Pawn);
-        let knights = self.pieces(by, PieceType::Knight);
-        let bishops = self.pieces(by, PieceType::Bishop);
-        let rooks = self.pieces(by, PieceType::Rook);
-        let queens = self.pieces(by, PieceType::Queen);
-        let king = self.pieces(by, PieceType::King);
-
-        let pawn_attackers = match by {
-            Color::White => pawn_attacks_from_square(sq, Color::Black) & pawns,
-            Color::Black => pawn_attacks_from_square(sq, Color::White) & pawns,
-        };
-
-        if pawn_attackers != 0 {
-            return true;
-        }
-
-        // -------------------------
-        // Knights
-        // -------------------------
-        if knight_attacks(sq) & knights != 0 {
-            return true;
-        }
-
-        // -------------------------
-        // Kings
-        // -------------------------
-        if king_attacks(sq) & king != 0 {
-            return true;
-        }
-
-        // -------------------------
-        // Bishops / Queens
-        // -------------------------
-        let diagonal_attackers = bishops | queens;
-
-        if bishop_attacks(sq, occupied) & diagonal_attackers != 0 {
-            return true;
-        }
-        // -------------------------
-        // Rooks / Queens
-        // -------------------------
-        let straight_attackers = rooks | queens;
-
-        if rook_attacks(sq, occupied) & straight_attackers != 0 {
-            return true;
-        }
-
-        false
+    pub fn square_attacked_by(&self, by: Color, sq: Square) -> bool {
+        square_attacked(&self.pieces, self.all_occupancy(), sq, by)
     }
 
     pub fn piece_at(&self, sq: Square) -> Option<Piece> {

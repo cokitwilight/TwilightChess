@@ -180,8 +180,8 @@ fn parse_castling_rights(s: &str) -> Result<u8, String> {
 #[cfg(test)]
 mod tests {
     use crate::board::{Board, MoveType};
+    use crate::eval::calculate_phase;
     use crate::eval::material::calculate_material;
-    use crate::eval::phase::calculate_phase;
     use crate::eval::pst::{eg_pst_bonus, mg_pst_bonus};
 
     fn assert_material_matches_recompute(board: &Board) {
@@ -259,7 +259,7 @@ mod tests {
             let original_mg_pst = board.mg_pst();
             let original_eg_pst = board.eg_pst();
 
-            let moves = board.legal_moves(board.side_to_move());
+            let moves = board.all_legal_moves();
 
             for mv in moves.iter().copied() {
                 let undo = board.make_move(mv);
@@ -316,7 +316,7 @@ mod tests {
 
         for (name, fen, expected_kind) in special_positions {
             let mut board = Board::from_fen(fen).unwrap();
-            let moves = board.legal_moves(board.side_to_move());
+            let moves = board.all_legal_moves();
 
             let mut saw_expected_move = false;
 

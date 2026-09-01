@@ -1,6 +1,6 @@
 use crate::bitboard::{file_char, file_of, rank_char, rank_of, square_to_algebraic};
 use crate::board::{Board, Move, MoveType};
-use crate::game::{Game, GameState, game::MoveError};
+use crate::game::{Game, GameState, MoveError};
 use crate::types::{Color, Piece, PieceType};
 
 #[derive(Clone, Debug)]
@@ -181,7 +181,7 @@ pub fn play_move_as_san(game: &mut Game, mv: Move) -> Result<String, MoveError> 
 }
 
 fn san_disambiguation(board: &mut Board, mv: Move, moving_piece: Piece) -> String {
-    let legal_moves = board.legal_moves(board.side_to_move);
+    let legal_moves = board.all_legal_moves();
 
     let mut same_file_conflict = false;
     let mut same_rank_conflict = false;

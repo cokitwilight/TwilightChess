@@ -4,8 +4,7 @@ use crate::bitboard::Square;
 use crate::board::{MoveList, MoveType};
 use crate::game::Game;
 use crate::types::{Color, Piece, PieceType};
-use crate::ui::BoardOrientation;
-use crate::ui::input::{screen_pos_to_square, square_to_rect};
+use crate::ui::{BoardOrientation, screen_pos_to_square, square_to_rect};
 
 #[derive(Debug, Clone, Copy)]
 pub struct BoardColors {
@@ -418,13 +417,5 @@ fn piece_to_unicode(piece: Piece) -> &'static str {
         (Color::Black, PieceType::Rook) => "♜",
         (Color::Black, PieceType::Queen) => "♛",
         (Color::Black, PieceType::King) => "♚",
-    }
-}
-
-#[allow(dead_code)]
-fn piece_color(color: Color) -> egui::Color32 {
-    match color {
-        Color::White => BOARD_COLORS.white_piece,
-        Color::Black => BOARD_COLORS.black_piece,
     }
 }

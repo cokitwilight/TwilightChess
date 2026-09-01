@@ -1,7 +1,7 @@
-use super::{
-    MoveStats, NodeStats,
-    formatting::{metric_count, metric_pct, section, submetric_count, submetric_pct, subsection},
+use crate::engine::search_stats::formatting::{
+    metric_count, metric_pct, section, submetric_count, submetric_pct, subsection,
 };
+use crate::engine::search_stats::{MoveStats, NodeStats};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CutoffStats {

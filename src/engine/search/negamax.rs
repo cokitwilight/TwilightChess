@@ -1,14 +1,13 @@
 use crate::board::{Board, Move, MoveType, null_move_reduction};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::history::HistoryKey;
+use crate::engine::ordering::ScoredMove;
 use crate::engine::ordering::see;
-use crate::engine::ordering::staged::ScoredMove;
-use crate::engine::pruning::lmr::LMR_SCALE_I32;
-use crate::engine::search::search::is_insufficient_material;
-use crate::engine::search_context::PickerFrame;
+use crate::engine::pruning::LMR_SCALE_I32;
+use crate::engine::search::is_insufficient_material;
 use crate::engine::search_stats::{MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS};
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
-use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, SearchStackEntry};
+use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, PickerFrame, SearchStackEntry};
 use crate::engine::{SearchContext, SearchOptions};
 use crate::eval::evaluation_for_turn;
 use crate::types::PieceType;
@@ -42,7 +41,7 @@ impl Engine {
             context.stats.node_stats.non_pv += 1;
         }
 
-        if ply >= MAX_PLY as usize - 1 {
+        if ply >= MAX_PLY - 1 {
             context.stats.terminal_stats.max_ply_returns += 1;
             return evaluation_for_turn(board);
         }
@@ -263,7 +262,7 @@ impl Engine {
             tt_best_move
         };
 
-        let mut move_picker = self.new_staged_move_selecter(
+        let mut move_picker = self.new_staged_move_selector(
             0,
             board,
             &mut moves,
@@ -274,16 +273,6 @@ impl Engine {
             None,
             ordering_tt_move,
         );
-
-        // self.order_moves(
-        //     board,
-        //     &mut moves,
-        //     side_to_move,
-        //     ply,
-        //     context,
-        //     None,
-        //     ordering_tt_move,
-        // );
 
         let mut max_eval = NEG_INF;
         let mut best_move: Option<Move> = None;

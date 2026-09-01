@@ -3,10 +3,13 @@ use crate::bitboard::{
     pop_lsb, queen_attacks, rook_attacks,
 };
 use crate::board::Board;
-use crate::eval::{
-    king::king_eval, knight::knight_eval, mobility::mobility_score, pawn::pawn_eval,
-    phase::MAX_PHASE, sliders::sliders_eval,
-};
+use crate::eval::MAX_PHASE;
+use crate::eval::king::king_eval;
+use crate::eval::knight::knight_eval;
+pub use crate::eval::lookup::KING_DANGER_TABLE;
+use crate::eval::mobility::mobility_score;
+use crate::eval::pawn::pawn_eval;
+use crate::eval::sliders::sliders_eval;
 use crate::types::{COLORS, Color, PieceType};
 
 pub const CENTER_SQUARES: Bitboard = 0x0000_3C3C_3C3C_0000;
@@ -16,14 +19,6 @@ pub const CENTER_4: Bitboard = 0x0000_0018_1800_0000;
 pub const BLACK_SQUARES: Bitboard = 0xAA55_AA55_AA55_AA55;
 
 pub const WHITE_SQUARES: Bitboard = !BLACK_SQUARES;
-
-pub const KING_DANGER_TABLE: [i32; 101] = [
-    0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 27, 30,
-    33, 36, 39, 42, 46, 50, 54, 58, 62, 67, 72, 77, 82, 87, 93, 99, 105, 111, 118, 125, 132, 139,
-    146, 154, 162, 170, 178, 187, 196, 205, 214, 224, 234, 244, 254, 265, 276, 287, 298, 310, 322,
-    334, 346, 359, 372, 385, 398, 412, 426, 440, 454, 469, 484, 499, 514, 530, 546, 562, 578, 595,
-    612, 629, 646, 664, 682, 700, 718, 737, 756, 775, 794, 814, 834,
-];
 
 pub const MAX_DANGER: usize = 100;
 
@@ -84,7 +79,7 @@ impl EvalInfo {
 
             let mut pawns = board.pieces(color, PieceType::Pawn);
             while let Some(sq) = pop_lsb(&mut pawns) {
-                let attacks = pawn_attacks_from_square(sq, color);
+                let attacks = pawn_attacks_from_square(color, sq);
 
                 add_pressure(color, attacks, king_zone, &mut pressure);
 

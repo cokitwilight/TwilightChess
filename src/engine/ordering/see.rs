@@ -1,8 +1,8 @@
 use std::cmp::max;
 
 use crate::bitboard::{
-    Bitboard, Square, bishop_attacks, bit, file_of, king_attacks, knight_attacks,
-    pawn_attacks_from_square, pop_lsb, rank_of, rook_attacks, square,
+    Bitboard, Square, attackers_to, bishop_attacks, bit, file_of, king_in_check, pop_lsb, rank_of,
+    rook_attacks, square,
 };
 use crate::board::{Board, Move, MoveType};
 use crate::types::{Color, PieceType};
@@ -78,8 +78,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
     occupied |= bit(target); // the capturing pawn lands on the empty ep target
     all_pieces[moving_piece.color.idx()][moving_piece.kind.idx()] &= !from_mask;
 
-    let mut attackers = attackers_to_occ(&all_pieces, target, Color::White, occupied)
-        | attackers_to_occ(&all_pieces, target, Color::Black, occupied);
+    let mut attackers = attackers_to(&all_pieces, occupied, target, Color::White)
+        | attackers_to(&all_pieces, occupied, target, Color::Black);
 
     let mut side_to_move = board.side_to_move().opposite();
 
@@ -122,7 +122,7 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
             occupied &= !attack_mask;
             all_pieces[side_to_move.idx()][PieceType::Pawn.idx()] &= !attack_mask;
 
-            if see_in_check(&all_pieces, occupied, side_to_move) {
+            if king_in_check(&all_pieces, occupied, side_to_move) {
                 // revert changes
                 occupied |= attack_mask;
                 all_pieces[side_to_move.idx()][PieceType::Pawn.idx()] |= attack_mask;
@@ -166,7 +166,7 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
             all_pieces[side_to_move.idx()][PieceType::Knight.idx()] &= !attacker_mask;
             occupied &= !attacker_mask;
 
-            if see_in_check(&all_pieces, occupied, side_to_move) {
+            if king_in_check(&all_pieces, occupied, side_to_move) {
                 // revert changes
                 all_pieces[side_to_move.idx()][PieceType::Knight.idx()] |= attacker_mask;
                 occupied |= attacker_mask;
@@ -193,7 +193,7 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
             all_pieces[side_to_move.idx()][PieceType::Bishop.idx()] &= !attacker_mask;
             occupied &= !attacker_mask;
 
-            if see_in_check(&all_pieces, occupied, side_to_move) {
+            if king_in_check(&all_pieces, occupied, side_to_move) {
                 // revert changes
                 all_pieces[side_to_move.idx()][PieceType::Bishop.idx()] |= attacker_mask;
                 occupied |= attacker_mask;
@@ -224,7 +224,7 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
             all_pieces[side_to_move.idx()][PieceType::Rook.idx()] &= !attacker_mask;
             occupied &= !attacker_mask;
 
-            if see_in_check(&all_pieces, occupied, side_to_move) {
+            if king_in_check(&all_pieces, occupied, side_to_move) {
                 // revert changes
                 all_pieces[side_to_move.idx()][PieceType::Rook.idx()] |= attacker_mask;
                 occupied |= attacker_mask;
@@ -256,7 +256,7 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
             all_pieces[side_to_move.idx()][PieceType::Queen.idx()] &= !attacker_mask;
             occupied &= !attacker_mask;
 
-            if see_in_check(&all_pieces, occupied, side_to_move) {
+            if king_in_check(&all_pieces, occupied, side_to_move) {
                 all_pieces[side_to_move.idx()][PieceType::Queen.idx()] |= attacker_mask;
                 occupied |= attacker_mask;
 
@@ -333,32 +333,6 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
     gains[0] - value
 }
 
-fn attackers_to_occ(
-    all_pieces: &[[Bitboard; 6]; 2],
-    target: Square,
-    by: Color,
-    occupied: Bitboard,
-) -> Bitboard {
-    let pawns = all_pieces[by.idx()][PieceType::Pawn.idx()];
-    let knights = all_pieces[by.idx()][PieceType::Knight.idx()];
-    let bishops = all_pieces[by.idx()][PieceType::Bishop.idx()];
-    let rooks = all_pieces[by.idx()][PieceType::Rook.idx()];
-    let queens = all_pieces[by.idx()][PieceType::Queen.idx()];
-    let king = all_pieces[by.idx()][PieceType::King.idx()];
-
-    let pawn_attackers = pawn_attacks_from_square(target, by.opposite()) & pawns;
-
-    let knight_attackers = knight_attacks(target) & knights;
-
-    let bishop_attackers = bishop_attacks(target, occupied) & (bishops | queens);
-
-    let rook_attackers = rook_attacks(target, occupied) & (rooks | queens);
-
-    let king_attackers = king_attacks(target) & king;
-
-    pawn_attackers | knight_attackers | bishop_attackers | rook_attackers | king_attackers
-}
-
 fn add_xray_attacks(
     target: Square,
     attackers: Bitboard,
@@ -371,73 +345,6 @@ fn add_xray_attacks(
         | (rook_attacks(target, occupied) & straights);
 
     attackers & occupied
-}
-
-fn see_in_check(pieces: &[[Bitboard; 6]; 2], occupied: Bitboard, color: Color) -> bool {
-    let king = pieces[color.idx()][PieceType::King.idx()];
-    debug_assert!(king != 0, "No king found for {:?}", color);
-
-    debug_assert!(
-        king.count_ones() == 1,
-        "Expected exactly one king for {:?}, found {}",
-        color,
-        king.count_ones()
-    );
-
-    let king_sq = king.trailing_zeros() as Square;
-    square_attacked(pieces, occupied, king_sq, color.opposite())
-}
-
-fn square_attacked(pieces: &[[Bitboard; 6]; 2], occupied: Bitboard, sq: Square, by: Color) -> bool {
-    // only check sliders for now
-    let pawns = pieces[by.idx()][PieceType::Pawn.idx()];
-    let knights = pieces[by.idx()][PieceType::Knight.idx()];
-    let bishops = pieces[by.idx()][PieceType::Bishop.idx()];
-    let rooks = pieces[by.idx()][PieceType::Rook.idx()];
-    let queens = pieces[by.idx()][PieceType::Queen.idx()];
-    let king = pieces[by.idx()][PieceType::King.idx()];
-
-    let pawn_attackers = match by {
-        Color::White => pawn_attacks_from_square(sq, Color::Black) & pawns,
-        Color::Black => pawn_attacks_from_square(sq, Color::White) & pawns,
-    };
-
-    if pawn_attackers != 0 {
-        return true;
-    }
-
-    // -------------------------
-    // Knights
-    // -------------------------
-    if knight_attacks(sq) & knights != 0 {
-        return true;
-    }
-
-    // -------------------------
-    // Kings
-    // -------------------------
-    if king_attacks(sq) & king != 0 {
-        return true;
-    }
-
-    // -------------------------
-    // Bishops / Queens
-    // -------------------------
-    let diagonal_attackers = bishops | queens;
-
-    if bishop_attacks(sq, occupied) & diagonal_attackers != 0 {
-        return true;
-    }
-    // -------------------------
-    // Rooks / Queens
-    // -------------------------
-    let straight_attackers = rooks | queens;
-
-    if rook_attacks(sq, occupied) & straight_attackers != 0 {
-        return true;
-    }
-
-    false
 }
 
 // regular see knight can take. Target square is D5

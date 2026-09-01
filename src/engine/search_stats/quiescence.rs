@@ -33,4 +33,4 @@ impl_counter_stats_ops!(
     max_ply_returns,
     check_ply_limit_returns,
 );
-use super::formatting::{metric_count, section};
+use crate::engine::search_stats::formatting::{metric_count, section};

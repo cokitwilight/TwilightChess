@@ -1,4 +1,6 @@
-use crate::bitboard::{Square, bit, file_of, rank_of, square};
+use crate::bitboard::{
+    Square, bit, file_distance, file_of, rank_of, same_file, square, square_distance,
+};
 use crate::board::{
     BLACK_KINGSIDE, BLACK_QUEENSIDE, Board, Move, MoveType, UndoMove, WHITE_KINGSIDE,
     WHITE_QUEENSIDE,
@@ -307,21 +309,6 @@ impl Board {
         self.add_piece_increment(color, PieceType::Rook, rook_to);
         // self.add_piece_increment(color, PieceType::King, king_to);
     }
-}
-
-#[inline]
-fn same_file(a: Square, b: Square) -> bool {
-    file_of(a) == file_of(b)
-}
-
-#[inline]
-fn square_distance(a: Square, b: Square) -> u8 {
-    a.abs_diff(b)
-}
-
-#[inline]
-fn file_distance(a: Square, b: Square) -> u8 {
-    file_of(a).abs_diff(file_of(b))
 }
 
 #[inline]

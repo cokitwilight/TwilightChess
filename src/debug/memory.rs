@@ -1,12 +1,8 @@
 #[test]
 pub fn print_memory_sizes() {
-    use std::mem::size_of;
-
-    use crate::{
-        board::{Move, MoveType},
-        engine::ordering::staged::ScoredMove,
-        types::PieceType,
-    };
+    use crate::board::{Move, MoveType};
+    use crate::engine::ordering::ScoredMove;
+    use crate::types::PieceType;
     println!("Move: {}", std::mem::size_of::<Move>());
     println!("MoveType: {}", std::mem::size_of::<MoveType>());
     println!(

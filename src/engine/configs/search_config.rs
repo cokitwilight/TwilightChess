@@ -1,6 +1,6 @@
 use crate::engine::configs::{
     AspirationConfig, DeltaPruneConfig, FutilityConfig, LMRConfig, NullMoveConfig, RFPConfig,
-    SEEConfig, singular_config::SingularConfig,
+    SEEConfig, SingularConfig,
 };
 
 #[derive(Clone, Copy, Debug)]

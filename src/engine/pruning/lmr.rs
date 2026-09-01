@@ -1,4 +1,5 @@
-use crate::engine::{MAX_PLY, configs::LMRConfig};
+use crate::engine::MAX_PLY;
+use crate::engine::configs::LMRConfig;
 
 const MAX_MOVES: usize = 128;
 

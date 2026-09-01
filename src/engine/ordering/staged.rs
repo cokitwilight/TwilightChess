@@ -1,11 +1,7 @@
 use crate::board::{Board, Move, MoveList, MoveType};
 use crate::engine::history::{HistoryKey, HistoryTables};
-use crate::engine::ordering::{
-    ordering::{move_order_score, promotion_score},
-    see,
-};
-use crate::engine::search_context::PickerFrame;
-use crate::engine::{Engine, SearchContext};
+use crate::engine::ordering::{move_order_score, promotion_score, see};
+use crate::engine::{Engine, PickerFrame, SearchContext};
 use crate::types::{Color, PieceType};
 
 const MAIN_STAGES: &[Stage; 8] = &[
@@ -125,7 +121,7 @@ pub struct StagedMoveSelector {
 }
 
 impl Engine {
-    pub(crate) fn new_staged_move_selecter(
+    pub(crate) fn new_staged_move_selector(
         &self,
         mode: u8,
         board: &Board,
@@ -391,7 +387,7 @@ impl StagedMoveSelector {
                 }
             }
             _ => {
-                if self.remaining.len() == 0 {
+                if self.remaining.is_empty() {
                     panic!(
                         "Recompute Staged called with self.remaining.len() == 0! Current stage: {:?}",
                         self.current_stage
@@ -543,7 +539,7 @@ mod tests {
         let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.hash()]);
 
         let mut parent_moves = expected;
-        let mut parent = engine.new_staged_move_selecter(
+        let mut parent = engine.new_staged_move_selector(
             0,
             &board,
             &mut parent_moves,
@@ -565,7 +561,7 @@ mod tests {
         // This models singular verification: the chess ply is unchanged, but the
         // nested search receives the next picker frame and must not reset its parent.
         let mut nested_moves = expected;
-        let mut nested = engine.new_staged_move_selecter(
+        let mut nested = engine.new_staged_move_selector(
             0,
             &board,
             &mut nested_moves,

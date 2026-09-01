@@ -1,4 +1,4 @@
-use crate::bitboard::{Square, file_of, rank_of, square};
+use crate::bitboard::{Square, file_distance, file_of, rank_of, square};
 use crate::board::{Board, Move, MoveType};
 use crate::types::{Color, PieceType};
 
@@ -58,7 +58,7 @@ impl Board {
             self.add_piece(cap_color, cap_piece, cap_sq);
         }
 
-        self.rebuild_occupancy();
+        // self.rebuild_occupancy();  // HOTSPOT. TRY AND MAKE INCREMENTAL
 
         self.hash = undo.old_hash;
         debug_assert_eq!(
@@ -87,9 +87,4 @@ impl Board {
         self.remove_piece(color, PieceType::Rook, rook_from);
         self.add_piece(color, PieceType::Rook, rook_to);
     }
-}
-
-#[inline]
-fn file_distance(a: Square, b: Square) -> u8 {
-    file_of(a).abs_diff(file_of(b))
 }

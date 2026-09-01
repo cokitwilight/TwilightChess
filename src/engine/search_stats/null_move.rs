@@ -1,6 +1,6 @@
-use super::{
-    DepthHistogram,
-    formatting::{print_depth_histogram, submetric_count, submetric_pct, subsection},
+use crate::engine::search_stats::DepthHistogram;
+use crate::engine::search_stats::formatting::{
+    print_depth_histogram, submetric_count, submetric_pct, subsection,
 };
 
 #[derive(Clone, Copy, Debug, Default)]

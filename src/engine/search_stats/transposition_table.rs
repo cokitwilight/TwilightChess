@@ -2,7 +2,9 @@ use std::ops::{AddAssign, Sub};
 
 use crate::engine::tt::TableStats;
 
-use super::formatting::{section, submetric_count, submetric_pct, subsection};
+use crate::engine::search_stats::formatting::{
+    section, submetric_count, submetric_pct, subsection,
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TranspositionTableStats {

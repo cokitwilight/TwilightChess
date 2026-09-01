@@ -6,7 +6,7 @@ use crate::opening::OpeningLine;
 use crate::tournament::results::GameResult::{Black, Draw, White};
 use crate::tournament::{GameRecord, MatchPlayers, MoveRecord};
 use crate::types::Color;
-use crate::uci::pgn::{PgnMetadata, game_to_pgn};
+use crate::uci::{PgnMetadata, game_to_pgn};
 
 pub fn run_game(
     start_fen: String,
@@ -151,11 +151,9 @@ pub fn run_game(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        board::STARTPOS_FEN,
-        opening::build_opening_book,
-        uci::pgn::{PgnMetadata, game_to_pgn},
-    };
+    use crate::board::STARTPOS_FEN;
+    use crate::opening::build_opening_book;
+    use crate::uci::{PgnMetadata, game_to_pgn};
 
     use super::*;
 

@@ -3,13 +3,11 @@ use std::time::{Duration, Instant};
 use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 use crate::engine::history::HistoryKey;
-use crate::engine::ordering::staged::ScoredMove;
-use crate::engine::search_context::PickerFrame;
+use crate::engine::ordering::ScoredMove;
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
-use crate::engine::tt::entry::TTNodeType;
-use crate::engine::tt::{TTEntry, TTFlag, score_to_tt};
+use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_to_tt};
 use crate::engine::{
-    Engine, MAX_PV, SearchContext, SearchOptions, SearchResult, SearchTermination,
+    Engine, MAX_PV, PickerFrame, SearchContext, SearchOptions, SearchResult, SearchTermination,
 };
 use crate::types::PieceType;
 
@@ -275,7 +273,7 @@ impl Engine {
         let mut best_move = None;
         let mut best_pv = [None; MAX_PV];
 
-        let mut all_moves = board.all_legal_moves(); // this returns mostly legal moves except for pawn and king legality(TODO)
+        let mut all_moves = board.all_legal_moves();
 
         let mut legal_moves = 0; // counter of legal moves since pseudo moves might not flag checkmate
 
@@ -291,7 +289,7 @@ impl Engine {
                     .and_then(|entry| entry.best_move)
             });
 
-        let mut move_picker = self.new_staged_move_selecter(
+        let mut move_picker = self.new_staged_move_selector(
             0,
             board,
             &mut all_moves,
@@ -492,7 +490,7 @@ impl Engine {
             root_hash,
             TTEntry {
                 eval: score_to_tt(best_eval, 1),
-                depth: depth as u16,
+                depth,
                 flag,
                 best_move,
                 node_type: TTNodeType::Main,

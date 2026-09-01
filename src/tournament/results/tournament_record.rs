@@ -4,11 +4,9 @@ use std::{
     time::Duration,
 };
 
-use crate::uci::pgn::{PgnMetadata, game_to_pgn};
-use crate::{
-    tournament::{GameRecord, NotableGame},
-    types::Color,
-};
+use crate::tournament::{GameRecord, NotableGame};
+use crate::types::Color;
+use crate::uci::{PgnMetadata, game_to_pgn};
 
 pub struct TournamentResult {
     // since the engines will swap between black and white keep track of engine wins not color

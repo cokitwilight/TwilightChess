@@ -1,8 +1,6 @@
-use crate::{
-    bitboard::{Bitboard, Square},
-    board::Board,
-    types::{COLORS, PIECE_TYPES},
-};
+use crate::bitboard::{Bitboard, Square};
+use crate::board::Board;
+use crate::types::{COLORS, PIECE_TYPES};
 
 // -------------------------
 // File masks
@@ -84,6 +82,21 @@ pub fn pop_lsb(bb: &mut Bitboard) -> Option<Square> {
 #[inline]
 pub const fn file_of(sq: Square) -> u8 {
     sq % 8
+}
+
+#[inline]
+pub fn same_file(a: Square, b: Square) -> bool {
+    file_of(a) == file_of(b)
+}
+
+#[inline]
+pub fn square_distance(a: Square, b: Square) -> u8 {
+    a.abs_diff(b)
+}
+
+#[inline]
+pub fn file_distance(a: Square, b: Square) -> u8 {
+    file_of(a).abs_diff(file_of(b))
 }
 
 #[inline]

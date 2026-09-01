@@ -1,6 +1,6 @@
 use crate::bitboard::Square;
 use crate::board::{Board, Move, MoveList, STARTPOS_FEN};
-use crate::engine::search::search::is_insufficient_material;
+use crate::engine::search::is_insufficient_material;
 use crate::game::GameState;
 
 #[derive(Clone)]
@@ -55,7 +55,7 @@ impl Game {
 
     pub fn game_state(&mut self) -> GameState {
         let side_to_move = self.board.side_to_move();
-        let legal_moves = self.board.legal_moves(side_to_move);
+        let legal_moves = self.board.all_legal_moves();
 
         if legal_moves.is_empty() {
             if self.board.in_check(side_to_move) {
@@ -72,8 +72,6 @@ impl Game {
         } else {
             GameState::Ongoing
         }
-
-        // TODO: ADD insufficient material and Repeated positions
     }
 
     pub fn play_move(&mut self, mv: Move) -> Result<(), MoveError> {
@@ -87,7 +85,7 @@ impl Game {
         // Use the legal move returned by the move generator, not blindly `mv`.
         // This helps if the UI passes a move with correct from/to but missing
         // promotion/castle/en-passant details.
-        let legal_moves = self.board.legal_moves(self.board.side_to_move());
+        let legal_moves = self.board.all_legal_moves();
 
         let Some(legal_mv) = legal_moves
             .iter()
@@ -109,8 +107,7 @@ impl Game {
     }
 
     pub fn legal_moves_from(&mut self, sq: Square) -> MoveList {
-        let turn = self.board.side_to_move();
-        self.board.legal_moves_at(sq, turn)
+        self.board.all_legal_moves_at(sq)
     }
 
     fn update_state(&mut self) {

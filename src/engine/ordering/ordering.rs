@@ -1,92 +1,8 @@
-use crate::board::{Board, Move, MoveList, MoveType};
-use crate::engine::Engine;
+use crate::board::{Board, Move, MoveType};
 use crate::engine::SearchContext;
 use crate::engine::history::{HistoryKey, HistoryTables};
 use crate::engine::ordering::see;
 use crate::types::{Color, PieceType};
-
-impl Engine {
-    pub fn order_moves(
-        &self,
-        board: &Board,
-        moves: &mut MoveList,
-        side_to_move: Color,
-        ply: usize,
-        context: &mut SearchContext,
-        previous_best_move: Option<Move>,
-        tt_best_move: Option<Move>,
-    ) {
-        moves.sort_by_score(|mv| {
-            move_order_score(
-                board,
-                mv,
-                side_to_move,
-                ply,
-                context,
-                &self.history,
-                previous_best_move,
-                tt_best_move,
-                None,
-                None,
-                None,
-            )
-        });
-    }
-
-    pub fn q_order_moves(&self, board: &Board, moves: &mut MoveList, tt_best_move: Option<Move>) {
-        moves.sort_by_score(|mv| self.q_move_order_score(board, mv, tt_best_move));
-    }
-
-    pub fn q_move_order_score(&self, board: &Board, mv: Move, tt_best_move: Option<Move>) -> i32 {
-        if Some(mv) == tt_best_move {
-            return 1_500_000;
-        }
-
-        // qsearch move lists are captures/promotions only by construction —
-        // no killers, no history, no quiet-move tier needed
-        let see_score = see(board, mv, None); // FOR NOW FIX LATER
-        let promo_bonus = mv.promotion().map_or(0, promotion_score);
-
-        see_score + promo_bonus
-    }
-}
-
-#[allow(dead_code)]
-fn mvv_lva_score(board: &Board, mv: Move) -> i32 {
-    let attacker = board
-        .piece_at(mv.from())
-        .expect("move_order_score called with no attacker on mv.from()")
-        .kind;
-
-    let victim = match mv.kind() {
-        MoveType::Capture => {
-            board
-                .piece_at(mv.to())
-                .expect("capture move has no victim on mv.to")
-                .kind
-        }
-        MoveType::EnPassant => PieceType::Pawn,
-
-        _ => return 0,
-    };
-
-    let victim_value = mvv_lva_piece_value(victim);
-    let attacker_value = mvv_lva_piece_value(attacker);
-
-    // Main MVV-LVA idea:
-    //
-    // Higher victim value = better.
-    // Lower attacker value = better.
-    //
-    // Multiply victim value so victim importance dominates attacker penalty.
-    let mut score = victim_value * 10 - attacker_value;
-
-    if let Some(promo) = mv.promotion() {
-        score += promotion_score(promo);
-    }
-
-    score
-}
 
 pub fn move_order_score(
     board: &Board,
@@ -169,17 +85,5 @@ pub fn promotion_score(piece: PieceType) -> i32 {
         PieceType::Knight => 3_000,
         PieceType::Pawn => 0,
         PieceType::King => 0,
-    }
-}
-
-#[allow(dead_code)]
-fn mvv_lva_piece_value(piece: PieceType) -> i32 {
-    match piece {
-        PieceType::Pawn => 100,
-        PieceType::Knight => 300,
-        PieceType::Bishop => 300,
-        PieceType::Rook => 500,
-        PieceType::Queen => 900,
-        PieceType::King => 10_000,
     }
 }

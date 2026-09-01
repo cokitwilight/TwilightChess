@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use crate::engine::tt::{TTEntry, TTFlag, entry::TTNodeType};
+use crate::engine::tt::{TTEntry, TTFlag, TTNodeType};
 
 const TT_CLUSTER_SIZE: usize = 4;
 
@@ -159,7 +159,7 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
                 continue;
             };
 
-            if old_slot.key != key && old_slot.entry.domain() != new_domain {
+            if old_slot.key != key || old_slot.entry.domain() != new_domain {
                 continue;
             }
 

@@ -1,4 +1,5 @@
-use crate::{tournament::TournamentResult, types::Color};
+use crate::tournament::TournamentResult;
+use crate::types::Color;
 
 impl TournamentResult {
     pub fn elo_stats(&self, color: Color) -> Option<EloStats> {

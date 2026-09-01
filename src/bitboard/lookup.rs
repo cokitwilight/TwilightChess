@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use crate::bitboard::{Bitboard, NOT_FILE_A, NOT_FILE_AB, NOT_FILE_GH, NOT_FILE_H, Square};
+use crate::bitboard::{Bitboard, NOT_FILE_A, NOT_FILE_AB, NOT_FILE_GH, NOT_FILE_H, Square, bit};
 
 pub struct AttackTables {
     pub knight: [Bitboard; 64],
@@ -114,10 +114,6 @@ fn generate_black_pawn_attacks(sq: Square) -> Bitboard {
 // *************************
 
 pub static BETWEEN: [[Bitboard; 64]; 64] = build_between_table();
-
-pub const fn bit(sq: Square) -> Bitboard {
-    1u64 << sq
-}
 
 const fn file_of_const(sq: Square) -> i32 {
     (sq & 7) as i32

@@ -1,10 +1,12 @@
 use crate::bitboard::lookup::BETWEEN;
 use crate::bitboard::{
     Bitboard, FILE_MASKS, RANK_1, RANK_2, RANK_7, RANK_8, Square, bishop_attacks, bit, file_of,
-    pop_lsb, rank_of, square,
+    pop_lsb, rank_of,
 };
 use crate::board::Board;
-use crate::eval::eval::{BLACK_SQUARES, CENTER_SQUARES, EvalInfo, WHITE_SQUARES};
+use crate::eval::EvalInfo;
+use crate::eval::eval::{BLACK_SQUARES, CENTER_SQUARES, WHITE_SQUARES};
+use crate::eval::lookup::ray_mask;
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
@@ -144,11 +146,8 @@ pub(super) fn connected_diagonals_bonus(
                 -1
             };
 
-            let edge_sq = ray_edge_square(dx, dy, sq);
-            let backwards_edge_sq = ray_edge_square(-dx, -dy, sq);
-
-            let edge_bb = bit(edge_sq);
-            let backwards_bb = bit(backwards_edge_sq);
+            let forward_ray = ray_mask(sq, dx, dy);
+            let backwards_ray = ray_mask(sq, -dx, -dy);
 
             if bit(forward_sq) & board.pieces(color, PieceType::Queen) != 0 {
                 // led by the queen
@@ -157,16 +156,14 @@ pub(super) fn connected_diagonals_bonus(
                 score -= 10;
             }
 
-            let total_ray_length =
-                (BETWEEN[backwards_edge_sq as usize][edge_sq as usize] | edge_bb | backwards_bb)
-                    .count_ones() as i32; // between does not include edges
+            let total_ray_length = (backwards_ray | bit(sq) | forward_ray).count_ones() as i32;
 
             if total_ray_length <= 4 {
                 // most powerful rays are along 5,6,7 squares long for either black or white squared bishops so avoid anymore bonuses
                 continue;
             }
 
-            let xray = BETWEEN[forward_sq as usize][edge_sq as usize] | edge_bb;
+            let xray = ray_mask(forward_sq, dx, dy);
 
             let blocked_ray = bishop_attacks(forward_sq, relevant_blockers) & xray; // only use pawns in the blocked ray
 
@@ -232,8 +229,7 @@ pub(super) fn xray_pressure_diagonal_bonus(
 
     while let Some(sq) = pop_lsb(&mut sliders) {
         for (dx, dy) in directions {
-            let edge_sq = ray_edge_square(*dx, *dy, sq);
-            let full_xray = BETWEEN[sq as usize][edge_sq as usize] | bit(edge_sq);
+            let full_xray = ray_mask(sq, *dx, *dy);
 
             if full_xray.count_ones() < 3 {
                 continue;
@@ -313,19 +309,20 @@ pub(super) fn connected_file_bonus(
             Color::Black => sq,
         };
 
-        let end_square = match color {
-            Color::White => square(file_of(sq), 7),
-
-            Color::Black => square(file_of(sq), 0),
-        };
+        let ray = ray_mask(
+            front_sq,
+            0,
+            match color {
+                Color::White => 1,
+                Color::Black => -1,
+            },
+        );
 
         let between = BETWEEN[sq as usize][other_sq as usize];
 
         if between & board.all_occupancy() != 0 {
             continue; // not connected
         }
-
-        let ray = BETWEEN[front_sq as usize][end_square as usize] | bit(end_square);
 
         // only count pawns defended by pawns as these can be a problem.
         let pawn_count =
@@ -374,13 +371,14 @@ pub(super) fn straights_xray_bonus(
     let mut score = 0;
 
     while let Some(sq) = pop_lsb(&mut straights) {
-        let end_square = match color {
-            Color::White => square(file_of(sq), 7),
-
-            Color::Black => square(file_of(sq), 0),
-        };
-        let ray = BETWEEN[sq as usize][end_square as usize] | bit(end_square);
-
+        let ray = ray_mask(
+            sq,
+            0,
+            match color {
+                Color::White => 1,
+                Color::Black => -1,
+            },
+        );
         let file = FILE_MASKS[file_of(sq) as usize];
 
         // hits =
@@ -429,14 +427,14 @@ pub(super) fn straights_on_open_file(
     let mut sliders = sliders;
 
     while let Some(sq) = pop_lsb(&mut sliders) {
-        let end_square = match color {
-            Color::White => square(file_of(sq), 7),
-
-            Color::Black => square(file_of(sq), 0),
-        };
-
-        let ray = BETWEEN[sq as usize][end_square as usize] | bit(end_square);
-
+        let ray = ray_mask(
+            sq,
+            0,
+            match color {
+                Color::White => 1,
+                Color::Black => -1,
+            },
+        );
         let friendly_pawn_count = (ray & friendly_pawns).count_ones();
         let enemy_pawn_count =
             (ray & enemy_pawns & info.attacks(color.opposite(), PieceType::Pawn)).count_ones();
@@ -501,35 +499,4 @@ pub(super) fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo)
     score += targets * 3;
 
     score
-}
-
-#[allow(dead_code)]
-fn open_file_mask(pawns: Bitboard) -> Bitboard {
-    let mut open_files = 0u64;
-
-    for mask in FILE_MASKS {
-        if pawns & mask == 0 {
-            open_files |= mask;
-        }
-    }
-
-    open_files
-}
-
-#[inline(always)]
-fn ray_edge_square(dx: i8, dy: i8, sq: u8) -> Square {
-    debug_assert!(dx == -1 || dx == 1);
-    debug_assert!(dy == -1 || dy == 1);
-    debug_assert!(sq < 64);
-
-    let file = sq & 7;
-    let rank = sq >> 3;
-
-    // XOR with 7 reverses a three-bit coordinate: x -> 7 - x.
-    let file_steps = file ^ (7 * (dx > 0) as u8);
-    let rank_steps = rank ^ (7 * (dy > 0) as u8);
-    let steps = file_steps.min(rank_steps) as i16;
-
-    let stride = dx as i16 + 8 * dy as i16;
-    (sq as i16 + steps * stride) as Square
 }

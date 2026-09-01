@@ -16,6 +16,7 @@ pub mod tt;
 
 pub use config::*;
 pub use engine::Engine;
+pub(crate) use search_context::PickerFrame;
 pub use search_context::SearchContext;
 pub use search_limits::SearchLimits;
 pub use search_options::SearchOptions;

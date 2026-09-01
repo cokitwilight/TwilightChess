@@ -1,4 +1,5 @@
-use crate::{bitboard::Square, board::Board};
+use crate::bitboard::Square;
+use crate::board::Board;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct UndoNullMove {

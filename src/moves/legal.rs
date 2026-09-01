@@ -1,10 +1,10 @@
 use crate::bitboard::pins::{generate_checkers_and_check_mask, generate_pin_masks};
 use crate::bitboard::{Bitboard, Square, pop_lsb};
 use crate::board::{Board, MoveList};
+use crate::moves::all_pseudo_moves_at;
 use crate::moves::king::{pseudo_king_capture_moves, pseudo_king_moves};
 use crate::moves::knight::{legal_knight_capture_moves, legal_knight_moves};
 use crate::moves::pawn::{legal_pawn_capture_moves, legal_pawn_moves};
-use crate::moves::pseudo::all_pseudo_moves_at;
 use crate::moves::sliders::{
     legal_bishop_capture_moves, legal_bishop_moves, legal_queen_capture_moves, legal_queen_moves,
     legal_rook_capture_moves, legal_rook_moves,
@@ -68,7 +68,7 @@ pub fn all_legal_moves(board: &mut Board, color: Color, moves: &mut MoveList) {
     }
 
     // these are special cases since en passant and king double checks so keep make/undo for now
-    legal_pawn_moves(board, color, &mut all_moves, &info);
+    legal_pawn_moves(board, color, &info, &mut all_moves);
     pseudo_king_moves(board, color, &mut all_moves);
 
     for &mv in all_moves.iter() {
@@ -83,10 +83,10 @@ pub fn all_legal_moves(board: &mut Board, color: Color, moves: &mut MoveList) {
         }
     }
 
-    legal_knight_moves(board, color, moves, &info);
-    legal_bishop_moves(board, color, moves, &info);
-    legal_rook_moves(board, color, moves, &info);
-    legal_queen_moves(board, color, moves, &info);
+    legal_knight_moves(board, color, &info, moves);
+    legal_bishop_moves(board, color, &info, moves);
+    legal_rook_moves(board, color, &info, moves);
+    legal_queen_moves(board, color, &info, moves);
 }
 
 pub fn all_legal_moves_at(board: &mut Board, color: Color, sq: Square, moves: &mut MoveList) {
@@ -139,7 +139,7 @@ pub fn all_legal_capture_moves(board: &mut Board, color: Color, moves: &mut Move
     }
 
     // these are special cases since en passant and king double checks so keep make/undo for now
-    legal_pawn_capture_moves(board, color, &mut all_moves, &info);
+    legal_pawn_capture_moves(board, color, &info, &mut all_moves);
     pseudo_king_capture_moves(board, color, &mut all_moves);
 
     for &mv in all_moves.iter() {
@@ -154,8 +154,8 @@ pub fn all_legal_capture_moves(board: &mut Board, color: Color, moves: &mut Move
         }
     }
 
-    legal_knight_capture_moves(board, color, moves, &info);
-    legal_bishop_capture_moves(board, color, moves, &info);
-    legal_rook_capture_moves(board, color, moves, &info);
-    legal_queen_capture_moves(board, color, moves, &info);
+    legal_knight_capture_moves(board, color, &info, moves);
+    legal_bishop_capture_moves(board, color, &info, moves);
+    legal_rook_capture_moves(board, color, &info, moves);
+    legal_queen_capture_moves(board, color, &info, moves);
 }

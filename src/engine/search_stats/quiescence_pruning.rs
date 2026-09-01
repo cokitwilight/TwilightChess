@@ -1,4 +1,6 @@
-use super::formatting::{metric_count, section, submetric_count, submetric_pct, subsection};
+use crate::engine::search_stats::formatting::{
+    metric_count, section, submetric_count, submetric_pct, subsection,
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct QuiescencePruningStats {

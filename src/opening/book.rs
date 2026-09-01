@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt};
 
 use rand::RngExt;
 
-use crate::bitboard::{Square, file_of, rank_of};
+use crate::bitboard::Square;
 use crate::board::{Board, Move};
 use crate::engine::Engine;
 use crate::game::Game;
@@ -270,41 +270,6 @@ fn square_from_uci(file_char: u8, rank_char: u8) -> Option<Square> {
 
 fn move_matches_uci(mv: Move, parsed: ParsedUciMove) -> bool {
     mv.from() == parsed.from && mv.to() == parsed.to && mv.promotion() == parsed.promotion
-}
-
-#[allow(dead_code)]
-fn move_to_uci(mv: Move) -> String {
-    let mut out = String::new();
-
-    out.push(file_char(file_of(mv.from())));
-    out.push(rank_char(rank_of(mv.from())));
-    out.push(file_char(file_of(mv.to())));
-    out.push(rank_char(rank_of(mv.to())));
-
-    if let Some(promo) = mv.promotion() {
-        out.push(match promo {
-            PieceType::Queen => 'q',
-            PieceType::Rook => 'r',
-            PieceType::Bishop => 'b',
-            PieceType::Knight => 'n',
-            _ => panic!("Invalid promotion piece"),
-        });
-    }
-
-    out
-}
-
-fn file_char(file: u8) -> char {
-    debug_assert!(file < 8);
-    (b'a' + file) as char
-}
-
-fn rank_char(rank: u8) -> char {
-    debug_assert!(rank < 8);
-
-    // New bitboard mapping:
-    // rank 0 = first rank, rank 7 = eighth rank.
-    (b'1' + rank) as char
 }
 
 #[cfg(test)]

@@ -1,6 +1,4 @@
-use crate::engine::history::{
-    HistoryKey, history::HISTORY_KEY_COUNT, history_bonus, history_malus, update,
-};
+use crate::engine::history::{HISTORY_KEY_COUNT, HistoryKey, history_bonus, history_malus, update};
 
 const CONTINUATION_SIZE: usize = HISTORY_KEY_COUNT * HISTORY_KEY_COUNT; // for continuation it is color(2) * prev_piece(6) * prev_to(64) * color(2) * current_piece(6) * current_to(64) = 589824
 // Indexed as [color_prev][prev_piece][prev_to][color_cur ][curr_piece][curr_to]

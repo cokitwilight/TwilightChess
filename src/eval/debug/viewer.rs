@@ -6,8 +6,7 @@ use crate::eval::debug::breakdown::{
     knight_lines, material_lines, middlegame_pst_lines, mobility_lines, pawn_lines, slider_lines,
     summary_breakdown, tempo_lines,
 };
-use crate::eval::eval::EvalInfo;
-use crate::eval::phase::MAX_PHASE;
+use crate::eval::{EvalInfo, MAX_PHASE};
 use crate::types::{Color, PieceType};
 
 pub fn run_interactive() -> io::Result<()> {

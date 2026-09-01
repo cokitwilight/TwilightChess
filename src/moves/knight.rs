@@ -24,7 +24,7 @@ pub fn pseudo_knight_moves(board: &Board, color: Color, moves: &mut MoveList) {
     }
 }
 
-pub fn legal_knight_moves(board: &Board, color: Color, moves: &mut MoveList, info: &MoveGenInfo) {
+pub fn legal_knight_moves(board: &Board, color: Color, info: &MoveGenInfo, moves: &mut MoveList) {
     let mut knights = board.pieces(color, PieceType::Knight);
     let enemies = board.occupancy_of(color.opposite());
     let friends = board.occupancy_of(color);
@@ -92,8 +92,8 @@ pub fn pseudo_knight_capture_moves(board: &Board, color: Color, moves: &mut Move
 pub fn legal_knight_capture_moves(
     board: &Board,
     color: Color,
-    moves: &mut MoveList,
     info: &MoveGenInfo,
+    moves: &mut MoveList,
 ) {
     let mut knights = board.pieces(color, PieceType::Knight);
     let enemies = board.occupancy_of(color.opposite());

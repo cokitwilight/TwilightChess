@@ -335,11 +335,9 @@ pub fn play_games(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        engine::configs::EngineConfig,
-        opening::{
-            build_important_opening_book, build_opening_book, build_suggestion_opening_book,
-        },
+    use crate::engine::configs::EngineConfig;
+    use crate::opening::{
+        build_important_opening_book, build_opening_book, build_suggestion_opening_book,
     };
 
     use super::*;

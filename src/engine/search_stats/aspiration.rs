@@ -1,4 +1,4 @@
-use super::formatting::{metric_count, metric_pct, section};
+use crate::engine::search_stats::formatting::{metric_count, metric_pct, section};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AspirationStats {

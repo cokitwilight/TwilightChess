@@ -1,6 +1,6 @@
 use num_format::{Locale, ToFormattedString};
 
-use super::{DepthHistogram, MAX_TRACKED_DEPTH};
+use crate::engine::search_stats::{DepthHistogram, MAX_TRACKED_DEPTH};
 
 pub(super) const REPORT_WIDTH: usize = 64;
 

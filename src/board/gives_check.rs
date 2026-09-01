@@ -1,7 +1,4 @@
-use crate::bitboard::{
-    Bitboard, Square, bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square,
-    rook_attacks,
-};
+use crate::bitboard::{bit, king_in_check};
 use crate::board::{Board, Move, MoveType};
 use crate::types::{Color, PieceType};
 
@@ -41,7 +38,7 @@ impl Board {
                 }
 
                 occupancy |= to_bb;
-                check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite())
+                king_in_check(&all_pieces, occupancy, side_to_move.opposite())
             }
             MoveType::Capture => {
                 let captured_piece = self
@@ -59,7 +56,7 @@ impl Board {
 
                 occupancy &= !from_bb; // adjust occupancy. Note the to square remains the same
 
-                check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite())
+                king_in_check(&all_pieces, occupancy, side_to_move.opposite())
             }
             // since these are rare and edge cases just clone the board
             MoveType::EnPassant => {
@@ -87,7 +84,7 @@ impl Board {
                 occupancy &= !captured_bb;
                 occupancy |= to_bb;
 
-                check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite())
+                king_in_check(&all_pieces, occupancy, side_to_move.opposite())
             }
             MoveType::Castle => {
                 let (rook_from, rook_to) = match (side_to_move, to) {
@@ -122,76 +119,10 @@ impl Board {
                 occupancy |= to_bb;
                 occupancy |= rook_to_bb;
 
-                check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite())
+                king_in_check(&all_pieces, occupancy, side_to_move.opposite())
             }
         }
     }
-}
-
-fn check_from_occupancy(pieces: &[[Bitboard; 6]; 2], occupied: Bitboard, color: Color) -> bool {
-    let king = pieces[color.idx()][PieceType::King.idx()];
-    debug_assert!(king != 0, "No king found for {:?}", color);
-
-    debug_assert!(
-        king.count_ones() == 1,
-        "Expected exactly one king for {:?}, found {}",
-        color,
-        king.count_ones()
-    );
-
-    let king_sq = king.trailing_zeros() as Square;
-    square_attacked(pieces, occupied, king_sq, color.opposite())
-}
-
-fn square_attacked(pieces: &[[Bitboard; 6]; 2], occupied: Bitboard, sq: Square, by: Color) -> bool {
-    let pawns = pieces[by.idx()][PieceType::Pawn.idx()];
-    let knights = pieces[by.idx()][PieceType::Knight.idx()];
-    let bishops = pieces[by.idx()][PieceType::Bishop.idx()];
-    let rooks = pieces[by.idx()][PieceType::Rook.idx()];
-    let queens = pieces[by.idx()][PieceType::Queen.idx()];
-    let king = pieces[by.idx()][PieceType::King.idx()];
-
-    let pawn_attackers = match by {
-        Color::White => pawn_attacks_from_square(sq, Color::Black) & pawns,
-        Color::Black => pawn_attacks_from_square(sq, Color::White) & pawns,
-    };
-
-    if pawn_attackers != 0 {
-        return true;
-    }
-
-    // -------------------------
-    // Knights
-    // -------------------------
-    if knight_attacks(sq) & knights != 0 {
-        return true;
-    }
-
-    // -------------------------
-    // Kings
-    // -------------------------
-    if king_attacks(sq) & king != 0 {
-        return true;
-    }
-
-    // -------------------------
-    // Bishops / Queens
-    // -------------------------
-    let diagonal_attackers = bishops | queens;
-
-    if bishop_attacks(sq, occupied) & diagonal_attackers != 0 {
-        return true;
-    }
-    // -------------------------
-    // Rooks / Queens
-    // -------------------------
-    let straight_attackers = rooks | queens;
-
-    if rook_attacks(sq, occupied) & straight_attackers != 0 {
-        return true;
-    }
-
-    false
 }
 
 #[cfg(test)]

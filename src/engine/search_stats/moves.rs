@@ -1,7 +1,5 @@
-use super::{
-    NodeStats,
-    formatting::{metric, metric_count, metric_pct, section},
-};
+use crate::engine::search_stats::NodeStats;
+use crate::engine::search_stats::formatting::{metric, metric_count, metric_pct, section};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MoveStats {

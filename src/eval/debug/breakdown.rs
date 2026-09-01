@@ -1,10 +1,14 @@
 use crate::bitboard::pop_lsb;
 use crate::board::Board;
-use crate::eval::eval::{EvalInfo, KING_DANGER_TABLE, MAX_DANGER};
+use crate::eval::EvalInfo;
+use crate::eval::MAX_PHASE;
+use crate::eval::eval::MAX_DANGER;
 use crate::eval::king::{
     defender_danger_bonus, escape_score_danger_bonus, king_eval, king_eval_danger_raw,
     open_diagonal_danger_bonus, open_file_danger_bonus, pawn_shield_danger_score,
 };
+use crate::eval::knight::{knight_eval, knight_eval_raw, knight_outpost_bonus};
+use crate::eval::lookup::KING_DANGER_TABLE;
 use crate::eval::mobility::{
     available_moves, development_penalty, hanging_pieces, mobility_score, mobility_score_raw,
     move_aggression, move_pressure, space_bonus,
@@ -13,14 +17,12 @@ use crate::eval::pawn::{
     backwards_pawn_bonus, center_pawns_bonus, isolated_pawns_bonus, passed_pawn_bonus, pawn_chain,
     pawn_eval, pawn_eval_raw, pawn_storm_bonus, pawn_tempo_bonus, stacked_pawns_bonus,
 };
-use crate::eval::phase::MAX_PHASE;
 use crate::eval::pst::{eg_pst_bonus_at, mg_pst_bonus_at};
 use crate::eval::sliders::{
     bishop_blocked_by_pawns_bonus, bishop_pair_bonus, connected_diagonals_bonus,
     connected_file_bonus, rook_on_the_seventh, sliders_eval, sliders_eval_raw,
     straights_on_open_file, straights_xray_bonus, xray_pressure_diagonal_bonus,
 };
-use crate::eval::{knight::knight_eval, knight::knight_eval_raw, knight::knight_outpost_bonus};
 use crate::types::{Color, PIECE_TYPES, PieceType};
 
 /// The compact, white-perspective breakdown used by both the GUI and debugger.
@@ -490,7 +492,7 @@ fn piece_name(piece: PieceType) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eval::eval::evaluation;
+    use crate::eval::evaluation;
 
     const TEST_FENS: &[&str] = &[
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",

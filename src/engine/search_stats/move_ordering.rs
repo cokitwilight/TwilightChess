@@ -1,11 +1,9 @@
 use std::ops::{AddAssign, Sub};
 
-use super::{
-    MOVE_INDEX_BUCKETS, MoveIndexHistogram,
-    formatting::{
-        count, metric, metric_count, metric_pct, pct, section, submetric_count, subsection,
-    },
+use crate::engine::search_stats::formatting::{
+    count, metric, metric_count, metric_pct, pct, section, submetric_count, subsection,
 };
+use crate::engine::search_stats::{MOVE_INDEX_BUCKETS, MoveIndexHistogram};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MoveOrderingStats {

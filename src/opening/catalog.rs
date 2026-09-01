@@ -1,6 +1,6 @@
 use crate::board::STARTPOS_FEN;
 
-use super::book::OpeningBook;
+use crate::opening::OpeningBook;
 
 pub fn build_opening_book() -> OpeningBook {
     let mut book = OpeningBook::new();

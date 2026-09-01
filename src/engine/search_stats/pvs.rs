@@ -37,4 +37,4 @@ impl_counter_stats_ops!(
     full_window_researches,
     research_cutoffs,
 );
-use super::formatting::{metric_count, metric_pct, section};
+use crate::engine::search_stats::formatting::{metric_count, metric_pct, section};

@@ -181,7 +181,7 @@ pub fn generate_checkers_and_check_mask(
 
     checkers |= knight_attacks(king_sq) & board.pieces(enemy, PieceType::Knight);
 
-    checkers |= pawn_attacks_from_square(king_sq, color) & board.pieces(enemy, PieceType::Pawn);
+    checkers |= pawn_attacks_from_square(color, king_sq) & board.pieces(enemy, PieceType::Pawn);
 
     let check_mask = match checkers.count_ones() {
         0 => !0u64,

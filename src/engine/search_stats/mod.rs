@@ -270,7 +270,8 @@ pub fn fmt_nps(value: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::SearchStats;
-    use crate::engine::{Engine, SearchLimits, configs::EngineConfig};
+    use crate::engine::configs::EngineConfig;
+    use crate::engine::{Engine, SearchLimits};
     use crate::game::Game;
 
     #[test]

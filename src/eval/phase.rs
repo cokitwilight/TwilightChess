@@ -1,7 +1,5 @@
-use crate::{
-    board::Board,
-    types::{Color, PieceType},
-};
+use crate::board::Board;
+use crate::types::{Color, PieceType};
 
 pub const MAX_PHASE: i32 = 24;
 

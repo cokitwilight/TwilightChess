@@ -25,7 +25,7 @@ pub fn pseudo_bishop_moves(board: &Board, color: Color, moves: &mut MoveList) {
     }
 }
 
-pub fn legal_bishop_moves(board: &Board, color: Color, moves: &mut MoveList, info: &MoveGenInfo) {
+pub fn legal_bishop_moves(board: &Board, color: Color, info: &MoveGenInfo, moves: &mut MoveList) {
     let mut bishops = board.pieces(color, PieceType::Bishop);
     let enemies = board.occupancy_of(color.opposite());
     let friends = board.occupancy_of(color);
@@ -98,8 +98,8 @@ pub fn pseudo_bishop_capture_moves(board: &Board, color: Color, moves: &mut Move
 pub fn legal_bishop_capture_moves(
     board: &Board,
     color: Color,
-    moves: &mut MoveList,
     info: &MoveGenInfo,
+    moves: &mut MoveList,
 ) {
     let mut bishops = board.pieces(color, PieceType::Bishop);
     let enemies = board.occupancy_of(color.opposite());
@@ -169,7 +169,7 @@ pub fn pseudo_rook_moves(board: &Board, color: Color, moves: &mut MoveList) {
     }
 }
 
-pub fn legal_rook_moves(board: &Board, color: Color, moves: &mut MoveList, info: &MoveGenInfo) {
+pub fn legal_rook_moves(board: &Board, color: Color, info: &MoveGenInfo, moves: &mut MoveList) {
     let mut rooks = board.pieces(color, PieceType::Rook);
     let enemies = board.occupancy_of(color.opposite());
     let friends = board.occupancy_of(color);
@@ -242,8 +242,8 @@ pub fn pseudo_rook_capture_moves(board: &Board, color: Color, moves: &mut MoveLi
 pub fn legal_rook_capture_moves(
     board: &Board,
     color: Color,
-    moves: &mut MoveList,
     info: &MoveGenInfo,
+    moves: &mut MoveList,
 ) {
     let mut rooks = board.pieces(color, PieceType::Rook);
     let enemies = board.occupancy_of(color.opposite());
@@ -308,7 +308,7 @@ pub fn pseudo_queen_moves(board: &Board, color: Color, moves: &mut MoveList) {
     }
 }
 
-pub fn legal_queen_moves(board: &Board, color: Color, moves: &mut MoveList, info: &MoveGenInfo) {
+pub fn legal_queen_moves(board: &Board, color: Color, info: &MoveGenInfo, moves: &mut MoveList) {
     let mut queens = board.pieces(color, PieceType::Queen);
     let enemies = board.occupancy_of(color.opposite());
     let friends = board.occupancy_of(color);
@@ -380,8 +380,8 @@ pub fn pseudo_queen_capture_moves(board: &Board, color: Color, moves: &mut MoveL
 pub fn legal_queen_capture_moves(
     board: &Board,
     color: Color,
-    moves: &mut MoveList,
     info: &MoveGenInfo,
+    moves: &mut MoveList,
 ) {
     let mut queens = board.pieces(color, PieceType::Queen);
     let enemies = board.occupancy_of(color.opposite());

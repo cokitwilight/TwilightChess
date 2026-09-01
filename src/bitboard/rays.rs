@@ -1,8 +1,5 @@
-use crate::bitboard::{
-    Bitboard, Square, bit, file_of,
-    magic::{bishop_attack_table, bishop_magics, rook_attack_table, rook_magics},
-    pop_lsb, rank_of, square,
-};
+use crate::bitboard::magic::{bishop_attack_table, bishop_magics, rook_attack_table, rook_magics};
+use crate::bitboard::{Bitboard, Square, bit, file_of, pop_lsb, rank_of, square};
 
 /// Generate attacks in one direction until edge of board or first blocker.
 ///

@@ -1,19 +1,15 @@
 use crate::bitboard::{
-    Bitboard, FILE_MASKS, RANK_2, RANK_4, RANK_5, RANK_7, RANK_MASKS, Square, bit, file_of,
-    pop_lsb, rank_of,
+    Bitboard, FILE_MASKS, RANK_2, RANK_4, RANK_5, RANK_7, RANK_MASKS, bit, file_of, pop_lsb,
+    rank_of,
 };
 use crate::board::Board;
+pub use crate::eval::lookup::PAWN_WEAKNESS_TABLE;
+use crate::eval::lookup::{BACKWARDS_PAWNS, PASSED_PAWNS};
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
-use crate::eval::eval::{CENTER_4, CENTER_SQUARES, EvalInfo};
-
-// represents 0, 1 - 8 total weaknesses
-pub const PAWN_WEAKNESS_TABLE: [i32; 9] = [0, 0, 0, 5, 20, 35, 50, 75, 110];
-
-static PASSED_PAWNS: [[Bitboard; 64]; 2] = generate_passed_pawns();
-
-static BACKWARDS_PAWNS: [[Bitboard; 64]; 2] = generate_backward_pawns();
+use crate::eval::EvalInfo;
+use crate::eval::eval::{CENTER_4, CENTER_SQUARES};
 
 pub fn pawn_eval(board: &Board, info: &EvalInfo) -> i32 {
     pawn_eval_raw(board, Color::White, info) - pawn_eval_raw(board, Color::Black, info)
@@ -412,103 +408,4 @@ pub(super) fn pawn_chain(_board: &Board, color: Color, pawns: Bitboard, info: &E
     score -= non_defended_pawns.count_ones() as i32 * 2;
 
     score
-}
-
-const fn generate_passed_pawns() -> [[Bitboard; 64]; 2] {
-    let mut table = [[0u64; 64]; 2];
-
-    // square
-    let mut sq = 0u8;
-    while sq < 64 {
-        table[0][sq as usize] = passed_pawn_mask(sq, Color::White);
-        sq += 1;
-    }
-
-    sq = 0u8;
-    while sq < 64 {
-        table[1][sq as usize] = passed_pawn_mask(sq, Color::Black);
-        sq += 1;
-    }
-
-    table
-}
-
-const fn passed_pawn_mask(sq: Square, color: Color) -> Bitboard {
-    let file = file_of(sq);
-    let mut mask = bit(sq);
-
-    if file != 0 {
-        // pawn not on the outer left file
-        mask |= bit(sq - 1);
-    }
-
-    if file != 7 {
-        // pawn not on the outer right file
-        mask |= bit(sq + 1);
-    }
-
-    match color {
-        Color::White => {
-            mask <<= 8;
-            mask |= mask << 8;
-            mask |= mask << 16;
-            mask |= mask << 32;
-        }
-        Color::Black => {
-            mask >>= 8;
-            mask |= mask >> 8;
-            mask |= mask >> 16;
-            mask |= mask >> 32;
-        }
-    }
-    mask
-}
-
-const fn generate_backward_pawns() -> [[Bitboard; 64]; 2] {
-    let mut table = [[0u64; 64]; 2];
-
-    // square
-    let mut sq = 0u8;
-    while sq < 64 {
-        table[0][sq as usize] = backwards_pawn_mask(sq, Color::White);
-        sq += 1;
-    }
-
-    sq = 0u8;
-    while sq < 64 {
-        table[1][sq as usize] = backwards_pawn_mask(sq, Color::Black);
-        sq += 1;
-    }
-
-    table
-}
-
-const fn backwards_pawn_mask(sq: Square, color: Color) -> Bitboard {
-    let file = file_of(sq);
-    let mut mask = 0u64;
-
-    if file != 0 {
-        mask |= bit(sq - 1);
-    }
-
-    if file != 7 {
-        mask |= bit(sq + 1);
-    }
-
-    match color {
-        Color::White => {
-            mask >>= 8;
-            mask |= mask >> 8;
-            mask |= mask >> 16;
-            mask |= mask >> 32;
-        }
-        Color::Black => {
-            mask <<= 8;
-            mask |= mask << 8;
-            mask |= mask << 16;
-            mask |= mask << 32;
-        }
-    }
-
-    mask
 }

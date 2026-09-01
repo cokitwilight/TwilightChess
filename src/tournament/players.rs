@@ -1,4 +1,5 @@
-use crate::engine::{SearchLimits, configs::EngineConfig};
+use crate::engine::SearchLimits;
+use crate::engine::configs::EngineConfig;
 
 #[derive(Clone, Debug)]
 pub struct EnginePlayer {

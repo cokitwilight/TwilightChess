@@ -1,4 +1,6 @@
-use crate::{board::Move, engine::history::HistoryKey, types::PieceType};
+use crate::board::Move;
+use crate::engine::history::HistoryKey;
+use crate::types::PieceType;
 
 #[derive(Clone, Debug, Copy)]
 pub struct SearchStackEntry {

@@ -4,17 +4,10 @@ use crate::bitboard::{
 };
 
 use crate::board::Board;
-use crate::eval::eval::EvalInfo;
+use crate::eval::EvalInfo;
+use crate::eval::lookup::{BISHOP_MOVE, KNIGHT_MOVE, QUEEN_MOVE, ROOK_MOVE};
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
-
-const KNIGHT_MOVE: [i32; 9] = [-30, -10, -5, 0, 5, 20, 25, 35, 35]; // PREV MAX: 64
-const BISHOP_MOVE: [i32; 14] = [-30, -30, -20, -5, -5, 0, 10, 20, 30, 30, 30, 35, 35, 35]; // PREV MAX: 78
-const ROOK_MOVE: [i32; 15] = [-25, -15, -10, -5, 0, 0, 0, 10, 20, 25, 30, 30, 30, 30, 30]; // PREV MAX: 84
-const QUEEN_MOVE: [i32; 28] = [
-    -130, -80, -40, -30, -25, -15, -5, 0, 0, 0, 0, 0, 0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 50,
-    50, 50, 50, 50, 50,
-]; // PREV MAX: 54
 
 pub fn mobility_score(board: &Board, info: &EvalInfo) -> i32 {
     mobility_score_raw(board, Color::White, info) - mobility_score_raw(board, Color::Black, info)
@@ -179,7 +172,7 @@ pub(super) fn space_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
         return 0;
     }
 
-    let space_mask = pawn_space_bitboard(pawns, color);
+    let space_mask = pawn_space_bitboard(color, pawns);
 
     let available_space =
         space_mask & !info.all_attacks(color.opposite()) & !board.occupancy_of(color.opposite());
@@ -213,7 +206,7 @@ fn pawn_moves_bitboard(board: &Board, color: Color) -> Bitboard {
     moves
 }
 
-fn pawn_space_bitboard(pawns: Bitboard, color: Color) -> Bitboard {
+fn pawn_space_bitboard(color: Color, pawns: Bitboard) -> Bitboard {
     let mut pawn_space: u64;
 
     match color {

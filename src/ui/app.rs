@@ -9,16 +9,17 @@ use crate::engine::{Engine, SearchLimits};
 use crate::eval::debug::evaluation_breakdown;
 use crate::game::{Game, GameState};
 use crate::types::{Color, PieceType};
-use crate::uci::pgn::{PgnMetadata, game_to_pgn};
-use crate::ui::board_view::{BoardAction, PromotionPicker, draw_board_sized};
-use crate::ui::bot_thread::{BotSearchRequest, BotSearchResponse};
+use crate::uci::{PgnMetadata, game_to_pgn};
+use crate::ui::{
+    BoardAction, BotSearchRequest, BotSearchResponse, PromotionPicker, draw_board_sized,
+};
 
 use eframe::egui;
 
 const DEFAULT_BOT_DEPTH: u16 = 25;
 const DEFAULT_Q_BOT_DEPTH: u16 = 4;
 
-const DEFAULT_BOT_TIME_MS: u64 = 1_000;
+const DEFAULT_BOT_TIME_MS: u64 = 3_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {

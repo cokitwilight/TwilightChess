@@ -2,10 +2,9 @@ use crate::board::{Board, Move, MoveType};
 use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
-use crate::engine::search::search::is_insufficient_material;
-use crate::engine::search_context::PickerFrame;
+use crate::engine::search::is_insufficient_material;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
-use crate::engine::{Engine, MAX_PLY};
+use crate::engine::{Engine, MAX_PLY, PickerFrame};
 use crate::eval::evaluation_for_turn;
 use crate::types::PieceType;
 
@@ -156,16 +155,6 @@ impl Engine {
             }
             evasions
         } else {
-            // disable lazy eval for now
-            // if !in_check {
-            //     let lazy_eval = lazy_eval_for_turn(board);
-
-            //     if lazy_eval - LAZY_MARGIN >= beta || lazy_eval + LAZY_MARGIN <= alpha {
-            //         // TODO: Add this to the statistics tracker
-            //         return lazy_eval;
-            //     }
-            // }
-
             stand_pat = evaluation_for_turn(board);
 
             best_eval = stand_pat;
@@ -206,29 +195,9 @@ impl Engine {
             context.stats.quiescence_stats.capture_candidates += raw_moves.len() as u64;
         }
 
-        /*
-        if in_check {
-            // self.order_moves(
-            //     // includes quiet moves and history heuristics
-            //     board,
-            //     &mut raw_moves,
-            //     side_to_move,
-            //     ply,
-            //     context,
-            //     None,
-            //     tt_best_move,
-            // );
-        } else {
-            self.q_order_moves
-        }
-
-
-
-         */
-
         // do move ordering here
         let mut move_picker = if in_check {
-            self.new_staged_move_selecter(
+            self.new_staged_move_selector(
                 0,
                 board,
                 &mut raw_moves,
@@ -241,7 +210,7 @@ impl Engine {
             )
         } else {
             // only tt and see ordering
-            self.new_staged_move_selecter(
+            self.new_staged_move_selector(
                 1,
                 board,
                 &mut raw_moves,

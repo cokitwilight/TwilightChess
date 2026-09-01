@@ -1,10 +1,8 @@
-use super::{
-    DepthHistogram, REDUCTION_BUCKETS, ReductionHistogram,
-    formatting::{
-        count, metric_count, metric_pct, pct, print_depth_histogram, section, submetric_count,
-        subsection,
-    },
+use crate::engine::search_stats::formatting::{
+    count, metric_count, metric_pct, pct, print_depth_histogram, section, submetric_count,
+    subsection,
 };
+use crate::engine::search_stats::{DepthHistogram, REDUCTION_BUCKETS, ReductionHistogram};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct LmrStats {

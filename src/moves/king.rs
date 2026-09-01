@@ -115,7 +115,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
             }
 
             // Cannot castle while in check.
-            if board.square_attacked_by(E1, enemy) {
+            if board.square_attacked_by(enemy, E1) {
                 return;
             }
 
@@ -130,7 +130,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
                 let path_empty = occupied & between == 0;
 
                 let path_safe =
-                    !board.square_attacked_by(F1, enemy) && !board.square_attacked_by(G1, enemy);
+                    !board.square_attacked_by(enemy, F1) && !board.square_attacked_by(enemy, G1);
 
                 if rook_on_h1 && path_empty && path_safe {
                     moves.push(Move::new(E1, G1, MoveType::Castle, None));
@@ -150,7 +150,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
                 // King moves through d1 and lands on c1.
                 // b1 must be empty, but b1 does not need to be safe.
                 let path_safe =
-                    !board.square_attacked_by(D1, enemy) && !board.square_attacked_by(C1, enemy);
+                    !board.square_attacked_by(enemy, D1) && !board.square_attacked_by(enemy, C1);
 
                 if rook_on_a1 && path_empty && path_safe {
                     moves.push(Move::new(E1, C1, MoveType::Castle, None));
@@ -165,7 +165,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
             }
 
             // Cannot castle while in check.
-            if board.square_attacked_by(E8, enemy) {
+            if board.square_attacked_by(enemy, E8) {
                 return;
             }
 
@@ -180,7 +180,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
                 let path_empty = occupied & between == 0;
 
                 let path_safe =
-                    !board.square_attacked_by(F8, enemy) && !board.square_attacked_by(G8, enemy);
+                    !board.square_attacked_by(enemy, F8) && !board.square_attacked_by(enemy, G8);
 
                 if rook_on_h8 && path_empty && path_safe {
                     moves.push(Move::new(E8, G8, MoveType::Castle, None));
@@ -200,7 +200,7 @@ fn pseudo_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
                 // King moves through d8 and lands on c8.
                 // b8 must be empty, but b8 does not need to be safe.
                 let path_safe =
-                    !board.square_attacked_by(D8, enemy) && !board.square_attacked_by(C8, enemy);
+                    !board.square_attacked_by(enemy, D8) && !board.square_attacked_by(enemy, C8);
 
                 if rook_on_a8 && path_empty && path_safe {
                     moves.push(Move::new(E8, C8, MoveType::Castle, None));

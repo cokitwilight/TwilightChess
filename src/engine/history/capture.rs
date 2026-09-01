@@ -1,7 +1,5 @@
-use crate::{
-    engine::history::{HISTORY_KEY_COUNT, HistoryKey, history_bonus, history_malus, update},
-    types::PieceType,
-};
+use crate::engine::history::{HISTORY_KEY_COUNT, HistoryKey, history_bonus, history_malus, update};
+use crate::types::PieceType;
 
 // indexed as history key([color][piece][to]) and captured piece type
 const CAPTURE_SIZE: usize = HISTORY_KEY_COUNT * 6;

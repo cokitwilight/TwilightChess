@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crate::engine::history::KillerTable;
-use crate::engine::ordering::staged::StagedMoveBuffer;
+use crate::engine::ordering::StagedMoveBuffer;
 use crate::engine::{MAX_PLY, SearchLimits, SearchStackEntry, SearchStats, SearchTermination};
 
 const PICKER_FRAME_COUNT: usize = MAX_PLY + 1;
