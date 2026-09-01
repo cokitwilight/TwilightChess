@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use rand::RngExt;
 
 use crate::bitboard::{Square, file_of, rank_of};
-use crate::board::{Board, Move, STARTPOS_FEN};
+use crate::board::{Board, Move};
 use crate::engine::Engine;
+use crate::game::Game;
 use crate::types::PieceType;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,38 +33,124 @@ impl Engine {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
+pub struct OpeningLine {
+    pub name: String,
+    pub game: Game,
+    pub weight: i32,
+}
+impl OpeningLine {
+    pub fn from_uci(
+        name: impl Into<String>,
+        starting_fen: impl Into<String>,
+        uci_moves: &[&str],
+        weight: i32,
+    ) -> Self {
+        let name = name.into();
+        let starting_fen = starting_fen.into();
+        let mut game = Game::from_fen(&starting_fen).expect("Invalid opening FEN");
+
+        for &uci in uci_moves {
+            let mv = find_legal_move_from_uci(&game.board, uci)
+                .unwrap_or_else(|| panic!("Invalid UCI move `{uci}` in opening `{name}`"));
+            game.play_move(mv)
+                .unwrap_or_else(|_| panic!("Invalid UCI move `{uci}` in opening `{name}`"));
+        }
+
+        Self { name, game, weight }
+    }
+
+    pub fn create_game(&self) -> Game {
+        self.game.clone()
+    }
+}
+
+impl fmt::Debug for OpeningLine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OpeningLine")
+            .field("name", &self.name)
+            .field("starting_fen", &self.game.starting_fen)
+            .field("move_count", &self.game.move_history.len())
+            .field("weight", &self.weight)
+            .finish()
+    }
+}
+
+#[derive(Clone)]
 pub struct OpeningBook {
     pub entries: HashMap<u64, Vec<BookMove>>,
+    pub openings: Vec<OpeningLine>,
 }
 
 impl OpeningBook {
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),
+            openings: Vec::new(),
         }
     }
 
-    pub fn add_line(&mut self, start_board: &Board, moves: &[&str], weight: i32) {
-        let mut board = start_board.clone();
+    pub fn add_line(
+        &mut self,
+        name: impl Into<String>,
+        starting_fen: impl Into<String>,
+        uci_moves: &[&str],
+        weight: i32,
+    ) {
+        let line = OpeningLine::from_uci(name, starting_fen, uci_moves, weight);
+        self.index_line(&line);
+        self.openings.push(line);
+    }
 
-        for mv_str in moves {
-            let hash = board.hash();
+    fn index_line(&mut self, line: &OpeningLine) {
+        let mut board = Board::from_fen(&line.game.starting_fen)
+            .unwrap_or_else(|_| panic!("Invalid opening FEN for `{}`", line.name));
 
-            let Some(mv) = find_legal_move_from_uci(&board, mv_str) else {
-                panic!("Opening book move {mv_str} is not legal in this position");
-            };
-
-            let entry = self.entries.entry(hash).or_default();
+        for &mv in &line.game.move_history {
+            let entry = self.entries.entry(board.hash()).or_default();
 
             if let Some(existing) = entry.iter_mut().find(|book_move| book_move.mv == mv) {
-                existing.weight += weight;
+                existing.weight += line.weight;
             } else {
-                entry.push(BookMove { mv, weight });
+                entry.push(BookMove {
+                    mv,
+                    weight: line.weight,
+                });
             }
 
             board.make_move(mv);
         }
+    }
+
+    pub fn random_line(&self) -> Option<OpeningLine> {
+        if self.openings.is_empty() {
+            return None;
+        }
+
+        let mut rng = rand::rng();
+        let index = rng.random_range(0..self.openings.len());
+        Some(self.openings[index].clone())
+    }
+
+    pub fn line_from_name(&self, name: &str) -> Option<OpeningLine> {
+        self.openings
+            .iter()
+            .find(|opening| opening.name == name)
+            .cloned()
+    }
+
+    pub fn only_named(&self, names: &[&str]) -> Self {
+        let mut filtered = Self::new();
+
+        for &name in names {
+            let line = self
+                .line_from_name(name)
+                .unwrap_or_else(|| panic!("Unknown opening `{name}`"));
+            filtered.index_line(&line);
+            filtered.openings.push(line);
+        }
+
+        filtered
     }
 
     pub fn get_move(&self, board: &Board) -> Option<Move> {
@@ -97,576 +184,19 @@ impl OpeningBook {
     }
 }
 
+impl fmt::Debug for OpeningBook {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OpeningBook")
+            .field("entries", &self.entries)
+            .field("openings", &self.openings)
+            .finish()
+    }
+}
+
 impl Default for OpeningBook {
     fn default() -> Self {
         Self::new()
     }
-}
-
-pub fn build_opening_book() -> OpeningBook {
-    let start = Board::from_fen(STARTPOS_FEN).expect("FEN not working in opening book!");
-    let mut book = OpeningBook::new();
-
-    // Italian Game
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6", "d2d3", "f8c5", "c2c3",
-        ],
-        5,
-    );
-
-    // Ruy Lopez
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6", "b5a4", "g8f6", "e1g1",
-        ],
-        4,
-    );
-
-    // Scotch
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "g1f3", "b8c6", "d2d4", "e5d4", "f3d4", "g8f6", "b1c3",
-        ],
-        4,
-    );
-
-    // Sicilian Defense
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "a7a6",
-        ],
-        5,
-    );
-
-    // Dragon Sicilian
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "g7g6", "c1e3",
-            "f8g7", "d1d2",
-        ],
-        5,
-    );
-
-    // French Defense
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e6", "d2d4", "d7d5", "b1c3", "g8f6", "c1g5", "f8e7",
-        ],
-        3,
-    );
-
-    // Caro-Kann
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c6", "d2d4", "d7d5", "b1c3", "d5e4", "c3e4", "c8f5",
-        ],
-        3,
-    );
-
-    // Queen's Gambit Declined
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5", "f8e7", "e2e3",
-        ],
-        4,
-    );
-
-    // King's Indian
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6",
-        ],
-        4,
-    );
-
-    // English
-    book.add_line(
-        &start,
-        &[
-            "c2c4", "e7e5", "b1c3", "g8f6", "g2g3", "d7d5", "c4d5", "f6d5", "f1g2",
-        ],
-        2,
-    );
-
-    // Evans Gambit
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5", "b2b4", "c5b4", "c2c3", "b4a5", "d2d4",
-            "e5d4", "e1g1",
-        ],
-        6,
-    );
-
-    // Danish Gambit
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "d2d4", "e5d4", "c2c3", "d4c3", "f1c4", "c3b2", "c1b2",
-        ],
-        5,
-    );
-
-    // King's Gambit Accepted
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "f2f4", "e5f4", "g1f3", "g7g5", "f1c4", "f8g7", "e1g1",
-        ],
-        5,
-    );
-
-    // Vienna Gambit
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "b1c3", "g8f6", "f2f4", "d7d5", "f4e5", "f6e4", "g1f3",
-        ],
-        4,
-    );
-
-    // Smith-Morra Gambit
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c5", "d2d4", "c5d4", "c2c3", "d4c3", "b1c3", "b8c6", "g1f3", "d7d6", "f1c4",
-        ],
-        6,
-    );
-
-    // -------------------------------------------------------------------------
-    // Additional 1.e4 e5 openings
-    // -------------------------------------------------------------------------
-
-    // Petrov Defense
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "g1f3", "g8f6", "f3e5", "d7d6", "e5f3", "f6e4", "d2d4", "d6d5", "f1d3",
-            "f8e7", "e1g1", "e8g8",
-        ],
-        3,
-    );
-
-    // Four Knights Game
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "g1f3", "b8c6", "b1c3", "g8f6", "f1b5", "f8b4", "e1g1", "e8g8", "d2d3",
-            "d7d6",
-        ],
-        3,
-    );
-
-    // Philidor Defense
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e5", "g1f3", "d7d6", "d2d4", "e5d4", "f3d4", "g8f6", "b1c3", "f8e7", "f1e2",
-            "e8g8", "e1g1",
-        ],
-        2,
-    );
-
-    // -------------------------------------------------------------------------
-    // Hypermodern and unusual responses to 1.e4
-    // -------------------------------------------------------------------------
-
-    // Pirc Defense: Austrian Attack
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "d7d6", "d2d4", "g8f6", "b1c3", "g7g6", "f2f4", "f8g7", "g1f3", "e8g8", "f1d3",
-        ],
-        4,
-    );
-
-    // Modern Defense
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "g7g6", "d2d4", "f8g7", "b1c3", "d7d6", "f2f4", "a7a6", "g1f3", "b7b5",
-        ],
-        3,
-    );
-
-    // Alekhine Defense
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "g8f6", "e4e5", "f6d5", "d2d4", "d7d6", "g1f3", "d6e5", "f3e5",
-        ],
-        3,
-    );
-
-    // Scandinavian Defense
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "d7d5", "e4d5", "d8d5", "b1c3", "d5d8", "d2d4", "g8f6", "g1f3",
-        ],
-        3,
-    );
-
-    // -------------------------------------------------------------------------
-    // Additional French and Caro-Kann structures
-    // -------------------------------------------------------------------------
-
-    // French Defense: Advance Variation
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e6", "d2d4", "d7d5", "e4e5", "c7c5", "c2c3", "b8c6", "g1f3", "d8b6", "f1d3",
-        ],
-        4,
-    );
-
-    // French Defense: Winawer Variation
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "e7e6", "d2d4", "d7d5", "b1c3", "f8b4", "e4e5", "c7c5", "a2a3", "b4c3", "b2c3",
-            "g8e7",
-        ],
-        4,
-    );
-
-    // Caro-Kann: Advance Variation
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c6", "d2d4", "d7d5", "e4e5", "c8f5", "g1f3", "e7e6", "f1e2", "c6c5", "e1g1",
-            "b8c6",
-        ],
-        4,
-    );
-
-    // Caro-Kann: Panov Attack
-    // Often produces an isolated queen pawn or hanging-pawn structure.
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c6", "d2d4", "d7d5", "e4d5", "c6d5", "c2c4", "g8f6", "b1c3", "e7e6", "g1f3",
-            "f8e7",
-        ],
-        4,
-    );
-
-    // -------------------------------------------------------------------------
-    // Additional Sicilian structures
-    // -------------------------------------------------------------------------
-
-    // Sicilian Sveshnikov
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c5", "g1f3", "b8c6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "e7e5", "d4b5",
-            "d7d6", "c1g5", "a7a6", "b5a3", "b7b5",
-        ],
-        5,
-    );
-
-    // Classical Sicilian: Richter-Rauzer
-    // Produces opposite-side castling and direct attacks.
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "b8c6", "c1g5",
-            "e7e6", "d1d2", "f8e7", "e1c1",
-        ],
-        5,
-    );
-
-    // Sicilian Alapin
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c5", "c2c3", "g8f6", "e4e5", "f6d5", "d2d4", "c5d4", "g1f3", "b8c6", "c3d4",
-            "d7d6",
-        ],
-        3,
-    );
-
-    // Closed Sicilian
-    book.add_line(
-        &start,
-        &[
-            "e2e4", "c7c5", "b1c3", "b8c6", "g2g3", "g7g6", "f1g2", "f8g7", "d2d3", "d7d6", "f2f4",
-            "e7e5",
-        ],
-        4,
-    );
-
-    // -------------------------------------------------------------------------
-    // Queen's Gambit family
-    // -------------------------------------------------------------------------
-
-    // Queen's Gambit Accepted
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "c2c4", "d5c4", "g1f3", "g8f6", "e2e3", "e7e6", "f1c4", "c7c5", "e1g1",
-            "a7a6",
-        ],
-        4,
-    );
-
-    // Slav Defense
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "c2c4", "c7c6", "g1f3", "g8f6", "b1c3", "d5c4", "a2a4", "c8f5", "e2e3",
-            "e7e6", "f1c4", "f8b4",
-        ],
-        4,
-    );
-
-    // Semi-Slav Defense
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "g1f3", "c7c6", "e2e3", "b8d7", "f1d3",
-            "d5c4", "d3c4", "b7b5",
-        ],
-        4,
-    );
-
-    // Queen's Gambit Declined: Exchange Variation
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c4d5", "e6d5", "c1g5", "c7c6", "e2e3",
-            "c8f5",
-        ],
-        3,
-    );
-
-    // Tarrasch Defense
-    // Frequently creates an isolated black queen pawn.
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "c7c5", "c4d5", "e6d5", "g1f3", "b8c6", "g2g3",
-            "g8f6",
-        ],
-        3,
-    );
-
-    // Catalan Opening
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c2c4", "e7e6", "g2g3", "d7d5", "f1g2", "f8e7", "g1f3", "e8g8", "e1g1",
-            "d5c4", "d1c2", "a7a6",
-        ],
-        4,
-    );
-
-    // -------------------------------------------------------------------------
-    // Indian defenses and asymmetrical 1.d4 positions
-    // -------------------------------------------------------------------------
-
-    // Nimzo-Indian Defense
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c2c4", "e7e6", "b1c3", "f8b4", "e2e3", "e8g8", "f1d3", "d7d5", "g1f3",
-            "c7c5", "e1g1",
-        ],
-        5,
-    );
-
-    // Queen's Indian Defense
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c2c4", "e7e6", "g1f3", "b7b6", "g2g3", "c8a6", "b2b3", "f8b4", "c1d2",
-            "b4e7", "f1g2",
-        ],
-        4,
-    );
-
-    // Grünfeld Defense: Exchange Variation
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "d7d5", "c4d5", "f6d5", "e2e4", "d5c3", "b2c3",
-            "f8g7",
-        ],
-        5,
-    );
-
-    // Modern Benoni
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c2c4", "c7c5", "d4d5", "e7e6", "b1c3", "e6d5", "c4d5", "d7d6", "e2e4",
-            "g7g6", "f2f4", "f8g7",
-        ],
-        5,
-    );
-
-    // Benko Gambit
-    // Gives Black long-term queenside activity for a pawn.
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c2c4", "c7c5", "d4d5", "b7b5", "c4b5", "a7a6", "b5a6", "g7g6", "b1c3",
-            "c8a6",
-        ],
-        5,
-    );
-
-    // King's Indian: Sämisch Variation
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6", "f2f3", "e8g8", "c1e3",
-            "e7e5", "d4d5",
-        ],
-        4,
-    );
-
-    // Budapest Gambit
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c2c4", "e7e5", "d4e5", "f6g4", "g1f3", "b8c6", "c1f4", "f8b4", "b1d2",
-            "d8e7",
-        ],
-        4,
-    );
-
-    // Dutch Defense: Leningrad
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "f7f5", "g2g3", "g8f6", "f1g2", "g7g6", "g1f3", "f8g7", "e1g1", "e8g8", "c2c4",
-            "d7d6", "b1c3",
-        ],
-        4,
-    );
-
-    // -------------------------------------------------------------------------
-    // Independent 1.d4 systems
-    // -------------------------------------------------------------------------
-
-    // London System
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "g1f3", "g8f6", "c1f4", "e7e6", "e2e3", "f8d6", "f4g3", "e8g8", "f1d3",
-            "c7c5",
-        ],
-        3,
-    );
-
-    // Trompowsky Attack
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "g8f6", "c1g5", "f6e4", "g5f4", "d7d5", "e2e3", "c7c5", "f1d3", "b8c6",
-        ],
-        3,
-    );
-
-    // Jobava London
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "b1c3", "g8f6", "c1f4", "c7c5", "e2e3", "b8c6", "c3b5", "e7e5", "d4e5",
-        ],
-        3,
-    );
-
-    // Blackmar-Diemer Gambit
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "e2e4", "d5e4", "b1c3", "g8f6", "f2f3", "e4f3", "g1f3",
-        ],
-        3,
-    );
-
-    // Albin Countergambit
-    book.add_line(
-        &start,
-        &[
-            "d2d4", "d7d5", "c2c4", "e7e5", "d4e5", "d5d4", "g1f3", "b8c6", "a2a3", "c8e6",
-        ],
-        3,
-    );
-
-    // -------------------------------------------------------------------------
-    // Flank openings
-    // -------------------------------------------------------------------------
-
-    // English Opening: Symmetrical Variation
-    book.add_line(
-        &start,
-        &[
-            "c2c4", "c7c5", "b1c3", "b8c6", "g2g3", "g7g6", "f1g2", "f8g7", "g1f3", "e7e5", "e1g1",
-            "g8e7",
-        ],
-        4,
-    );
-
-    // English Opening: Botvinnik Setup
-    book.add_line(
-        &start,
-        &[
-            "c2c4", "e7e5", "b1c3", "b8c6", "g2g3", "g7g6", "f1g2", "f8g7", "e2e4", "d7d6", "g1e2",
-        ],
-        3,
-    );
-
-    // Réti Opening
-    book.add_line(
-        &start,
-        &[
-            "g1f3", "d7d5", "c2c4", "e7e6", "g2g3", "g8f6", "f1g2", "f8e7", "e1g1", "e8g8", "d2d4",
-        ],
-        4,
-    );
-
-    // King's Indian Attack
-    book.add_line(
-        &start,
-        &[
-            "g1f3", "d7d5", "g2g3", "g8f6", "f1g2", "e7e6", "e1g1", "f8e7", "d2d3", "e8g8", "b1d2",
-        ],
-        3,
-    );
-
-    // Bird Opening
-    book.add_line(
-        &start,
-        &[
-            "f2f4", "d7d5", "g1f3", "g8f6", "e2e3", "g7g6", "b2b3", "f8g7", "c1b2", "e8g8",
-        ],
-        2,
-    );
-
-    // Polish Opening / Sokolsky
-    book.add_line(
-        &start,
-        &[
-            "b2b4", "e7e5", "c1b2", "f8b4", "b2e5", "g8f6", "g1f3", "e8g8", "e2e3", "d7d5",
-        ],
-        2,
-    );
-
-    book
 }
 
 pub fn find_legal_move_from_uci(board: &Board, s: &str) -> Option<Move> {
@@ -775,4 +305,106 @@ fn rank_char(rank: u8) -> char {
     // New bitboard mapping:
     // rank 0 = first rank, rank 7 = eighth rank.
     (b'1' + rank) as char
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use crate::board::STARTPOS_FEN;
+    use crate::opening::{
+        IMPORTANT_OPENINGS, SUGGESTION_OPENINGS, build_important_opening_book, build_opening_book,
+        build_suggestion_opening_book,
+    };
+
+    use super::*;
+
+    #[test]
+    fn adding_a_line_updates_search_and_tournament_views() {
+        let mut book = OpeningBook::new();
+        book.add_line("King's Pawn", STARTPOS_FEN, &["e2e4"], 7);
+
+        let line = book.line_from_name("King's Pawn").unwrap();
+        assert_eq!(line.game.move_history.len(), 1);
+        assert_eq!(line.weight, 7);
+
+        let board = Board::from_fen(STARTPOS_FEN).unwrap();
+        assert_eq!(book.get_move(&board), Some(line.game.move_history[0]));
+    }
+
+    #[test]
+    fn catalog_builds_both_views_from_all_openings() {
+        let book = build_opening_book();
+
+        assert_eq!(book.openings.len(), 100);
+        assert!(!book.entries.is_empty());
+
+        let mut names = HashSet::new();
+        for line in &book.openings {
+            assert!(names.insert(line.name.as_str()), "duplicate opening name");
+        }
+
+        for (index, line) in book.openings.iter().enumerate() {
+            for other in book.openings.iter().skip(index + 1) {
+                assert_ne!(
+                    line.game.move_history, other.game.move_history,
+                    "duplicate opening lines: `{}` and `{}`",
+                    line.name, other.name
+                );
+            }
+        }
+
+        let italian = book.line_from_name("Italian Game").unwrap();
+        assert_eq!(italian.game.move_history.len(), 9);
+        assert_eq!(italian.weight, 5);
+    }
+
+    #[test]
+    fn important_book_filters_the_shared_catalog() {
+        let full_book = build_opening_book();
+        let important_book = build_important_opening_book();
+
+        assert_eq!(important_book.openings.len(), IMPORTANT_OPENINGS.len());
+
+        for &name in IMPORTANT_OPENINGS {
+            let full_line = full_book.line_from_name(name).unwrap();
+            let important_line = important_book.line_from_name(name).unwrap();
+            assert_eq!(
+                important_line.game.move_history,
+                full_line.game.move_history
+            );
+            assert_eq!(important_line.weight, full_line.weight);
+        }
+    }
+
+    #[test]
+    fn suggestion_book_contains_25_short_lines() {
+        let full_book = build_opening_book();
+        let suggestion_book = build_suggestion_opening_book();
+
+        assert_eq!(SUGGESTION_OPENINGS.len(), 25);
+        assert_eq!(suggestion_book.openings.len(), 25);
+
+        let mut suggestion_names = HashSet::new();
+        for &name in SUGGESTION_OPENINGS {
+            assert!(
+                suggestion_names.insert(name),
+                "duplicate suggestion opening `{name}`"
+            );
+
+            let full_line = full_book.line_from_name(name).unwrap();
+            let suggestion_line = suggestion_book.line_from_name(name).unwrap();
+            let move_count = suggestion_line.game.move_history.len();
+
+            assert!(
+                (1..=3).contains(&move_count),
+                "suggestion `{name}` has {move_count} moves"
+            );
+            assert_eq!(
+                suggestion_line.game.move_history,
+                full_line.game.move_history
+            );
+            assert_eq!(suggestion_line.weight, full_line.weight);
+        }
+    }
 }

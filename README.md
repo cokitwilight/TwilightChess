@@ -61,6 +61,22 @@ cargo build --release
 cargo run --release
 ```
 
+## Static Evaluation Debugger
+
+Launch the interactive evaluator separately from the GUI:
+
+```bash
+cargo run --release --bin eval-debug
+```
+
+Paste a six-field FEN at the prompt for a compact summary. Use commands such as
+`show pawns`, `show mobility`, `show sliders`, `show king`, or `show all` to print
+the named bonuses for the current position. Type `compare` to enter two FENs and
+print their overall values side by side. Once loaded, `compare pawns`,
+`compare king`, or a named row such as `compare pawn shield` prints its change.
+Comparison deltas are Position 2 minus Position 1. Type `help` for the full
+command list.
+
 ## Testing
 
 Run all tests:

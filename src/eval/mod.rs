@@ -1,3 +1,4 @@
+pub mod debug;
 pub mod eval;
 pub mod incremental_eval;
 pub mod king;

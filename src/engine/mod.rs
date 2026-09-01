@@ -19,6 +19,6 @@ pub use engine::Engine;
 pub use search_context::SearchContext;
 pub use search_limits::SearchLimits;
 pub use search_options::SearchOptions;
-pub use search_result::SearchResult;
+pub use search_result::{MAX_PV, SearchResult, SearchTermination};
 pub use search_stack::SearchStackEntry;
 pub use search_stats::SearchStats;

@@ -1,5 +1,5 @@
 use crate::bitboard::Square;
-use crate::engine::history::{ContinuationHistory, MainHistory};
+use crate::engine::history::{CaptureHistory, ContinuationHistory, MainHistory};
 use crate::engine::{Engine, MAX_PLY, SearchContext, SearchStackEntry};
 use crate::types::{Color, PieceType};
 
@@ -27,6 +27,7 @@ impl HistoryKey {
 pub struct HistoryTables {
     pub main: MainHistory,
     pub continuation: ContinuationHistory,
+    pub capture: CaptureHistory,
 }
 
 impl HistoryTables {
@@ -36,7 +37,7 @@ impl HistoryTables {
 
     pub fn get_quiet_score(
         &self,
-        stack: &[SearchStackEntry; MAX_PLY as usize],
+        stack: &[SearchStackEntry; MAX_PLY],
         ply: usize,
         curr_key: HistoryKey,
     ) -> i32 {
@@ -61,12 +62,16 @@ impl HistoryTables {
         score
     }
 
+    pub fn get_capture_score(&self, curr_key: HistoryKey, captured: PieceType) -> i32 {
+        self.capture.get(curr_key, captured)
+    }
+
     pub fn add_quiet_bonus(
         &mut self,
+        curr_key: HistoryKey,
         context: &mut SearchContext,
         ply: usize,
         depth: u16,
-        curr_key: HistoryKey,
     ) {
         context.stats.history_stats.bonus_updates += 1;
         self.main.add_bonus(curr_key, depth);
@@ -94,12 +99,16 @@ impl HistoryTables {
         }
     }
 
+    pub fn add_capture_bonus(&mut self, curr_key: HistoryKey, captured: PieceType, depth: u16) {
+        self.capture.add_bonus(curr_key, captured, depth);
+    }
+
     pub fn add_quiet_malus(
         &mut self,
+        curr_key: HistoryKey,
         context: &mut SearchContext,
         ply: usize,
         depth: u16,
-        curr_key: HistoryKey,
     ) {
         context.stats.history_stats.malus_updates += 1;
         self.main.add_malus(curr_key, depth);
@@ -125,6 +134,10 @@ impl HistoryTables {
                 }
             }
         }
+    }
+
+    pub fn add_capture_malus(&mut self, curr_key: HistoryKey, captured: PieceType, depth: u16) {
+        self.capture.add_malus(curr_key, captured, depth);
     }
 }
 

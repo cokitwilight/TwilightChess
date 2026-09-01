@@ -8,7 +8,7 @@ pub struct SearchStackEntry {
 
     pub history_index: Option<HistoryKey>, // the history key of mv
 
-    pub static_eval: i32, // current static eval. NOT the static eval from the incoming node.
+    pub static_eval: Option<i32>, // current static eval. NOT the static eval from the incoming node.
 }
 
 impl Default for SearchStackEntry {
@@ -17,7 +17,7 @@ impl Default for SearchStackEntry {
             mv: None,
             piece: None,
             history_index: None,
-            static_eval: 0,
+            static_eval: None,
         }
     }
 }

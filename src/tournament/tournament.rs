@@ -1,12 +1,12 @@
 use std::time::{Duration, Instant};
 
-use crate::tournament::opening_suite::OpeningSuite;
+use crate::opening::OpeningBook;
 use crate::tournament::results::GameResult;
 use crate::tournament::{MatchPlayers, NotableGame, NotableReason, TournamentResult, run_game};
 use crate::types::Color;
 
 pub fn play_games(
-    opening_suite: OpeningSuite,
+    opening_suite: OpeningBook,
     num_games_per_opening: usize, // how many games to play for each opening in the suite. input 1 = 1 as white, 1 as black. input 2 = 2 as white, 2 as black, etc.
     max_games: usize,
     mut players: MatchPlayers, /* Later: OpeningSuite, Start_fen */
@@ -32,11 +32,12 @@ pub fn play_games(
     let mut count = 1;
 
     for opening in opening_suite.openings.iter() {
-        if count - 1 >= max_games {
+        if count > max_games {
             break;
         }
         for _ in 0..total_opening_games {
             let start = Instant::now();
+            let search_elapsed: Duration;
             match run_game(
                 opening.game.starting_fen.clone(),
                 players.clone(),
@@ -44,6 +45,7 @@ pub fn play_games(
                 Some(opening.clone()),
             ) {
                 Ok(g) => {
+                    search_elapsed = g.total_time;
                     let Some(game_result) = g.result.clone() else {
                         result
                             .invalid_games
@@ -312,9 +314,10 @@ pub fn play_games(
             let elapsed = start.elapsed();
 
             println!(
-                "Game: {}. Time: {:.2} seconds",
+                "Game: {}. Wall time: {:.2} seconds. Engine search time: {:.2} seconds",
                 count - 1,
-                elapsed.as_secs_f64()
+                elapsed.as_secs_f64(),
+                search_elapsed.as_secs_f64(),
             );
         }
     }
@@ -334,7 +337,9 @@ pub fn play_games(
 mod tests {
     use crate::{
         engine::configs::EngineConfig,
-        tournament::opening_suite::{build_important_opening_suite, build_opening_suite},
+        opening::{
+            build_important_opening_book, build_opening_book, build_suggestion_opening_book,
+        },
     };
 
     use super::*;
@@ -345,7 +350,7 @@ mod tests {
         let mut match_players =
             MatchPlayers::from_depth("Depth 11".to_string(), "Depth 10".to_string(), 11, 6, 10, 6);
 
-        let opening_suite = build_important_opening_suite();
+        let opening_suite = build_important_opening_book();
 
         match_players.white.config.search.fut.enabled = true;
         match_players.black.config.search.fut.enabled = true;
@@ -390,7 +395,7 @@ mod tests {
         match_players.white.config.search.singular.minimum_depth = 6;
         match_players.black.config.search.singular.enabled = false;
 
-        let opening_suite = build_opening_suite();
+        let opening_suite = build_opening_book();
 
         let result = play_games(opening_suite, 1, 300, match_players, Color::White);
 
@@ -427,7 +432,7 @@ mod tests {
         match_players.white.config.search.lmr.enabled = true;
         match_players.black.config.search.lmr.enabled = true;
 
-        let opening_suite = build_important_opening_suite();
+        let opening_suite = build_important_opening_book();
 
         let result = play_games(opening_suite, 1, 5, match_players, Color::White);
 
@@ -440,9 +445,9 @@ mod tests {
         let mut match_players = MatchPlayers::from_depth(
             "LMR History on".to_string(),
             "LMR History off".to_string(),
-            14,
+            24,
             6,
-            14,
+            24,
             6,
         );
 
@@ -451,13 +456,13 @@ mod tests {
 
         match_players.white.config.search.lmr.enabled = true;
         match_players.white.config.search.lmr.history_enabled = true;
-        match_players.white.config.search.lmr.history_scale = 94;
+        match_players.white.config.search.lmr.history_scale = 120;
         match_players.black.config.search.lmr.enabled = true;
         match_players.black.config.search.lmr.history_enabled = false;
 
-        let opening_suite = build_opening_suite();
+        let opening_suite = build_opening_book();
 
-        let result = play_games(opening_suite, 8, 880, match_players, Color::White);
+        let result = play_games(opening_suite, 1, 880, match_players, Color::White);
 
         result.review().expect("IO Error");
     }
@@ -474,7 +479,7 @@ mod tests {
         match_players.white.config.search.null_move.enabled = true;
         match_players.black.config.search.null_move.enabled = false;
 
-        let opening_suite = build_opening_suite();
+        let opening_suite = build_opening_book();
 
         let result = play_games(opening_suite, 8, 880, match_players, Color::White);
 
@@ -493,7 +498,7 @@ mod tests {
         match_players.white.config.search.rfp.enabled = true;
         match_players.black.config.search.rfp.enabled = false;
 
-        let opening_suite = build_opening_suite();
+        let opening_suite = build_opening_book();
 
         let result = play_games(opening_suite, 8, 880, match_players, Color::White);
 
@@ -504,15 +509,17 @@ mod tests {
     #[ignore]
     pub fn test_tournament_fut() {
         let mut match_players =
-            MatchPlayers::from_depth("FUT on".to_string(), "FUT off".to_string(), 12, 6, 12, 6);
+            MatchPlayers::from_depth("FUT on".to_string(), "FUT off".to_string(), 20, 6, 20, 6);
 
         match_players.white.config = EngineConfig::standard();
         match_players.black.config = EngineConfig::standard();
 
         match_players.white.config.search.fut.enabled = true;
-        match_players.black.config.search.fut.enabled = false;
+        match_players.white.config.search.fut.history_enabled = true;
+        match_players.black.config.search.fut.enabled = true;
+        match_players.black.config.search.fut.history_enabled = false;
 
-        let opening_suite = build_opening_suite();
+        let opening_suite = build_opening_book();
 
         let result = play_games(opening_suite, 8, 880, match_players, Color::White);
 
@@ -534,9 +541,50 @@ mod tests {
         match_players.white.config.search.see.margin = 250;
         match_players.black.config.search.see.margin = 200;
 
-        let opening_suite = build_opening_suite();
+        let opening_suite = build_opening_book();
 
         let result = play_games(opening_suite, 2, 150, match_players, Color::White);
+
+        result.review().expect("IO Error");
+    }
+
+    #[test]
+    #[ignore]
+    pub fn test_tournament_singular() {
+        let mut match_players = MatchPlayers::from_depth(
+            "Singular On".to_string(),
+            "Singular Off".to_string(),
+            20,
+            6,
+            20,
+            6,
+        );
+
+        match_players.white.config = EngineConfig::standard();
+        match_players.black.config = EngineConfig::standard();
+
+        match_players.white.config.search.singular.enabled = true;
+        match_players.black.config.search.singular.enabled = false;
+
+        let opening_suite = build_opening_book();
+
+        let result = play_games(opening_suite, 5, 1000, match_players, Color::White);
+
+        result.review().expect("IO Error");
+    }
+
+    #[test]
+    #[ignore]
+    pub fn test_tournament_suggestion() {
+        let mut match_players =
+            MatchPlayers::from_depth("Engine 1".to_string(), "Engine 2".to_string(), 30, 6, 30, 6);
+
+        match_players.white.config.limits.soft_time_limit_ms = Some(1000);
+        match_players.black.config.limits.soft_time_limit_ms = Some(1000);
+
+        let opening_suite = build_suggestion_opening_book();
+
+        let result = play_games(opening_suite, 1, 100, match_players, Color::White);
 
         result.review().expect("IO Error");
     }

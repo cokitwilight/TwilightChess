@@ -1,7 +1,5 @@
-use std::time::Instant;
-
 use crate::board::Board;
-use crate::engine::{Engine, SearchContext, SearchLimits, SearchResult};
+use crate::engine::{Engine, MAX_PV, SearchContext, SearchLimits, SearchResult, SearchTermination};
 use crate::eval::eval::{BLACK_SQUARES, WHITE_SQUARES};
 use crate::types::{Color, PieceType};
 
@@ -18,8 +16,6 @@ impl Engine {
         let mut context = SearchContext::new(limits, repetition_history.clone());
         let mut board = board.clone();
 
-        let start = Instant::now();
-
         if opening_allowed && let Some(book_mv) = self.get_book_move(&board) {
             // let piece = board.piece_at(book_mv.from).unwrap();
 
@@ -32,8 +28,9 @@ impl Engine {
                 eval: 0,
                 depth_reached: 0,
                 stats: context.stats,
-                pv: Vec::new(),
-                elapsed: start.elapsed(),
+                pv: [None; MAX_PV],
+                elapsed: context.elapsed(),
+                termination: SearchTermination::BookMove,
             };
         }
 
@@ -46,18 +43,7 @@ impl Engine {
         // IMPORTANT: increments generation for the transposition table
         self.tt.new_search();
 
-        let search_result = self.iterative_deepening(&mut board, &mut context, can_print);
-
-        let elapsed = start.elapsed();
-
-        SearchResult {
-            best_move: search_result.best_move,
-            eval: search_result.eval,
-            depth_reached: search_result.depth_reached,
-            stats: context.stats,
-            pv: Vec::new(), // TODO: Implement principal variation
-            elapsed,
-        }
+        self.iterative_deepening(&mut board, &mut context, can_print)
     }
 }
 

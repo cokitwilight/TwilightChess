@@ -96,7 +96,7 @@ impl MoveList {
     }
 
     pub fn swap_remove(&mut self, index: usize) -> Move {
-        if self.len() == 0 || index >= self.len() {
+        if self.is_empty() || index >= self.len() {
             panic!("Invalid index in swap_remove in MoveList");
         }
         let removed = self.moves[index];

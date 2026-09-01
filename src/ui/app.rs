@@ -4,9 +4,9 @@ use std::thread;
 use crate::bitboard::{Square, square_to_algebraic};
 use crate::board::{Move, MoveList};
 use crate::bot::Bot;
-use crate::debug::eval_breakdown::evaluation_breakdown;
 use crate::engine::configs::EngineConfig;
 use crate::engine::{Engine, SearchLimits};
+use crate::eval::debug::evaluation_breakdown;
 use crate::game::{Game, GameState};
 use crate::types::{Color, PieceType};
 use crate::uci::pgn::{PgnMetadata, game_to_pgn};
@@ -18,7 +18,7 @@ use eframe::egui;
 const DEFAULT_BOT_DEPTH: u16 = 25;
 const DEFAULT_Q_BOT_DEPTH: u16 = 4;
 
-const DEFAULT_BOT_TIME_MS: u64 = 3000;
+const DEFAULT_BOT_TIME_MS: u64 = 1_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {

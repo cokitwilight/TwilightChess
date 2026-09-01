@@ -19,7 +19,7 @@ pub fn bishop_magics() -> &'static [MagicEntry; 64] {
     BISHOP_MAGIC_TABLE.get_or_init(build_bishop_magic)
 }
 
-pub fn bishop_attack_table() -> &'static Box<[Bitboard]> {
+pub fn bishop_attack_table() -> &'static [Bitboard] {
     BISHOP_ATTACK_TABLE.get_or_init(|| {
         let magics = bishop_magics();
         build_bishop_attack_table(magics)
@@ -30,7 +30,7 @@ pub fn rook_magics() -> &'static [MagicEntry; 64] {
     ROOK_MAGIC_TABLE.get_or_init(build_rook_magic)
 }
 
-pub fn rook_attack_table() -> &'static Box<[Bitboard]> {
+pub fn rook_attack_table() -> &'static [Bitboard] {
     ROOK_ATTACK_TABLE.get_or_init(|| {
         let magics = rook_magics();
         build_rook_attack_table(magics)

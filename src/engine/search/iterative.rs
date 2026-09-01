@@ -3,10 +3,15 @@ use std::time::{Duration, Instant};
 use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 use crate::engine::history::HistoryKey;
+use crate::engine::ordering::staged::ScoredMove;
+use crate::engine::search_context::PickerFrame;
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
 use crate::engine::tt::entry::TTNodeType;
 use crate::engine::tt::{TTEntry, TTFlag, score_to_tt};
-use crate::engine::{Engine, SearchContext, SearchOptions, SearchResult};
+use crate::engine::{
+    Engine, MAX_PV, SearchContext, SearchOptions, SearchResult, SearchTermination,
+};
+use crate::types::PieceType;
 
 // for debug printing
 use thousands::Separable;
@@ -18,19 +23,22 @@ impl Engine {
         ctx: &mut SearchContext,
         can_print: bool,
     ) -> SearchResult {
-        let full_start = Instant::now();
         let mut best_result = SearchResult {
-            best_move: None,
+            // A zero-duration/node limit can expire before depth one completes.
+            // Keep a legal fallback so callers such as run_game can still move.
+            best_move: board.all_legal_moves().iter().copied().next(),
             eval: 0,
             depth_reached: 0,
             stats: SearchStats::default(),
-            pv: Vec::new(),
-            elapsed: full_start.elapsed(),
+            pv: [None; MAX_PV],
+            elapsed: Duration::ZERO,
+            termination: SearchTermination::DepthLimit,
         };
 
         let mut total_time: f64 = 0.0;
         let mut total_nodes: u64 = 0;
-        let mut nps_samples: Vec<f64> = Vec::new();
+        let mut nps_samples = [0.0f64; 128];
+        let mut nps_index = 0usize;
 
         let aspiration_start = self.config.search.aspiration.initial_window;
         let window_growth = self.config.search.aspiration.growth_factor;
@@ -179,14 +187,15 @@ impl Engine {
             total_time += elapsed_secs;
             total_nodes += depth_nodes;
 
-            if depth_nps.is_finite() && depth_nps > 0.0 {
-                nps_samples.push(depth_nps);
+            if depth_nps.is_finite() && depth_nps > 0.0 && nps_index < 128 {
+                nps_samples[nps_index] = depth_nps;
+                nps_index += 1;
             }
 
-            let avg_nps = if nps_samples.is_empty() {
+            let avg_nps = if nps_index == 0 {
                 0.0
             } else {
-                nps_samples.iter().sum::<f64>() / nps_samples.len() as f64
+                nps_samples.iter().sum::<f64>() / (nps_index + 1) as f64
             };
 
             let median_nps = median_f64(&nps_samples);
@@ -217,10 +226,9 @@ impl Engine {
 
             best_result = result;
             best_result.depth_reached = depth;
-            best_result.elapsed = full_start.elapsed()
         }
 
-        total_time = full_start.elapsed().as_secs_f64();
+        total_time = ctx.elapsed().as_secs_f64();
 
         let total_nps = if total_time > 0.0 {
             ctx.stats.total_nodes() as f64 / total_time
@@ -238,6 +246,8 @@ impl Engine {
         }
 
         best_result.stats = ctx.stats;
+        best_result.elapsed = ctx.elapsed();
+        best_result.termination = ctx.stop_reason.unwrap_or(SearchTermination::DepthLimit);
         best_result
     }
 
@@ -263,7 +273,7 @@ impl Engine {
 
         let mut best_eval = NEG_INF;
         let mut best_move = None;
-        let mut best_pv = Vec::new();
+        let mut best_pv = [None; MAX_PV];
 
         let mut all_moves = board.all_legal_moves(); // this returns mostly legal moves except for pawn and king legality(TODO)
 
@@ -281,60 +291,36 @@ impl Engine {
                     .and_then(|entry| entry.best_move)
             });
 
-        // SELECTOR TESTING
-        //
-
-        // let expected = board.all_legal_moves();
-        // let mut selector = self.new_staged_move_selecter(
-        //     &board,
-        //     &mut expected.clone(),
-        //     board.side_to_move(),
-        //     0,
-        //     ctx,
-        //     previous_best_move,
-        //     tt_best_move,
-        // );
-        // let mut returned = Vec::new();
-
-        // while let Some(scored) = selector.get_next(
-        //     &board,
-        //     board.side_to_move(),
-        //     0,
-        //     ctx,
-        //     &self.history,
-        //     previous_best_move,
-        //     tt_best_move,
-        // ) {
-        //     returned.push(scored.mv);
-        // }
-
-        // assert_eq!(returned.len(), expected.len());
-
-        // for mv in expected.iter() {
-        //     assert_eq!(
-        //         returned.iter().filter(|&&found| found == *mv).count(),
-        //         1,
-        //         "move must be returned exactly once: {mv:?}",
-        //     );
-        // }
-
-        // SELECTOR TESTING
-
-        self.order_moves(
+        let mut move_picker = self.new_staged_move_selecter(
+            0,
             board,
             &mut all_moves,
-            board.side_to_move(),
+            side_to_move,
             0,
+            PickerFrame::ROOT,
             ctx,
             previous_best_move,
             tt_best_move,
         );
 
-        for mv in all_moves.iter() {
+        let mut searched_quiets = [ScoredMove::new(); 10];
+        let mut q = 0usize;
+        let mut searched_captures = [ScoredMove::new(); 10];
+        let mut c = 0usize;
+
+        while let Some(scored_mv) = move_picker.get_next(board, ctx, &self.history) {
+            // for mv in all_moves.iter() {
             if ctx.should_stop() {
                 stopped = true;
                 break;
             }
+
+            let mv = &scored_mv.mv;
+
+            let is_capture = mv.kind() == MoveType::Capture || mv.kind() == MoveType::EnPassant;
+            let is_quiet = !is_capture && mv.promotion().is_none();
+
+            let mut improved_alpha = false;
 
             let piece = board
                 .piecetype_at(mv.from())
@@ -344,10 +330,6 @@ impl Engine {
 
             let child_hash = board.hash();
 
-            // if board.in_check(side_to_move) {
-            //     board.undo_move(undo);
-            //     continue;
-            // }
             legal_moves += 1;
 
             ctx.repetition_history.push(child_hash);
@@ -359,38 +341,110 @@ impl Engine {
                 -beta,
                 -alpha,
                 1,
+                PickerFrame::ROOT.child(),
                 SearchOptions::NORMAL,
             );
-
-            if stopped {
-                break;
-            }
 
             ctx.repetition_history.pop();
 
             board.undo_move(undo);
 
+            if ctx.stopped {
+                stopped = true;
+                break;
+            }
+
             if eval > best_eval {
                 best_eval = eval;
                 best_move = Some(*mv);
 
-                best_pv.clear();
-                best_pv.push(*mv);
+                best_pv[0] = Some(*mv);
             }
 
             if eval > alpha {
                 alpha = eval;
+                improved_alpha = true;
             }
 
             if alpha >= beta {
-                if (mv.kind() == MoveType::Normal || mv.kind() == MoveType::Castle)
-                    && mv.promotion().is_none()
-                {
+                let history_key = if let Some(key) = scored_mv.history_key {
+                    key
+                } else {
+                    let mv = &scored_mv.mv;
+                    HistoryKey::new(side_to_move, piece, mv.to())
+                };
+
+                if is_quiet {
+                    self.history.main.add_bonus(history_key, depth);
+
+                    for scored_mv in &searched_quiets[..q] {
+                        let key = if let Some(k) = scored_mv.history_key {
+                            k
+                        } else {
+                            let mv = &scored_mv.mv;
+                            let piece = board
+                                .piecetype_at(mv.from())
+                                .expect("No piece in board in negamax!");
+                            HistoryKey::new(side_to_move, piece, mv.to())
+                        };
+
+                        self.history.main.add_malus(key, depth);
+                    }
+                } else if is_capture {
+                    let captured_piece = if let Some(piece) = scored_mv.captured {
+                        piece
+                    } else {
+                        match mv.kind() {
+                            MoveType::EnPassant => PieceType::Pawn,
+                            MoveType::Capture => board.piecetype_at(mv.to()).unwrap(),
+                            _ => unreachable!(
+                                "Somehow non capture move in searched captures in negamax! {:?}",
+                                mv.kind()
+                            ),
+                        }
+                    };
+
                     self.history
-                        .main
-                        .add_bonus(HistoryKey::new(side_to_move, piece, mv.to()), depth);
+                        .add_capture_bonus(history_key, captured_piece, depth);
+                }
+                for scored_mv in &searched_captures[..c] {
+                    let mv = &scored_mv.mv;
+                    let history_key = if let Some(key) = scored_mv.history_key {
+                        key
+                    } else {
+                        let piece = board
+                            .piecetype_at(mv.from())
+                            .expect("No piece in board in negamax!");
+                        HistoryKey::new(side_to_move, piece, mv.to())
+                    };
+
+                    let captured_piece = if let Some(piece) = scored_mv.captured {
+                        piece
+                    } else {
+                        match mv.kind() {
+                            MoveType::EnPassant => PieceType::Pawn,
+                            MoveType::Capture => board.piecetype_at(mv.to()).unwrap(),
+                            _ => unreachable!(
+                                "Somehow non capture move in searched captures in negamax! {:?}",
+                                mv.kind()
+                            ),
+                        }
+                    };
+
+                    self.history
+                        .add_capture_malus(history_key, captured_piece, depth);
                 }
                 break;
+            }
+
+            if !improved_alpha {
+                if is_quiet && q < 10 {
+                    searched_quiets[q] = scored_mv;
+                    q += 1;
+                } else if is_capture && c < 10 {
+                    searched_captures[c] = scored_mv;
+                    c += 1;
+                }
             }
         }
         if stopped {
@@ -403,6 +457,7 @@ impl Engine {
                 stats: ctx.stats,
                 pv: best_pv,
                 elapsed: Duration::ZERO,
+                termination: SearchTermination::DepthLimit,
             };
         }
 
@@ -421,6 +476,7 @@ impl Engine {
                 stats: ctx.stats,
                 pv: best_pv,
                 elapsed: Duration::ZERO,
+                termination: SearchTermination::DepthLimit,
             };
         }
 
@@ -451,6 +507,7 @@ impl Engine {
             stats: ctx.stats,
             pv: best_pv, // TODO: Implement principal variation
             elapsed: Duration::ZERO,
+            termination: SearchTermination::DepthLimit,
         }
     }
 }

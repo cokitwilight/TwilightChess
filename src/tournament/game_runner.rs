@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::engine::Engine;
 use crate::game::{Game, GameState};
-use crate::tournament::opening_suite::OpeningPosition;
+use crate::opening::OpeningLine;
 use crate::tournament::results::GameResult::{Black, Draw, White};
 use crate::tournament::{GameRecord, MatchPlayers, MoveRecord};
 use crate::types::Color;
@@ -12,7 +12,7 @@ pub fn run_game(
     start_fen: String,
     players: MatchPlayers,
     engine_1_color: Color,
-    opening_line: Option<OpeningPosition>,
+    opening_line: Option<OpeningLine>,
 ) -> Result<GameRecord, String> {
     let mut game_record = GameRecord::new(start_fen.clone(), engine_1_color);
 
@@ -138,6 +138,12 @@ pub fn run_game(
         game_record.black_avg_time = Duration::ZERO;
     }
 
+    debug_assert_eq!(
+        game_record.total_time,
+        game_record.white_time_elapsed + game_record.black_time_elapsed,
+        "run_game search-time accounting must equal the two color totals",
+    );
+
     game_record.game = game;
 
     Ok(game_record)
@@ -147,7 +153,7 @@ pub fn run_game(
 mod tests {
     use crate::{
         board::STARTPOS_FEN,
-        tournament::opening_suite::build_opening_suite,
+        opening::build_opening_book,
         uci::pgn::{PgnMetadata, game_to_pgn},
     };
 
@@ -208,7 +214,7 @@ mod tests {
         println!("");
 
         println!(
-            "Total run time: {:.3} seconds",
+            "Total engine search time: {:.3} seconds",
             game_record.total_time.as_secs_f64()
         );
 
@@ -231,17 +237,12 @@ mod tests {
     #[test]
     #[ignore]
     pub fn test_game_2() {
-        let mut players = MatchPlayers::from_depth(
-            "LMR History Off".to_string(),
-            "LMR History On".to_string(),
-            16,
-            7,
-            16,
-            7,
-        );
+        let engine1: String = String::from("Lmr History Off");
+        let engine2: String = String::from("Lmr History On");
+        let mut players = MatchPlayers::from_depth(engine1.clone(), engine2.clone(), 16, 7, 16, 7);
 
-        players.white.config.limits.soft_time_limit_ms = Some(100);
-        players.black.config.limits.soft_time_limit_ms = Some(100);
+        players.white.config.limits.soft_time_limit_ms = Some(10_000);
+        players.black.config.limits.soft_time_limit_ms = Some(10_000);
 
         players.white.config.limits.hard_time_limit_ms = Some(250000);
         players.black.config.limits.hard_time_limit_ms = Some(150000);
@@ -254,7 +255,7 @@ mod tests {
         players.black.config.search.lmr.enabled = true;
         players.black.config.search.lmr.history_enabled = true;
 
-        let opening_suite = build_opening_suite();
+        let opening_suite = build_opening_book();
 
         let opening_line = opening_suite.random_line().unwrap();
 
@@ -303,7 +304,7 @@ mod tests {
         println!("");
 
         println!(
-            "Total run time: {:.3} seconds",
+            "Total engine search time: {:.3} seconds",
             game_record.total_time.as_secs_f64()
         );
 
@@ -314,8 +315,8 @@ mod tests {
             site: "Local".to_string(),
             date: "2026.07.27".to_string(),
             round: "1".to_string(),
-            white: "On".to_string(),
-            black: "Off".to_string(),
+            white: engine1,
+            black: engine2,
         };
 
         let pgn_text = game_to_pgn(&game_record.game, &metadata).expect("Game Failed");
@@ -328,5 +329,88 @@ mod tests {
             "Result: {:?}\n",
             game_record.result.expect("No result in test_game_1")
         );
+    }
+    #[test]
+    #[ignore]
+    pub fn test_game_3() {
+        let engine1: String = String::from("20 s");
+        let engine2: String = String::from("40 s");
+        let mut players = MatchPlayers::from_depth(engine1.clone(), engine2.clone(), 32, 7, 32, 7);
+
+        players.white.config.limits.soft_time_limit_ms = Some(192_000);
+        players.black.config.limits.soft_time_limit_ms = Some(384_000);
+
+        let opening_suite = build_opening_book();
+
+        let opening_line = opening_suite.random_line().unwrap();
+
+        let game_record = match run_game(
+            opening_line.game.starting_fen.to_string(),
+            players.clone(),
+            Color::Black,
+            Some(opening_line),
+        ) {
+            Ok(g) => g,
+            Err(msg) => panic!("{msg}"),
+        };
+
+        println!(
+            "Result: {:?}\n",
+            game_record.result.expect("No result in test_game_1")
+        );
+
+        println!("White Bot -- {}", players.white.name);
+        game_record
+            .white_stats
+            .print_all(1, game_record.white_time_elapsed.as_secs_f64());
+        println!("");
+        println!(
+            "Total Time as White: {:.3} seconds",
+            game_record.white_time_elapsed.as_secs_f64()
+        );
+        println!(
+            "Avg Time Per Move as White: {:.3} seconds",
+            game_record.white_avg_time.as_secs_f64()
+        );
+
+        println!("");
+
+        println!("Black Bot -- {}", players.black.name);
+        game_record
+            .black_stats
+            .print_all(1, game_record.black_time_elapsed.as_secs_f64());
+
+        println!("");
+
+        println!(
+            "Total Time as Black: {:.3} seconds",
+            game_record.black_time_elapsed.as_secs_f64()
+        );
+        println!(
+            "Avg Time Per Move as Black: {:.3} seconds",
+            game_record.black_avg_time.as_secs_f64()
+        );
+
+        println!("");
+
+        println!(
+            "Total engine search time: {:.3} seconds",
+            game_record.total_time.as_secs_f64()
+        );
+
+        println!("");
+
+        let metadata = PgnMetadata {
+            event: "Engine Test".to_string(),
+            site: "Local".to_string(),
+            date: "2026.07.27".to_string(),
+            round: "1".to_string(),
+            white: engine1,
+            black: engine2,
+        };
+
+        let pgn_text = game_to_pgn(&game_record.game, &metadata).expect("Game Failed");
+
+        println!("{pgn_text}");
     }
 }

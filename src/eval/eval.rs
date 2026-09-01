@@ -7,7 +7,7 @@ use crate::eval::{
     king::king_eval, knight::knight_eval, mobility::mobility_score, pawn::pawn_eval,
     phase::MAX_PHASE, sliders::sliders_eval,
 };
-use crate::types::{COLORS, Color, PIECE_TYPES, PieceType};
+use crate::types::{COLORS, Color, PieceType};
 
 pub const CENTER_SQUARES: Bitboard = 0x0000_3C3C_3C3C_0000;
 
@@ -16,15 +16,6 @@ pub const CENTER_4: Bitboard = 0x0000_0018_1800_0000;
 pub const BLACK_SQUARES: Bitboard = 0xAA55_AA55_AA55_AA55;
 
 pub const WHITE_SQUARES: Bitboard = !BLACK_SQUARES;
-
-const KING_ATTACK_WEIGHTS: [i32; 6] = [
-    0,  // Pawn, handled separately
-    10, // Knight
-    9,  // Bishop
-    12, // Rook
-    20, // Queen
-    0,  // King
-];
 
 pub const KING_DANGER_TABLE: [i32; 101] = [
     0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 27, 30,
@@ -57,7 +48,7 @@ impl EvalInfo {
         let mut eval_info = EvalInfo {
             king_squares: [0; 2],
             king_ring: [0; 2],
-            king_attack_weight: [0; 2],
+            king_attack_weight: [0i32; 2],
 
             attacks: [[0; 6]; 2],
             all_attacks: [0; 2],
@@ -74,6 +65,15 @@ impl EvalInfo {
             eval_info.king_ring[color.idx()] = king_attacks(king_sq) | bit(king_sq);
         }
 
+        let mut pressure = [0i8; 64]; // pressure is stored as white attacks - black attacks(so always from whites perspective)
+
+        let king_rings = [
+            king_attacks(eval_info.king_square(Color::White)),
+            king_attacks(eval_info.king_square(Color::Black)),
+        ];
+
+        let king_zone = king_rings[0] | king_rings[1];
+
         let occupied = board.all_occupancy();
 
         for color in COLORS {
@@ -85,6 +85,9 @@ impl EvalInfo {
             let mut pawns = board.pieces(color, PieceType::Pawn);
             while let Some(sq) = pop_lsb(&mut pawns) {
                 let attacks = pawn_attacks_from_square(sq, color);
+
+                add_pressure(color, attacks, king_zone, &mut pressure);
+
                 twice |= once & attacks;
                 once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Pawn.idx()] |= attacks;
@@ -93,6 +96,9 @@ impl EvalInfo {
             let mut knights = board.pieces(color, PieceType::Knight);
             while let Some(sq) = pop_lsb(&mut knights) {
                 let attacks = knight_attacks(sq);
+
+                add_pressure(color, attacks, king_zone, &mut pressure);
+
                 twice |= once & attacks;
                 once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Knight.idx()] |= attacks;
@@ -101,6 +107,9 @@ impl EvalInfo {
             let mut bishops = board.pieces(color, PieceType::Bishop);
             while let Some(sq) = pop_lsb(&mut bishops) {
                 let attacks = bishop_attacks(sq, occupied);
+
+                add_pressure(color, attacks, king_zone, &mut pressure);
+
                 twice |= once & attacks;
                 once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Bishop.idx()] |= attacks;
@@ -109,6 +118,9 @@ impl EvalInfo {
             let mut rooks = board.pieces(color, PieceType::Rook);
             while let Some(sq) = pop_lsb(&mut rooks) {
                 let attacks = rook_attacks(sq, occupied);
+
+                add_pressure(color, attacks, king_zone, &mut pressure);
+
                 twice |= once & attacks;
                 once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Rook.idx()] |= attacks;
@@ -117,6 +129,9 @@ impl EvalInfo {
             let mut queens = board.pieces(color, PieceType::Queen);
             while let Some(sq) = pop_lsb(&mut queens) {
                 let attacks = queen_attacks(sq, occupied);
+
+                add_pressure(color, attacks, king_zone, &mut pressure);
+
                 twice |= once & attacks;
                 once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Queen.idx()] |= attacks;
@@ -125,7 +140,6 @@ impl EvalInfo {
             let king_sq = eval_info.king_squares[color_idx];
             let attacks = king_attacks(king_sq);
             twice |= once & attacks;
-            // once |= attacks;
             eval_info.attacks[color_idx][PieceType::King.idx()] |= attacks;
 
             eval_info.all_attacks[color_idx] = eval_info.attacks[color_idx][PieceType::Pawn.idx()]
@@ -138,36 +152,24 @@ impl EvalInfo {
             eval_info.attacked_by_two[color_idx] = twice;
         }
 
-        for attacker in COLORS {
-            let defender = attacker.opposite();
+        for defender in COLORS {
+            let mut current_king_ring = king_rings[defender.idx()];
+            let mut danger = 0i32;
 
-            let attacker_idx = attacker.idx();
-            let defender_idx = defender.idx();
+            while let Some(sq) = pop_lsb(&mut current_king_ring) {
+                let pressure = pressure[sq as usize] as i32;
 
-            let king_ring = eval_info.king_ring[defender_idx];
+                let surplus = match defender {
+                    Color::White => -pressure,
+                    Color::Black => pressure,
+                };
 
-            let mut danger = 0;
-
-            for piece in PIECE_TYPES {
-                if piece == PieceType::King {
-                    continue;
-                }
-
-                let hits =
-                    (eval_info.attacks[attacker_idx][piece.idx()] & king_ring).count_ones() as i32;
-
-                if hits == 0 {
-                    continue;
-                }
-
-                if piece == PieceType::Pawn {
-                    danger += hits * 6;
-                } else {
-                    danger += KING_ATTACK_WEIGHTS[piece.idx()] + hits * 4;
+                if surplus > 0 {
+                    danger += surplus * surplus * surplus;
                 }
             }
 
-            eval_info.king_attack_weight[defender_idx] = danger;
+            eval_info.king_attack_weight[defender.idx()] = danger;
         }
         eval_info
     }
@@ -202,6 +204,20 @@ impl EvalInfo {
 
     pub fn phase(&self) -> i32 {
         self.phase
+    }
+}
+
+#[inline(always)]
+fn add_pressure(attacker: Color, attacks: Bitboard, king_zone: Bitboard, pressure: &mut [i8; 64]) {
+    let delta: i8 = match attacker {
+        Color::White => 1,
+        Color::Black => -1,
+    };
+
+    let mut hits = attacks & king_zone;
+
+    while let Some(sq) = pop_lsb(&mut hits) {
+        pressure[sq as usize] += delta;
     }
 }
 

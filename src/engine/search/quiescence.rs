@@ -3,6 +3,7 @@ use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
 use crate::engine::search::search::is_insufficient_material;
+use crate::engine::search_context::PickerFrame;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MAX_PLY};
 use crate::eval::evaluation_for_turn;
@@ -13,7 +14,7 @@ use crate::types::PieceType;
 const MAX_CHECK_Q_PLIES: usize = 64;
 
 impl Engine {
-    pub fn quiescence(
+    pub(crate) fn quiescence(
         &mut self,
         board: &mut Board,
         context: &mut SearchContext,
@@ -21,6 +22,7 @@ impl Engine {
         mut alpha: i32,
         mut beta: i32,
         ply: usize,
+        picker_frame: PickerFrame,
         check_plies: usize,
     ) -> i32 {
         if context.stopped || (context.stats.total_nodes() & 2047 == 0 && context.should_stop()) {
@@ -232,6 +234,7 @@ impl Engine {
                 &mut raw_moves,
                 side_to_move,
                 ply,
+                picker_frame,
                 context,
                 None,
                 tt_best_move,
@@ -244,6 +247,7 @@ impl Engine {
                 &mut raw_moves,
                 side_to_move,
                 ply,
+                picker_frame,
                 context,
                 None,
                 tt_best_move,
@@ -265,7 +269,8 @@ impl Engine {
                 && board.phase > 8
                 && mv.promotion().is_none()
                 && alpha.abs() < MATE_THRESHOLD
-                && !gives_check;
+                && !gives_check
+                && Some(*mv) != tt_best_move;
 
             if can_prune {
                 // delta pruning
@@ -282,7 +287,7 @@ impl Engine {
                     let see_value = if let Some(value) = scored_mv.see {
                         value
                     } else {
-                        see(board, *mv)
+                        see(board, *mv, scored_mv.captured)
                     };
                     if see_value < -self.config.search.see.margin {
                         context.stats.q_pruning_stats.see_prunes += 1;
@@ -298,7 +303,16 @@ impl Engine {
 
             let check_plies = if gives_check { check_plies + 1 } else { 0 };
 
-            let eval = -self.quiescence(board, context, depth, -beta, -alpha, ply + 1, check_plies);
+            let eval = -self.quiescence(
+                board,
+                context,
+                depth,
+                -beta,
+                -alpha,
+                ply + 1,
+                picker_frame.child(),
+                check_plies,
+            );
 
             if context.stopped {
                 context.repetition_history.pop();

@@ -28,6 +28,7 @@ impl Engine {
                 tt_best_move,
                 None,
                 None,
+                None,
             )
         });
     }
@@ -43,7 +44,7 @@ impl Engine {
 
         // qsearch move lists are captures/promotions only by construction —
         // no killers, no history, no quiet-move tier needed
-        let see_score = see(board, mv);
+        let see_score = see(board, mv, None); // FOR NOW FIX LATER
         let promo_bonus = mv.promotion().map_or(0, promotion_score);
 
         see_score + promo_bonus
@@ -98,6 +99,7 @@ pub fn move_order_score(
     tt_best_move: Option<Move>,
     history_key: Option<HistoryKey>,
     see_value: Option<i32>,
+    captured_piece: Option<PieceType>,
 ) -> i32 {
     if Some(mv) == previous_best_move {
         return 2_000_000;
@@ -112,7 +114,12 @@ pub fn move_order_score(
         let see_score = if let Some(value) = see_value {
             value
         } else {
-            see(board, mv)
+            let victim = if let Some(v) = captured_piece {
+                Some(v)
+            } else {
+                board.piecetype_at(mv.to())
+            };
+            see(board, mv, victim)
         };
         let promo_bonus = mv.promotion().map_or(0, promotion_score);
 

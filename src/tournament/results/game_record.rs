@@ -38,6 +38,7 @@ pub struct GameRecord {
     pub black_time_elapsed: Duration,
     pub black_avg_time: Duration,
 
+    /// Sum of both engines' reported search time; this is not `run_game` wall time.
     pub total_time: Duration,
 }
 

@@ -3,6 +3,7 @@ pub struct SearchLimits {
     pub max_depth: u16,
     pub max_q_depth: u16,
     pub max_nodes: Option<u64>,
+    /// Time budget for one `Engine::search` call, not for an entire game.
     pub soft_time_limit_ms: Option<u64>,
     pub hard_time_limit_ms: Option<u64>,
 }

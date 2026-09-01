@@ -41,7 +41,7 @@ impl Board {
                 }
 
                 occupancy |= to_bb;
-                return check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite());
+                check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite())
             }
             MoveType::Capture => {
                 let captured_piece = self
@@ -59,7 +59,7 @@ impl Board {
 
                 occupancy &= !from_bb; // adjust occupancy. Note the to square remains the same
 
-                return check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite());
+                check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite())
             }
             // since these are rare and edge cases just clone the board
             MoveType::EnPassant => {
@@ -87,7 +87,7 @@ impl Board {
                 occupancy &= !captured_bb;
                 occupancy |= to_bb;
 
-                return check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite());
+                check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite())
             }
             MoveType::Castle => {
                 let (rook_from, rook_to) = match (side_to_move, to) {
@@ -122,7 +122,7 @@ impl Board {
                 occupancy |= to_bb;
                 occupancy |= rook_to_bb;
 
-                return check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite());
+                check_from_occupancy(&all_pieces, occupancy, side_to_move.opposite())
             }
         }
     }

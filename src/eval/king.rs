@@ -173,12 +173,18 @@ fn pawn_shield_score(board: &Board, color: Color, king_sq: Square, info: &EvalIn
     score
 }
 
-fn pawn_shield_danger_score(board: &Board, color: Color, king_sq: Square, info: &EvalInfo) -> i32 {
+// range: -17 <-> 8
+pub(super) fn pawn_shield_danger_score(
+    board: &Board,
+    color: Color,
+    king_sq: Square,
+    info: &EvalInfo,
+) -> i32 {
     if info.phase() < 10 {
         return 0; // no pawn shield evaluation in the endgame
     }
 
-    if info.phase() > 20 {
+    if info.phase() > 20 && board.has_castling_rights() {
         match color {
             Color::White => {
                 if king_sq == 4 {
@@ -279,7 +285,13 @@ fn open_file_bonus(board: &Board, color: Color, king_sq: Square, info: &EvalInfo
     score
 }
 
-fn open_file_danger_bonus(board: &Board, color: Color, king_sq: Square, info: &EvalInfo) -> i32 {
+// range: 0 <-> 25
+pub(super) fn open_file_danger_bonus(
+    board: &Board,
+    color: Color,
+    king_sq: Square,
+    info: &EvalInfo,
+) -> i32 {
     if info.phase() < 10 {
         return 0; // ignore in endgames
     }
@@ -355,7 +367,9 @@ fn open_diagonal_bonus(board: &Board, color: Color, king_sq: Square, info: &Eval
     score
 }
 
-fn open_diagonal_danger_bonus(
+// range: 0 <-> 24. Note in just the forward two it would likely be 0-12/14
+// REWRITE FUNCTION!
+pub(super) fn open_diagonal_danger_bonus(
     board: &Board,
     color: Color,
     king_sq: Square,
@@ -424,7 +438,8 @@ fn escape_score_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     }
 }
 
-fn escape_score_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+// range: -6 <-> 12
+pub(super) fn escape_score_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     if info.phase() < 10 {
         return 0;
     }
@@ -448,7 +463,8 @@ fn escape_score_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i3
     }
 }
 
-fn defender_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+// range: 0 <-> 40.  // reasonably more likely to be at max ~20
+pub(super) fn defender_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let defended_squares = info.king_ring(color) & info.attacked_by_two(color); // king is included in regular attacks
 
     let local_defenders =
@@ -457,7 +473,7 @@ fn defender_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     let mut danger = 0;
 
     // since this represents king danger the bonus is negative
-    danger -= defended_squares.count_ones() as i32;
+    danger -= defended_squares.count_ones() as i32 * 2;
     danger -= local_defenders.count_ones() as i32 * 3;
 
     danger

@@ -2,6 +2,7 @@
 name = "chess_final"
 version = "0.1.0"
 edition = "2024"
+default-run = "chess_final"
 
 [dependencies]
 eframe = "0.34.3"

@@ -266,7 +266,7 @@ impl Board {
             return GameState::DrawByFiftyMoveRule;
         }
 
-        if is_insufficient_material(&self) {
+        if is_insufficient_material(self) {
             return GameState::DrawByInsufficientMaterial;
         }
 
@@ -362,14 +362,20 @@ impl Board {
 
     pub fn piecetype_at(&self, sq: Square) -> Option<PieceType> {
         let m = bit(sq);
+        PIECE_TYPES.into_iter().find(|&kind| {
+            self.pieces(Color::Black, kind) & m != 0 || self.pieces(Color::White, kind) & m != 0
+        })
+    }
 
-        for kind in PIECE_TYPES {
-            if self.pieces(Color::White, kind) & m != 0 || self.pieces(Color::Black, kind) & m != 0
-            {
-                return Some(kind);
-            }
+    pub fn has_castling_rights(&self) -> bool {
+        if WHITE_KINGSIDE & self.castling_rights == 0
+            && WHITE_QUEENSIDE & self.castling_rights == 0
+            && BLACK_KINGSIDE & self.castling_rights == 0
+            && BLACK_QUEENSIDE & self.castling_rights == 0
+        {
+            return true;
         }
-        None
+        false
     }
     pub fn print_board(&self) {
         println!("  +-----------------+");

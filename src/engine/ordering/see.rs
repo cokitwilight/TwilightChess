@@ -7,7 +7,7 @@ use crate::bitboard::{
 use crate::board::{Board, Move, MoveType};
 use crate::types::{Color, PieceType};
 
-pub fn see(board: &Board, mv: Move) -> i32 {
+pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
     let moving_piece = board
         .piece_at(mv.from())
         .expect("SEE called with no piece at mv.from");
@@ -15,21 +15,39 @@ pub fn see(board: &Board, mv: Move) -> i32 {
     let target = mv.to(); // this also includes en passant
 
     debug_assert_eq!(board.side_to_move(), moving_piece.color);
+    debug_assert_ne!(mv.kind(), MoveType::Castle);
 
     let victim_square = match mv.kind() {
         MoveType::EnPassant => square(file_of(mv.to()), rank_of(mv.from())),
         _ => target,
     };
 
-    let victim_value = match board.piece_at(victim_square) {
-        Some(piece) => piece.kind.value(),
+    let victim_value = match victim {
+        Some(piece) => piece.value(),
         None => {
             if mv.promotion().is_none() {
-                return 0;
+                panic!(
+                    "Move called in see with no promotion or captured piece! {}, {:?}",
+                    mv,
+                    mv.kind()
+                );
             }
             0
         }
     };
+
+    if mv.kind() == MoveType::Capture {
+        debug_assert_eq!(
+            victim_value,
+            board.piecetype_at(victim_square).unwrap().value()
+        );
+    } else if mv.kind() == MoveType::Normal {
+        debug_assert!(mv.promotion().is_some());
+    } else if mv.kind() == MoveType::EnPassant {
+        debug_assert_eq!(victim_value, PieceType::Pawn.value());
+    } else {
+        panic!("Castle move found in SEE!");
+    }
 
     let mut gains: Vec<i32> = Vec::with_capacity(32);
 
@@ -452,7 +470,13 @@ mod see_tests {
             "{capture_move:?} is not a valid move!\nFEN: {fen}"
         );
 
-        let actual_see = see(&board, capture_move);
+        let victim = match capture_move.kind() {
+            MoveType::Capture => board.piecetype_at(capture_move.to()),
+            MoveType::EnPassant => Some(PieceType::Pawn),
+            _ => None,
+        };
+
+        let actual_see = see(&board, capture_move, victim);
 
         println!(
             "Move: {capture_move:?}, Actual SEE: {actual_see}, \

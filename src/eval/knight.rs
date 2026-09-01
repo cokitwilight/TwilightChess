@@ -20,6 +20,7 @@ pub fn knight_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     score
 }
 
+// range per knight: -40 <-> 60
 pub fn knight_outpost_bonus(
     board: &Board,
     color: Color,
@@ -64,15 +65,15 @@ pub fn knight_outpost_bonus(
 
             if defended {
                 // friendly pawn defending knight
-                score += 50;
+                score += 30;
             } else {
-                score += 20;
+                score += 10;
             }
 
             if attacked {
-                score -= 20;
+                score -= 50;
             } else {
-                score += 50;
+                score += 30;
             }
             // TODO: Later add more detail like how valuable the knight outpost is
         }

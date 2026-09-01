@@ -5,15 +5,17 @@ use crate::engine::ordering::see;
 use crate::engine::ordering::staged::ScoredMove;
 use crate::engine::pruning::lmr::LMR_SCALE_I32;
 use crate::engine::search::search::is_insufficient_material;
+use crate::engine::search_context::PickerFrame;
 use crate::engine::search_stats::{MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS};
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, SearchStackEntry};
 use crate::engine::{SearchContext, SearchOptions};
 use crate::eval::evaluation_for_turn;
+use crate::types::PieceType;
 
 impl Engine {
     // Implementation for negamax function
-    pub fn negamax(
+    pub(crate) fn negamax(
         &mut self,
         board: &mut Board,
         context: &mut SearchContext,
@@ -21,6 +23,7 @@ impl Engine {
         mut alpha: i32,
         mut beta: i32,
         ply: usize,
+        picker_frame: PickerFrame,
         options: SearchOptions,
     ) -> i32 {
         // every 2048 nodes check if it should stop rather than expensively checking each time.
@@ -54,6 +57,7 @@ impl Engine {
                 alpha,
                 beta,
                 ply,
+                picker_frame,
                 0,
             );
         }
@@ -218,6 +222,7 @@ impl Engine {
                 -beta,
                 -beta + 1,
                 ply + 1,
+                picker_frame.child(),
                 search_options,
             );
 
@@ -264,6 +269,7 @@ impl Engine {
             &mut moves,
             side_to_move,
             ply,
+            picker_frame,
             context,
             None,
             ordering_tt_move,
@@ -303,15 +309,28 @@ impl Engine {
             excluded_move: None,
         };
 
-        if let Some(eval) = static_eval {
-            context.stack[ply].static_eval = eval;
-        } else {
-            let eval = evaluation_for_turn(board);
-            context.stack[ply].static_eval = eval;
-            static_eval = Some(eval);
+        let eval = match static_eval {
+            Some(e) => e,
+            None => evaluation_for_turn(board),
+        };
+
+        if !in_check {
+            context.stack[ply].static_eval = Some(eval);
         }
 
-        let mut searched_quiets: Vec<ScoredMove> = Vec::with_capacity(5); // 99% of cutoffs happen in the first 5 moves
+        let is_improving = if ply >= 2 && !in_check {
+            match context.stack[ply - 2].static_eval {
+                Some(previous_eval) => eval > previous_eval,
+                None => false,
+            }
+        } else {
+            false
+        };
+
+        let mut searched_quiets = [ScoredMove::new(); 10];
+        let mut q = 0usize;
+        let mut searched_captures = [ScoredMove::new(); 10];
+        let mut c = 0usize;
 
         // for mv in moves.iter() {
         while let Some(scored_mv) = move_picker.get_next(board, context, &self.history) {
@@ -322,6 +341,7 @@ impl Engine {
             }
 
             let is_quiet = mv.kind() == MoveType::Normal && mv.promotion().is_none();
+            let is_capture = mv.kind() == MoveType::Capture || mv.kind() == MoveType::EnPassant;
             let gives_check = board.move_gives_check(mv);
 
             let piece = board
@@ -336,6 +356,16 @@ impl Engine {
                 HistoryKey::new(side_to_move, piece, mv.to())
             };
 
+            let captured_piece = if is_capture {
+                if let Some(piece) = scored_mv.captured {
+                    Some(piece)
+                } else {
+                    board.piecetype_at(mv.to())
+                }
+            } else {
+                None
+            };
+
             let was_killer = context.killer_moves.contains(ply, *mv);
             let history_score = if is_quiet {
                 self.history.get_quiet_score(&context.stack, ply, curr_key)
@@ -347,7 +377,7 @@ impl Engine {
                 mv: Some(*mv),
                 piece: Some(piece),
                 history_index: Some(curr_key),
-                static_eval: 0,
+                static_eval: None,
             };
 
             let mut extension: u16 = 0;
@@ -371,6 +401,7 @@ impl Engine {
                         singular_beta - 1,
                         singular_beta,
                         ply, // Same position: do not increase ply
+                        picker_frame.child(),
                         SearchOptions {
                             allow_null_move: false,
                             allow_singular: false,
@@ -463,6 +494,10 @@ impl Engine {
                     }
                 }
 
+                if is_improving {
+                    current_reduction -= LMR_SCALE_I32 / 2; // half a ply
+                }
+
                 let red = current_reduction / LMR_SCALE_I32;
 
                 red.clamp(0, depth as i32 - 2)
@@ -482,6 +517,7 @@ impl Engine {
                     -beta,
                     -alpha,
                     ply + 1,
+                    picker_frame.child(),
                     normal_child_options,
                 );
 
@@ -518,6 +554,7 @@ impl Engine {
                     -alpha - 1,
                     -alpha,
                     ply + 1,
+                    picker_frame.child(),
                     normal_child_options,
                 );
 
@@ -543,6 +580,7 @@ impl Engine {
                             -alpha - 1,
                             -alpha,
                             ply + 1,
+                            picker_frame.child(),
                             normal_child_options,
                         );
 
@@ -571,6 +609,7 @@ impl Engine {
                             -beta,
                             -alpha,
                             ply + 1,
+                            picker_frame.child(),
                             normal_child_options,
                         );
 
@@ -594,12 +633,19 @@ impl Engine {
             context.repetition_history.pop();
             board.undo_move(undo);
 
+            let mut improved_alpha = false;
+
             if eval > max_eval {
                 max_eval = eval;
                 best_move = Some(*mv);
             }
 
-            alpha = alpha.max(eval);
+            if alpha < eval {
+                alpha = eval;
+                improved_alpha = true;
+            }
+
+            // alpha = alpha.max(eval);
 
             if alpha >= beta {
                 context.stats.cutoff_stats.beta += 1;
@@ -624,7 +670,7 @@ impl Engine {
                     let see_value = if let Some(value) = scored_mv.see {
                         value
                     } else {
-                        see(board, *mv)
+                        see(board, *mv, captured_piece)
                     };
                     if see_value >= 0 {
                         context.stats.move_ordering_stats.winning_capture_cutoffs += 1;
@@ -643,37 +689,83 @@ impl Engine {
 
                 did_cutoff = true;
 
-                if is_quiet && options.excluded_move.is_none() {
-                    if was_killer {
-                        context.stats.history_stats.killer_cutoffs += 1;
-                    } else if history_score > 0 {
-                        context.stats.history_stats.history_cutoffs += 1;
-                    }
+                if options.excluded_move.is_none() {
+                    if is_quiet {
+                        context.killer_moves.add(ply, *mv);
+                        self.history.add_quiet_bonus(curr_key, context, ply, depth);
 
-                    context.killer_moves.add(ply, *mv);
-                    self.history.add_quiet_bonus(context, ply, depth, curr_key);
+                        for scored_mv in &searched_quiets[..q] {
+                            let history_key = if let Some(key) = scored_mv.history_key {
+                                key
+                            } else {
+                                let mv = &scored_mv.mv;
+                                let piece = board
+                                    .piecetype_at(mv.from())
+                                    .expect("No piece in board in negamax!");
+                                HistoryKey::new(side_to_move, piece, mv.to())
+                            };
 
-                    for scored_mv in searched_quiets.iter() {
-                        let history_key = if let Some(key) = scored_mv.history_key {
-                            key
+                            self.history
+                                .add_quiet_malus(history_key, context, ply, depth);
+                        }
+                    } else if is_capture {
+                        let captured_piece = if let Some(piece) = captured_piece {
+                            piece
                         } else {
-                            let mv = &scored_mv.mv;
-                            let piece = board
-                                .piecetype_at(mv.from())
-                                .expect("No piece in board in move ordering!");
-                            HistoryKey::new(side_to_move, piece, mv.to())
+                            match mv.kind() {
+                                MoveType::EnPassant => PieceType::Pawn,
+                                MoveType::Capture => board.piecetype_at(mv.to()).unwrap(),
+                                _ => unreachable!(
+                                    "Somehow non capture move in searched captures in negamax! {:?}",
+                                    mv.kind()
+                                ),
+                            }
                         };
 
                         self.history
-                            .add_quiet_malus(context, ply, depth, history_key);
+                            .add_capture_bonus(curr_key, captured_piece, depth);
+                    }
+
+                    for scored_mv in &searched_captures[..c] {
+                        let mv = &scored_mv.mv;
+                        let history_key = if let Some(key) = scored_mv.history_key {
+                            key
+                        } else {
+                            let piece = board
+                                .piecetype_at(mv.from())
+                                .expect("No piece in board in negamax!");
+                            HistoryKey::new(side_to_move, piece, mv.to())
+                        };
+
+                        let captured_piece = if let Some(piece) = scored_mv.captured {
+                            piece
+                        } else {
+                            match mv.kind() {
+                                MoveType::EnPassant => PieceType::Pawn,
+                                MoveType::Capture => board.piecetype_at(mv.to()).unwrap(),
+                                _ => unreachable!(
+                                    "Somehow non capture move in searched captures in negamax! {:?}",
+                                    mv.kind()
+                                ),
+                            }
+                        };
+
+                        self.history
+                            .add_capture_malus(history_key, captured_piece, depth);
                     }
                 }
 
                 break;
             }
 
-            if is_quiet {
-                searched_quiets.push(scored_mv);
+            if !improved_alpha {
+                if is_quiet && q < 10 {
+                    searched_quiets[q] = scored_mv;
+                    q += 1;
+                } else if is_capture && c < 10 {
+                    searched_captures[c] = scored_mv;
+                    c += 1;
+                }
             }
         }
 

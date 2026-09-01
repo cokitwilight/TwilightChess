@@ -9,7 +9,7 @@ use crate::types::{Color, PieceType};
 use crate::eval::eval::{CENTER_4, CENTER_SQUARES, EvalInfo};
 
 // represents 0, 1 - 8 total weaknesses
-pub const PAWN_WEAKNESS_TABLE: [i32; 9] = [0, 0, 5, 30, 55, 120, 180, 240, 400];
+pub const PAWN_WEAKNESS_TABLE: [i32; 9] = [0, 0, 0, 5, 20, 35, 50, 75, 110];
 
 static PASSED_PAWNS: [[Bitboard; 64]; 2] = generate_passed_pawns();
 
@@ -36,74 +36,12 @@ pub fn pawn_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     score
 }
 
-pub fn print_pawn_eval(board: &Board) {
-    let info = &EvalInfo::calculate(board);
-    let w_pawns = board.pieces(Color::White, PieceType::Pawn);
-    let b_pawns = board.pieces(Color::Black, PieceType::Pawn);
-
-    println!();
-    println!("================ PAWN EVAL BREAKDOWN ================");
-    println!(
-        "{:<22} {:>8} {:>8} {:>10}",
-        "Feature", "White", "Black", "Net"
-    );
-    println!("{:-<52}", "");
-
-    print_pawn_eval_row(
-        "Stacked pawns",
-        stacked_pawns_bonus(board, Color::White, w_pawns, info),
-        stacked_pawns_bonus(board, Color::White, b_pawns, info),
-    );
-    print_pawn_eval_row(
-        "Center pawns",
-        center_pawns_bonus(board, Color::White, w_pawns, info),
-        center_pawns_bonus(board, Color::Black, b_pawns, info),
-    );
-    print_pawn_eval_row(
-        "Pawn tempo",
-        pawn_tempo_bonus(board, Color::White, w_pawns, info),
-        pawn_tempo_bonus(board, Color::Black, b_pawns, info),
-    );
-    print_pawn_eval_row(
-        "Passed pawns",
-        passed_pawn_bonus(board, Color::White, w_pawns, info),
-        passed_pawn_bonus(board, Color::Black, b_pawns, info),
-    );
-    print_pawn_eval_row(
-        "Pawn storm",
-        pawn_storm_bonus(board, Color::White, w_pawns, info),
-        pawn_storm_bonus(board, Color::Black, b_pawns, info),
-    );
-    print_pawn_eval_row(
-        "Pawn chain",
-        pawn_chain(board, Color::White, w_pawns, info),
-        pawn_chain(board, Color::Black, b_pawns, info),
-    );
-    print_pawn_eval_row(
-        "Isolated pawns",
-        isolated_pawns_bonus(board, Color::White, w_pawns, info),
-        isolated_pawns_bonus(board, Color::Black, b_pawns, info),
-    );
-    print_pawn_eval_row(
-        "Backward pawns",
-        backwards_pawn_bonus(board, Color::White, w_pawns, info),
-        backwards_pawn_bonus(board, Color::Black, b_pawns, info),
-    );
-
-    println!("{:-<52}", "");
-}
-
-fn print_pawn_eval_row(name: &str, white: i32, black: i32) {
-    println!(
-        "{:<22} {:>+8} {:>+8} {:>+10}",
-        name,
-        white,
-        black,
-        white - black,
-    );
-}
-
-fn center_pawns_bonus(_board: &Board, _color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn center_pawns_bonus(
+    _board: &Board,
+    _color: Color,
+    pawns: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     if pawns == 0 {
         return 0;
     }
@@ -123,7 +61,12 @@ fn center_pawns_bonus(_board: &Board, _color: Color, pawns: Bitboard, info: &Eva
     score
 }
 
-fn stacked_pawns_bonus(_board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn stacked_pawns_bonus(
+    _board: &Board,
+    color: Color,
+    pawns: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     if pawns == 0 {
         return 0;
     }
@@ -154,7 +97,12 @@ fn stacked_pawns_bonus(_board: &Board, color: Color, pawns: Bitboard, info: &Eva
     score
 }
 
-fn isolated_pawns_bonus(_board: &Board, _color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn isolated_pawns_bonus(
+    _board: &Board,
+    _color: Color,
+    pawns: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     let mut isolated_pawns = pawns;
 
     let mut pawn_copy = pawns;
@@ -175,9 +123,9 @@ fn isolated_pawns_bonus(_board: &Board, _color: Color, pawns: Bitboard, info: &E
     let penalty = if info.phase() > 20 {
         -6
     } else if info.phase() > 14 {
-        -12
+        -8
     } else {
-        -16
+        -10
     };
     let total = isolated_pawns.count_ones() as i32;
     let center_iso = (isolated_pawns & CENTER_SQUARES).count_ones() as i32;
@@ -188,7 +136,12 @@ fn isolated_pawns_bonus(_board: &Board, _color: Color, pawns: Bitboard, info: &E
     score
 }
 
-fn backwards_pawn_bonus(_board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn backwards_pawn_bonus(
+    _board: &Board,
+    color: Color,
+    pawns: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     let mut score = 0;
     let mut backwards_pawns = pawns & !info.attacks(color, PieceType::Pawn);
 
@@ -221,7 +174,12 @@ fn backwards_pawn_bonus(_board: &Board, color: Color, pawns: Bitboard, info: &Ev
     score - PAWN_WEAKNESS_TABLE[total]
 }
 
-fn passed_pawn_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn passed_pawn_bonus(
+    board: &Board,
+    color: Color,
+    pawns: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     if pawns == 0 {
         return 0;
     }
@@ -318,7 +276,12 @@ fn passed_pawn_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalIn
     score
 }
 
-fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn pawn_storm_bonus(
+    board: &Board,
+    color: Color,
+    pawns: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     if pawns == 0 {
         return 0;
     }
@@ -353,8 +316,8 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
     let forward_pawns = (pawns & forward_mask & !king_file_mask).count_ones() as i32;
     let starting_pawns = (pawns & starting_mask & !king_file_mask).count_ones() as i32;
 
-    score -= starting_pawns * 8;
-    score += forward_pawns * 8;
+    score -= starting_pawns * 4;
+    score += forward_pawns * 4;
 
     // includes two rows ahead
     let enemy_half = match color {
@@ -414,7 +377,12 @@ fn pawn_storm_bonus(board: &Board, color: Color, pawns: Bitboard, info: &EvalInf
     score
 }
 
-fn pawn_tempo_bonus(board: &Board, color: Color, _pawns: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn pawn_tempo_bonus(
+    board: &Board,
+    color: Color,
+    _pawns: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     let pawn_attacks = (board.occupancy_of(color.opposite())
         & !board.pieces(color.opposite(), PieceType::Pawn))
         & info.attacks(color, PieceType::Pawn)
@@ -425,7 +393,7 @@ fn pawn_tempo_bonus(board: &Board, color: Color, _pawns: Bitboard, info: &EvalIn
     if pawn_attacks == 0 { 0 } else { 10 }
 }
 
-fn pawn_chain(_board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn pawn_chain(_board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
     if pawns == 0 {
         return 0;
     }

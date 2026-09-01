@@ -1,7 +1,7 @@
 use crate::bitboard::lookup::BETWEEN;
 use crate::bitboard::{
-    Bitboard, FILE_MASKS, RANK_1, RANK_2, RANK_7, RANK_8, Square, bit, file_of, pop_lsb, rank_of,
-    square,
+    Bitboard, FILE_MASKS, RANK_1, RANK_2, RANK_7, RANK_8, Square, bishop_attacks, bit, file_of,
+    pop_lsb, rank_of, square,
 };
 use crate::board::Board;
 use crate::eval::eval::{BLACK_SQUARES, CENTER_SQUARES, EvalInfo, WHITE_SQUARES};
@@ -35,7 +35,7 @@ pub fn sliders_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
     score
 }
 
-fn bishop_pair_bonus(board: &Board, color: Color) -> i32 {
+pub(super) fn bishop_pair_bonus(board: &Board, color: Color) -> i32 {
     let bishops = board.pieces(color, PieceType::Bishop).count_ones();
     if bishops >= 2 {
         return 30;
@@ -44,7 +44,7 @@ fn bishop_pair_bonus(board: &Board, color: Color) -> i32 {
     }
 }
 
-fn bishop_blocked_by_pawns_bonus(board: &Board, color: Color, _info: &EvalInfo) -> i32 {
+pub(super) fn bishop_blocked_by_pawns_bonus(board: &Board, color: Color, _info: &EvalInfo) -> i32 {
     let black_bishop = BLACK_SQUARES & board.pieces(color, PieceType::Bishop);
     let white_bishop = WHITE_SQUARES & board.pieces(color, PieceType::Bishop);
 
@@ -55,7 +55,10 @@ fn bishop_blocked_by_pawns_bonus(board: &Board, color: Color, _info: &EvalInfo) 
             (BLACK_SQUARES & CENTER_SQUARES & board.pieces(color.opposite(), PieceType::Pawn))
                 .count_ones() as i32;
 
-        score -= 5 * enemy_pawns;
+        let friendly_pawns = (BLACK_SQUARES & CENTER_SQUARES & board.pieces(color, PieceType::Pawn))
+            .count_ones() as i32;
+
+        score -= (2 * enemy_pawns) + (5 * friendly_pawns);
     }
 
     if white_bishop != 0 {
@@ -63,13 +66,16 @@ fn bishop_blocked_by_pawns_bonus(board: &Board, color: Color, _info: &EvalInfo) 
             (WHITE_SQUARES & CENTER_SQUARES & board.pieces(color.opposite(), PieceType::Pawn))
                 .count_ones() as i32;
 
-        score -= 5 * enemy_pawns;
+        let friendly_pawns = (WHITE_SQUARES & CENTER_SQUARES & board.pieces(color, PieceType::Pawn))
+            .count_ones() as i32;
+
+        score -= (2 * enemy_pawns) + (5 * friendly_pawns);
     }
 
     score
 }
 
-fn connected_diagonals_bonus(
+pub(super) fn connected_diagonals_bonus(
     board: &Board,
     color: Color,
     sliders: Bitboard,
@@ -87,64 +93,114 @@ fn connected_diagonals_bonus(
 
     let occupied = board.all_occupancy();
 
-    let directions = &[(1, 1), (1, -1), (-1, 1), (-1, -1)];
+    let enemy_pawns = board.pieces(color.opposite(), PieceType::Pawn);
+    let friendly_pawns = board.pieces(color, PieceType::Pawn);
+
+    let relevant_blockers = enemy_pawns
+        | friendly_pawns
+        | (board.occupancy_of(color.opposite()) & info.attacks(color.opposite(), PieceType::Pawn));
+
+    // relevant blockers includes all pawns and all pieces that are defended by a pawn
+
+    let dy = match color {
+        Color::White => 1,
+        Color::Black => -1,
+    };
 
     while let Some(sq) = pop_lsb(&mut sliders) {
-        for (df, dr) in directions {
-            let mut file = file_of(sq) as i8 + df;
-            let mut rank = rank_of(sq) as i8 + dr;
+        let attacks = bishop_attacks(sq, occupied);
 
-            while (0..8).contains(&file) && (0..8).contains(&rank) {
-                let ray_sq = square(file as u8, rank as u8);
-                let ray_mask = bit(ray_sq);
+        let mut connected = attacks & sliders;
 
-                if ray_mask & occupied != 0 {
-                    if ray_mask & sliders != 0 {
-                        let full_ray_mask = ray_bitboard(ray_sq, *df, *dr)
-                            | ray_bitboard(ray_sq, -1 * *df, -1 * *dr);
+        while let Some(other_sq) = pop_lsb(&mut connected) {
+            // connected slider
+            score += 15;
 
-                        let ray_length = full_ray_mask.count_ones();
+            // remaining bonuses should only apply if the connected sliders are actually powerful
 
-                        let enemy_pawns = (full_ray_mask
-                            & board.pieces(color.opposite(), PieceType::Pawn))
-                        .count_ones() as i32;
-                        let enemy_pieces = (full_ray_mask
-                            & (board.occupancy_of(color.opposite())
-                                & !board.pieces(color.opposite(), PieceType::Pawn)))
-                        .count_ones() as i32;
+            let sq_rank = rank_of(sq);
+            let other_rank = rank_of(other_sq);
 
-                        let sees_king_ring = full_ray_mask & info.king_ring(color.opposite()) != 0;
-
-                        if enemy_pawns >= 2 {
-                            score -= 20;
-                        }
-
-                        if sees_king_ring && enemy_pawns <= 1 {
-                            score += 20;
-                        } else if sees_king_ring {
-                            score += 5;
-                        }
-
-                        if ray_length >= 7 {
-                            // longest possible for black and white square bishops
-                            score += 20 + (enemy_pieces - enemy_pawns) * 3;
-                        } else if ray_length >= 5 {
-                            // second longest
-                            score += 3 + (enemy_pieces - enemy_pawns) * 3;
-                        } else {
-                            // doubled in the wrong direction
-                            score -= 15 + (enemy_pawns - enemy_pieces) * 3;
-                        }
-
-                        score += 20;
-                        sliders &= !ray_mask; // dont double count pieces
+            let forward_sq = match color {
+                Color::White => {
+                    if sq_rank > other_rank {
+                        sq
+                    } else {
+                        other_sq
                     }
-
-                    break;
                 }
+                Color::Black => {
+                    if sq_rank < other_rank {
+                        sq
+                    } else {
+                        other_sq
+                    }
+                }
+            };
+            let rear_sq = if forward_sq == sq { other_sq } else { sq };
+            let dx = if file_of(forward_sq) > file_of(rear_sq) {
+                1
+            } else {
+                -1
+            };
 
-                file += df;
-                rank += dr;
+            let edge_sq = ray_edge_square(dx, dy, sq);
+            let backwards_edge_sq = ray_edge_square(-dx, -dy, sq);
+
+            let edge_bb = bit(edge_sq);
+            let backwards_bb = bit(backwards_edge_sq);
+
+            if bit(forward_sq) & board.pieces(color, PieceType::Queen) != 0 {
+                // led by the queen
+                score += 15;
+            } else {
+                score -= 10;
+            }
+
+            let total_ray_length =
+                (BETWEEN[backwards_edge_sq as usize][edge_sq as usize] | edge_bb | backwards_bb)
+                    .count_ones() as i32; // between does not include edges
+
+            if total_ray_length <= 4 {
+                // most powerful rays are along 5,6,7 squares long for either black or white squared bishops so avoid anymore bonuses
+                continue;
+            }
+
+            let xray = BETWEEN[forward_sq as usize][edge_sq as usize] | edge_bb;
+
+            let blocked_ray = bishop_attacks(forward_sq, relevant_blockers) & xray; // only use pawns in the blocked ray
+
+            score += blocked_ray.count_ones() as i32; // prefers longer unblocked rays
+
+            let enemy_pawns = xray & enemy_pawns;
+
+            let friendly_pawns = xray & friendly_pawns;
+
+            // enemy pawns can become targets while friendly pawns generally block the bishop so overvalue friendly pawns
+
+            score -= (enemy_pawns.count_ones() as i32 + friendly_pawns.count_ones() as i32 * 3) * 4;
+
+            let king_ring = info.king_ring(color.opposite());
+
+            if xray & king_ring != 0 {
+                if blocked_ray & king_ring != 0 {
+                    score += 30; // directly sees the king ring
+
+                    if (blocked_ray & king_ring)
+                        & (info.attacked_by_two(color.opposite())
+                            & board.occupancy_of(color.opposite()))
+                        != 0
+                    {
+                        score -= 20;
+                        // sees the king ring but the square is defended
+                    } else {
+                        score += 20;
+                    }
+                } else {
+                    score += 10;
+                }
+            } else {
+                score -= 15;
             }
         }
     }
@@ -152,7 +208,7 @@ fn connected_diagonals_bonus(
     score
 }
 
-fn xray_pressure_diagonal_bonus(
+pub(super) fn xray_pressure_diagonal_bonus(
     board: &Board,
     color: Color,
     sliders: Bitboard,
@@ -165,64 +221,70 @@ fn xray_pressure_diagonal_bonus(
 
     let mut sliders = sliders;
 
-    let directions = &[(1, 1), (1, -1), (-1, 1), (-1, -1)];
+    let enemy_pawns = board.pieces(color.opposite(), PieceType::Pawn);
+    let friendly_pawns = board.pieces(color, PieceType::Pawn);
+
+    let relevant_blockers = enemy_pawns
+        | friendly_pawns
+        | (board.occupancy_of(color.opposite()) & info.attacks(color.opposite(), PieceType::Pawn));
+
+    let directions: &[(i8, i8); 4] = &[(1, 1), (-1, -1), (-1, 1), (1, -1)];
 
     while let Some(sq) = pop_lsb(&mut sliders) {
-        for (df, dr) in directions {
-            let ray_mask = ray_bitboard(sq, *df, *dr);
+        for (dx, dy) in directions {
+            let edge_sq = ray_edge_square(*dx, *dy, sq);
+            let full_xray = BETWEEN[sq as usize][edge_sq as usize] | bit(edge_sq);
 
-            let ray_length = ray_mask.count_ones();
-
-            if ray_length < 2 {
-                // only count the long diagonals
+            if full_xray.count_ones() < 3 {
                 continue;
             }
 
-            let enemy_pawns =
-                (ray_mask & board.pieces(color.opposite(), PieceType::Pawn)).count_ones();
-            let friendly_pawns = (ray_mask & board.pieces(color, PieceType::Pawn)).count_ones();
+            let blocked_ray = bishop_attacks(sq, relevant_blockers) & full_xray;
 
-            let hanging_pieces = (ray_mask
-                & (board.occupancy_of(color.opposite()) & !info.all_attacks(color.opposite())))
-            .count_ones();
+            score += blocked_ray.count_ones() as i32 * 2; // prefers longer unblocked rays
 
-            let sees_king_ring = ray_mask & info.king_ring(color.opposite()) != 0;
+            let enemy_pawns = full_xray & enemy_pawns;
 
-            if enemy_pawns > 2 {
-                // severly blocked
-                score -= 20;
-            } else if enemy_pawns > 0 {
+            let friendly_pawns = full_xray & friendly_pawns;
+
+            // enemy pawns can become targets while friendly pawns generally block the bishop so overvalue friendly pawns
+
+            score -= (enemy_pawns.count_ones() as i32 + friendly_pawns.count_ones() as i32 * 3) * 4;
+
+            let king_ring = info.king_ring(color.opposite());
+
+            if full_xray & king_ring != 0 {
+                if blocked_ray & king_ring != 0 {
+                    score += 20; // directly sees the king ring
+
+                    if (blocked_ray & king_ring)
+                        & (info.attacked_by_two(color.opposite())
+                            & board.occupancy_of(color.opposite()))
+                        != 0
+                    {
+                        score -= 15;
+                        // sees the king ring but the square is defended
+                    } else {
+                        score += 15;
+                    }
+                } else {
+                    score += 10;
+                }
+            } else {
                 score -= 10;
-            } else {
-                score += 20
-            }
-
-            if friendly_pawns > 2 {
-                // severly blocked but is helping the pawn chain
-                score -= 15;
-            } else if friendly_pawns > 0 {
-                score -= 5;
-            } else {
-                score += 10;
-            }
-
-            if hanging_pieces > 1 {
-                // maybe adjust this value
-                score += 4 * hanging_pieces as i32;
-            }
-
-            if sees_king_ring {
-                score += 10;
             }
         }
     }
 
-    score = scale_by_phase(score, info.phase(), 4, 16);
-
     score
 }
 
-fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn connected_file_bonus(
+    board: &Board,
+    color: Color,
+    sliders: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     if sliders == 0 {
         return 0;
     }
@@ -292,7 +354,12 @@ fn connected_file_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
     score
 }
 
-fn straights_xray_bonus(board: &Board, color: Color, sliders: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn straights_xray_bonus(
+    board: &Board,
+    color: Color,
+    sliders: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     if sliders == 0 {
         return 0;
     }
@@ -322,8 +389,9 @@ fn straights_xray_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
         // minus total enemy pawns
 
         let enemy_pawns_on_ray = enemy_pawns & ray;
+        let enemies_on_ray = enemy_occupancy & ray;
 
-        let hits = ((enemy_occupancy & !enemy_pawns_on_ray).count_ones() as i32
+        let hits = ((enemies_on_ray & !enemy_pawns_on_ray).count_ones() as i32
             - ((friendly_occupancy & ray).count_ones() as i32 - 1))
             .max(0)
             - enemy_pawns_on_ray.count_ones() as i32;
@@ -338,7 +406,12 @@ fn straights_xray_bonus(board: &Board, color: Color, sliders: Bitboard, info: &E
     scale_by_phase(score, info.phase(), 6, 12)
 }
 
-fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn straights_on_open_file(
+    board: &Board,
+    color: Color,
+    sliders: Bitboard,
+    info: &EvalInfo,
+) -> i32 {
     if sliders == 0 {
         return 0;
     }
@@ -395,7 +468,7 @@ fn straights_on_open_file(board: &Board, color: Color, sliders: Bitboard, info: 
     scale_by_phase(score, info.phase(), 6, 12)
 }
 
-fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo) -> i32 {
+pub(super) fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo) -> i32 {
     let mut score = 0;
 
     let enemy_color = color.opposite();
@@ -443,20 +516,20 @@ fn open_file_mask(pawns: Bitboard) -> Bitboard {
     open_files
 }
 
-fn ray_bitboard(sq: Square, df: i8, dr: i8) -> Bitboard {
-    let mut final_mask = bit(sq);
+#[inline(always)]
+fn ray_edge_square(dx: i8, dy: i8, sq: u8) -> Square {
+    debug_assert!(dx == -1 || dx == 1);
+    debug_assert!(dy == -1 || dy == 1);
+    debug_assert!(sq < 64);
 
-    let mut file = file_of(sq) as i8 + df;
-    let mut rank = rank_of(sq) as i8 + dr;
-    while (0..8).contains(&file) && (0..8).contains(&rank) {
-        let ray_sq = square(file as u8, rank as u8);
-        let ray_mask = bit(ray_sq);
+    let file = sq & 7;
+    let rank = sq >> 3;
 
-        final_mask |= ray_mask;
+    // XOR with 7 reverses a three-bit coordinate: x -> 7 - x.
+    let file_steps = file ^ (7 * (dx > 0) as u8);
+    let rank_steps = rank ^ (7 * (dy > 0) as u8);
+    let steps = file_steps.min(rank_steps) as i16;
 
-        file += df;
-        rank += dr;
-    }
-
-    final_mask
+    let stride = dx as i16 + 8 * dy as i16;
+    (sq as i16 + steps * stride) as Square
 }
