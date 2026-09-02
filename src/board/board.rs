@@ -3,7 +3,7 @@ use crate::board::MoveList;
 use crate::engine::search::is_insufficient_material;
 use crate::eval::MAX_PHASE;
 use crate::game::GameState;
-use crate::moves::{all_legal_capture_moves, all_legal_moves, all_legal_moves_at};
+use crate::moves::{all_legal_capture_moves, all_legal_moves};
 use crate::types::{COLORS, Color, PIECE_TYPES, Piece, PieceType};
 
 pub const WHITE_KINGSIDE: u8 = 0b0001;
@@ -212,11 +212,6 @@ impl Board {
         captures
     }
 
-    pub fn all_legal_moves_at(&mut self, sq: Square) -> MoveList {
-        let mut legal_moves = MoveList::new();
-        all_legal_moves_at(self, self.side_to_move, sq, &mut legal_moves);
-        legal_moves
-    }
     // ********************
     // **** GAME STATE ****
     // ********************

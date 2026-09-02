@@ -107,7 +107,16 @@ impl Game {
     }
 
     pub fn legal_moves_from(&mut self, sq: Square) -> MoveList {
-        self.board.all_legal_moves_at(sq)
+        let all_moves = self.board.all_legal_moves();
+        let mut moves_from = MoveList::new();
+
+        for &mv in all_moves.iter() {
+            if mv.from() == sq {
+                moves_from.push(mv);
+            }
+        }
+
+        moves_from
     }
 
     fn update_state(&mut self) {

@@ -1,7 +1,6 @@
 use crate::bitboard::pins::{generate_checkers_and_check_mask, generate_pin_masks};
 use crate::bitboard::{Bitboard, Square, pop_lsb};
 use crate::board::{Board, MoveList};
-use crate::moves::all_pseudo_moves_at;
 use crate::moves::king::{legal_king_moves, pseudo_king_capture_moves, pseudo_king_moves};
 use crate::moves::knight::{legal_knight_capture_moves, legal_knight_moves};
 use crate::moves::pawn::{legal_en_passant_moves, legal_pawn_capture_moves, legal_pawn_moves};
@@ -64,29 +63,6 @@ pub fn all_legal_moves(board: &mut Board, color: Color, moves: &mut MoveList) {
     legal_bishop_moves(board, color, &info, moves);
     legal_rook_moves(board, color, &info, moves);
     legal_queen_moves(board, color, &info, moves);
-}
-
-pub fn all_legal_moves_at(board: &mut Board, color: Color, sq: Square, moves: &mut MoveList) {
-    debug_assert_eq!(
-        board.side_to_move, color,
-        "all_legal_moves called with color != board.side_to_move"
-    );
-
-    let mut pseudo_moves = MoveList::new();
-
-    all_pseudo_moves_at(board, color, sq, &mut pseudo_moves);
-
-    for &mv in pseudo_moves.iter() {
-        let undo = board.make_move(mv);
-
-        let is_legal = !board.in_check(color);
-
-        board.undo_move(undo);
-
-        if is_legal {
-            moves.push(mv);
-        }
-    }
 }
 
 pub fn all_legal_capture_moves(board: &mut Board, color: Color, moves: &mut MoveList) {

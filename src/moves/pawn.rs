@@ -289,91 +289,6 @@ pub fn legal_en_passant_moves(
     }
 }
 
-pub fn pseudo_pawn_moves_at(board: &Board, color: Color, sq: Square, moves: &mut MoveList) {
-    if sq >= 64 {
-        return;
-    }
-
-    let pawn = bit(sq);
-
-    if board.pieces(color, PieceType::Pawn) & pawn == 0 {
-        return;
-    }
-
-    let occupancy = board.all_occupancy();
-    let enemies = board.occupancy_of(color.opposite());
-    let empty = !occupancy;
-
-    match color {
-        Color::White => {
-            let mut single_push = (pawn << 8) & empty;
-            let mut double_push = ((single_push & RANK_3) << 8) & empty;
-
-            let mut captures_left = ((pawn & !FILE_A) << 7) & enemies;
-            let mut captures_right = ((pawn & !FILE_H) << 9) & enemies;
-
-            while let Some(to) = pop_lsb(&mut single_push) {
-                add_pawn_move(moves, sq, to, MoveType::Normal, color);
-            }
-
-            while let Some(to) = pop_lsb(&mut double_push) {
-                moves.push(Move::new(sq, to, MoveType::Normal, None));
-            }
-
-            while let Some(to) = pop_lsb(&mut captures_left) {
-                add_pawn_move(moves, sq, to, MoveType::Capture, color);
-            }
-
-            while let Some(to) = pop_lsb(&mut captures_right) {
-                add_pawn_move(moves, sq, to, MoveType::Capture, color);
-            }
-
-            if let Some(en_pass_to) = board.en_passant() {
-                let en_passant_to_bb = bit(en_pass_to);
-                let en_left = ((pawn & !FILE_A) << 7) & en_passant_to_bb;
-                let en_right = ((pawn & !FILE_H) << 9) & en_passant_to_bb;
-
-                if en_left != 0 || en_right != 0 {
-                    moves.push(Move::new(sq, en_pass_to, MoveType::EnPassant, None));
-                }
-            }
-        }
-
-        Color::Black => {
-            let mut single_push = (pawn >> 8) & empty;
-            let mut double_push = ((single_push & RANK_6) >> 8) & empty;
-
-            let mut captures_left = ((pawn & !FILE_A) >> 9) & enemies;
-            let mut captures_right = ((pawn & !FILE_H) >> 7) & enemies;
-
-            while let Some(to) = pop_lsb(&mut single_push) {
-                add_pawn_move(moves, sq, to, MoveType::Normal, color);
-            }
-
-            while let Some(to) = pop_lsb(&mut double_push) {
-                moves.push(Move::new(sq, to, MoveType::Normal, None));
-            }
-
-            while let Some(to) = pop_lsb(&mut captures_left) {
-                add_pawn_move(moves, sq, to, MoveType::Capture, color);
-            }
-
-            while let Some(to) = pop_lsb(&mut captures_right) {
-                add_pawn_move(moves, sq, to, MoveType::Capture, color);
-            }
-
-            if let Some(en_pass_to) = board.en_passant() {
-                let en_passant_to_bb = bit(en_pass_to);
-                let en_left = ((pawn & !FILE_A) >> 9) & en_passant_to_bb;
-                let en_right = ((pawn & !FILE_H) >> 7) & en_passant_to_bb;
-
-                if en_left != 0 || en_right != 0 {
-                    moves.push(Move::new(sq, en_pass_to, MoveType::EnPassant, None));
-                }
-            }
-        }
-    }
-}
 pub fn pseudo_pawn_capture_moves(board: &Board, color: Color, moves: &mut MoveList) {
     let pawns = board.pieces(color, PieceType::Pawn);
     let enemies = board.occupancy_of(color.opposite());
@@ -463,34 +378,12 @@ pub fn legal_pawn_capture_moves(
 ) {
     let pawns = board.pieces(color, PieceType::Pawn);
     let enemies = board.occupancy_of(color.opposite());
-    let empty = !board.all_occupancy();
-
-    let promotion_rank = match color {
-        Color::White => 7,
-        Color::Black => 0,
-    };
 
     match color {
         Color::White => {
-            let mut single_pushes = (pawns << 8) & empty;
-
             let mut captures_left = ((pawns & !FILE_A) << 7) & enemies;
 
             let mut captures_right = ((pawns & !FILE_H) << 9) & enemies;
-
-            while let Some(to) = pop_lsb(&mut single_pushes) {
-                let from = to - 8;
-                if rank_of(to) == promotion_rank && is_legal_pawn_move(to, from, info) {
-                    for promotion in [
-                        PieceType::Queen,
-                        PieceType::Rook,
-                        PieceType::Bishop,
-                        PieceType::Knight,
-                    ] {
-                        moves.push(Move::new(from, to, MoveType::Normal, Some(promotion)));
-                    }
-                }
-            }
 
             while let Some(to) = pop_lsb(&mut captures_left) {
                 let from = to - 7;
@@ -508,25 +401,9 @@ pub fn legal_pawn_capture_moves(
         }
 
         Color::Black => {
-            let mut single_pushes = (pawns >> 8) & empty;
-
             let mut captures_left = ((pawns & !FILE_A) >> 9) & enemies;
 
             let mut captures_right = ((pawns & !FILE_H) >> 7) & enemies;
-
-            while let Some(to) = pop_lsb(&mut single_pushes) {
-                let from = to + 8;
-                if rank_of(to) == promotion_rank && is_legal_pawn_move(to, from, info) {
-                    for promotion in [
-                        PieceType::Queen,
-                        PieceType::Rook,
-                        PieceType::Bishop,
-                        PieceType::Knight,
-                    ] {
-                        moves.push(Move::new(from, to, MoveType::Normal, Some(promotion)));
-                    }
-                }
-            }
 
             while let Some(to) = pop_lsb(&mut captures_left) {
                 let from = to + 9;
@@ -545,47 +422,123 @@ pub fn legal_pawn_capture_moves(
     }
 }
 
-pub fn pseudo_pawn_capture_moves_at(board: &Board, color: Color, sq: Square, moves: &mut MoveList) {
-    if sq >= 64 {
-        return;
-    }
-
-    let pawn = bit(sq);
-
-    if board.pieces(color, PieceType::Pawn) & pawn == 0 {
-        return;
-    }
-
-    let enemies = board.occupancy_of(color.opposite());
+pub fn legal_pawn_quiet_moves(
+    board: &Board,
+    color: Color,
+    info: &MoveGenInfo,
+    moves: &mut MoveList,
+) {
+    let pawns = board.pieces(color, PieceType::Pawn);
+    let occupancy = board.all_occupancy();
+    let empty = !occupancy;
 
     match color {
         Color::White => {
-            let mut captures_left = ((pawn & !FILE_A) << 7) & enemies;
-            let mut captures_right = ((pawn & !FILE_H) << 9) & enemies;
+            let promotion_rank = 7;
 
-            while let Some(to) = pop_lsb(&mut captures_left) {
-                add_pawn_move(moves, sq, to, MoveType::Capture, color);
+            let mut single_pushes = (pawns << 8) & empty;
+
+            let mut double_pushes = ((single_pushes & RANK_3) << 8) & empty;
+
+            while let Some(to) = pop_lsb(&mut single_pushes) {
+                let from = to - 8;
+
+                if rank_of(to) == promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
+                if is_legal_pawn_move(to, from, info) {
+                    add_pawn_move(moves, from, to, MoveType::Normal, color);
+                }
             }
 
-            while let Some(to) = pop_lsb(&mut captures_right) {
-                add_pawn_move(moves, sq, to, MoveType::Capture, color);
+            while let Some(to) = pop_lsb(&mut double_pushes) {
+                let from = to - 16;
+
+                if is_legal_pawn_move(to, from, info) {
+                    moves.push(Move::new(from, to, MoveType::Normal, None));
+                }
             }
         }
 
         Color::Black => {
-            let mut captures_left = ((pawn & !FILE_A) >> 9) & enemies;
-            let mut captures_right = ((pawn & !FILE_H) >> 7) & enemies;
+            let promotion_rank = 0;
 
-            while let Some(to) = pop_lsb(&mut captures_left) {
-                add_pawn_move(moves, sq, to, MoveType::Capture, color);
+            let mut single_pushes = (pawns >> 8) & empty;
+
+            let mut double_pushes = ((single_pushes & RANK_6) >> 8) & empty;
+
+            while let Some(to) = pop_lsb(&mut single_pushes) {
+                let from = to + 8;
+
+                if rank_of(to) == promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
+                if is_legal_pawn_move(to, from, info) {
+                    add_pawn_move(moves, from, to, MoveType::Normal, color);
+                }
             }
 
-            while let Some(to) = pop_lsb(&mut captures_right) {
-                add_pawn_move(moves, sq, to, MoveType::Capture, color);
+            while let Some(to) = pop_lsb(&mut double_pushes) {
+                let from = to + 16;
+                if is_legal_pawn_move(to, from, info) {
+                    moves.push(Move::new(from, to, MoveType::Normal, None));
+                }
             }
         }
     }
 }
+
+pub fn legal_pawn_promotion_moves(
+    board: &Board,
+    color: Color,
+    info: &MoveGenInfo,
+    moves: &mut MoveList,
+) {
+    let pawns = board.pieces(color, PieceType::Pawn);
+    let occupancy = board.all_occupancy();
+    let empty = !occupancy;
+
+    match color {
+        Color::White => {
+            let promotion_rank = 7;
+
+            let mut single_pushes = (pawns << 8) & empty;
+
+            while let Some(to) = pop_lsb(&mut single_pushes) {
+                let from = to - 8;
+
+                if rank_of(to) != promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
+                if is_legal_pawn_move(to, from, info) {
+                    add_pawn_move(moves, from, to, MoveType::Normal, color);
+                }
+            }
+        }
+
+        Color::Black => {
+            let promotion_rank = 0;
+
+            let mut single_pushes = (pawns >> 8) & empty;
+
+            while let Some(to) = pop_lsb(&mut single_pushes) {
+                let from = to + 8;
+
+                if rank_of(to) != promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
+                if is_legal_pawn_move(to, from, info) {
+                    add_pawn_move(moves, from, to, MoveType::Normal, color);
+                }
+            }
+        }
+    }
+}
+
 fn add_pawn_move(moves: &mut MoveList, from: Square, to: Square, kind: MoveType, color: Color) {
     let to_bb = bit(to);
 

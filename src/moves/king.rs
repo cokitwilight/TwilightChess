@@ -1,5 +1,5 @@
 use crate::bitboard::{
-    A1, A8, B1, B8, C1, C8, D1, D8, E1, E8, F1, F8, G1, G8, H1, H8, Square, bishop_attacks, bit,
+    A1, A8, B1, B8, C1, C8, D1, D8, E1, E8, F1, F8, G1, G8, H1, H8, bishop_attacks, bit,
     king_attacks, knight_attacks, pawn_attacks_from_square, pop_lsb, rook_attacks,
 };
 use crate::board::{
@@ -39,6 +39,51 @@ pub fn legal_king_moves(board: &Board, color: Color, moves: &mut MoveList) {
     legal_castling_moves(board, color, moves);
 }
 
+pub fn legal_king_capture_moves(board: &Board, color: Color, moves: &mut MoveList) {
+    let mut king = board.pieces(color, PieceType::King);
+    let enemies = board.occupancy_of(color.opposite());
+    let friends = board.occupancy_of(color);
+
+    let Some(from) = pop_lsb(&mut king) else {
+        board.print_board();
+        panic!("No king at board.pieces(king)");
+    };
+
+    let targets = king_attacks(from) & !friends;
+
+    let mut captures = targets & enemies;
+
+    while let Some(to) = pop_lsb(&mut captures) {
+        let mv = Move::new(from, to, MoveType::Capture, None);
+        if legal_king_move(board, mv) {
+            moves.push(mv);
+        }
+    }
+}
+
+pub fn legal_king_quiet_moves(board: &Board, color: Color, moves: &mut MoveList) {
+    let mut king = board.pieces(color, PieceType::King);
+    let friends = board.occupancy_of(color);
+    let empty = !board.all_occupancy();
+
+    let Some(from) = pop_lsb(&mut king) else {
+        board.print_board();
+        panic!("No king at board.pieces(king)");
+    };
+
+    let targets = king_attacks(from) & !friends;
+
+    let mut quiets = targets & empty;
+
+    while let Some(to) = pop_lsb(&mut quiets) {
+        let mv = Move::new(from, to, MoveType::Normal, None);
+        if legal_king_move(board, mv) {
+            moves.push(mv);
+        }
+    }
+    legal_castling_moves(board, color, moves);
+}
+
 pub fn pseudo_king_moves(board: &Board, color: Color, moves: &mut MoveList) {
     let mut king = board.pieces(color, PieceType::King);
     let enemies = board.occupancy_of(color.opposite());
@@ -64,36 +109,6 @@ pub fn pseudo_king_moves(board: &Board, color: Color, moves: &mut MoveList) {
     pseudo_castling_moves(board, color, moves);
 }
 
-pub fn pseudo_king_moves_at(board: &Board, color: Color, sq: Square, moves: &mut MoveList) {
-    if sq >= 64 {
-        return;
-    }
-
-    if board.pieces(color, PieceType::King) & bit(sq) == 0 {
-        return;
-    }
-
-    let enemies = board.occupancy_of(color.opposite());
-    let friends = board.occupancy_of(color);
-    let empty = !(enemies | friends);
-
-    let targets = king_attacks(sq) & !friends;
-
-    let mut captures = targets & enemies;
-    let mut quiets = targets & empty;
-
-    while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move::new(sq, to, MoveType::Capture, None));
-    }
-
-    while let Some(to) = pop_lsb(&mut quiets) {
-        moves.push(Move::new(sq, to, MoveType::Normal, None));
-    }
-
-    // Only produces castles if this king is actually on E1/E8.
-    pseudo_castling_moves_at(board, color, sq, moves);
-}
-
 pub fn pseudo_king_capture_moves(board: &Board, color: Color, moves: &mut MoveList) {
     let mut king = board.pieces(color, PieceType::King);
     let enemies = board.occupancy_of(color.opposite());
@@ -110,27 +125,6 @@ pub fn pseudo_king_capture_moves(board: &Board, color: Color, moves: &mut MoveLi
 
     while let Some(to) = pop_lsb(&mut captures) {
         moves.push(Move::new(from, to, MoveType::Capture, None));
-    }
-}
-
-pub fn pseudo_king_capture_moves_at(board: &Board, color: Color, sq: Square, moves: &mut MoveList) {
-    if sq >= 64 {
-        return;
-    }
-
-    if board.pieces(color, PieceType::King) & bit(sq) == 0 {
-        return;
-    }
-
-    let enemies = board.occupancy_of(color.opposite());
-    let friends = board.occupancy_of(color);
-
-    let targets = king_attacks(sq) & !friends;
-
-    let mut captures = targets & enemies;
-
-    while let Some(to) = pop_lsb(&mut captures) {
-        moves.push(Move::new(sq, to, MoveType::Capture, None));
     }
 }
 
@@ -357,14 +351,6 @@ fn legal_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
                 }
             }
         }
-    }
-}
-
-fn pseudo_castling_moves_at(board: &Board, color: Color, sq: Square, moves: &mut MoveList) {
-    match color {
-        Color::White if sq == E1 => pseudo_castling_moves(board, color, moves),
-        Color::Black if sq == E8 => pseudo_castling_moves(board, color, moves),
-        _ => {}
     }
 }
 
