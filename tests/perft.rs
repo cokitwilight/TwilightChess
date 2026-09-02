@@ -213,6 +213,28 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // this test is very slow, so ignore it by default.
+    fn perft_kiwipete_depth_6() {
+        let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+        let mut board = Board::from_fen(fen).unwrap();
+
+        let start = std::time::Instant::now();
+        let nodes = perft(&mut board, 6);
+        let elapsed = start.elapsed();
+
+        println!(
+            "kiwipete depth 6: nodes={} expected={} time={:.3}s nps={:.0}",
+            nodes,
+            8_031_647_685u64,
+            elapsed.as_secs_f64(),
+            nodes as f64 / elapsed.as_secs_f64()
+        );
+
+        assert_eq!(nodes, 8_031_647_685);
+        board.assert_hash();
+    }
+
+    #[test]
     fn perft_position_3() {
         // Chess Programming Wiki Position 3.
         //

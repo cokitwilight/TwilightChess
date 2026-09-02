@@ -43,6 +43,7 @@ pub fn play_games(
                 players.clone(),
                 engine_1_current_color,
                 Some(opening.clone()),
+                false,
             ) {
                 Ok(g) => {
                     search_elapsed = g.total_time;
@@ -506,8 +507,14 @@ mod tests {
     #[test]
     #[ignore]
     pub fn test_tournament_fut() {
-        let mut match_players =
-            MatchPlayers::from_depth("FUT on".to_string(), "FUT off".to_string(), 20, 6, 20, 6);
+        let mut match_players = MatchPlayers::from_depth(
+            "FUT History on".to_string(),
+            "FUT History off".to_string(),
+            20,
+            6,
+            20,
+            6,
+        );
 
         match_players.white.config = EngineConfig::standard();
         match_players.black.config = EngineConfig::standard();

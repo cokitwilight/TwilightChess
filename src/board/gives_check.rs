@@ -3,6 +3,7 @@ use crate::board::{Board, Move, MoveType};
 use crate::types::{Color, PieceType};
 
 impl Board {
+    // HOTSPOT. TRY TO OPTIMIZE THIS CODE
     pub fn move_gives_check(&self, mv: &Move) -> bool {
         let from = mv.from();
         let to = mv.to();

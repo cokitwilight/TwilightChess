@@ -1,8 +1,9 @@
-use crate::bitboard::{Square, bit, file_mask, file_of, pop_lsb, rank_of, square};
+use crate::bitboard::lookup::BETWEEN;
+use crate::bitboard::{Square, bit, file_mask, file_of, pop_lsb};
 use crate::board::Board;
 use crate::eval::EvalInfo;
 use crate::eval::eval::MAX_DANGER;
-use crate::eval::lookup::{KING_DANGER_TABLE, KING_PAWN_SHIELD, KING_PAWN_TWO_SHIELD};
+use crate::eval::lookup::{KING_DANGER_TABLE, KING_PAWN_SHIELD, KING_PAWN_TWO_SHIELD, RAY_MASKS};
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
@@ -149,7 +150,6 @@ pub(super) fn open_file_danger_bonus(
 }
 
 // range: 0 <-> 24. Note in just the forward two it would likely be 0-12/14
-// REWRITE FUNCTION!
 pub(super) fn open_diagonal_danger_bonus(
     board: &Board,
     color: Color,
@@ -162,39 +162,61 @@ pub(super) fn open_diagonal_danger_bonus(
 
     let mut danger = 0;
 
-    let occupied = board.all_occupancy();
-
     let enemy_sliders = board.pieces(color.opposite(), PieceType::Bishop)
         | board.pieces(color.opposite(), PieceType::Queen);
 
     for (df, dr) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
-        let mut file = file_of(king_sq) as i8 + df;
-        let mut rank = rank_of(king_sq) as i8 + dr;
+        let ray = RAY_MASKS[king_sq as usize][(df + 1) as usize][(dr + 1) as usize];
+        let ray_length = ray.count_ones() as i32;
 
-        let mut open_diagonal = true;
+        if ray_length <= 1 {
+            // lazily assume there is some danger but avoid computing logic on single square rays
+            danger += 1;
+            continue;
+        }
+        let mut sliders_on_ray = ray & enemy_sliders;
 
-        while (0..8).contains(&file) && (0..8).contains(&rank) {
-            let to = square(file as u8, rank as u8);
-            let to_mask = bit(to);
+        if ray & enemy_sliders != 0 {
+            danger += 6 * sliders_on_ray.count_ones() as i32 * sliders_on_ray.count_ones() as i32; // slider pointing at king
 
-            if occupied & to_mask != 0 {
-                open_diagonal = false;
-                if to_mask & enemy_sliders != 0 {
-                    // break when you meet a bishop/queen else keep checking for potention weakness
-                    danger += 7;
-                    break;
-                }
+            let mut between = 0u64;
+            while let Some(slider_sq) = pop_lsb(&mut sliders_on_ray) {
+                between |= BETWEEN[slider_sq as usize][king_sq as usize];
             }
 
-            file += df;
-            rank += dr;
+            if between & board.all_occupancy() != 0 {
+                let pawns = (between & board.pieces(color, PieceType::Pawn)).count_ones() as i32; // MAYBE INCLUDE ENEMY PAWNS HERE
+                if pawns == 0 {
+                    danger += 4;
+                } else {
+                    danger -= 4 * pawns * pawns;
+                }
+
+                let others =
+                    between & board.occupancy_of(color) & !board.pieces(color, PieceType::Pawn);
+
+                danger -= others.count_ones() as i32;
+            } else {
+                danger += 2; // direct check
+            }
+            continue;
         }
-        if open_diagonal {
-            danger += 6;
+
+        let pawns_on_ray = ray & board.pieces(color, PieceType::Pawn);
+
+        if pawns_on_ray == 0 {
+            danger += ray_length; // this should be relative to the length of the ray.
+
+            let others = ray & board.occupancy_of(color);
+
+            danger -= others.count_ones() as i32;
+        } else {
+            let pawns = pawns_on_ray.count_ones() as i32;
+            danger -= pawns * pawns;
         }
     }
 
-    danger
+    danger.max(-4)
 }
 
 // range: -6 <-> 12

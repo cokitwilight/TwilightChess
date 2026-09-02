@@ -13,6 +13,7 @@ pub fn run_game(
     players: MatchPlayers,
     engine_1_color: Color,
     opening_line: Option<OpeningLine>,
+    can_print: bool,
 ) -> Result<GameRecord, String> {
     let mut game_record = GameRecord::new(start_fen.clone(), engine_1_color);
 
@@ -113,6 +114,14 @@ pub fn run_game(
 
         game_record.total_time += search_result.elapsed;
         count += 1;
+
+        if can_print {
+            println!(
+                "Move {}: {:.3} seconds",
+                count,
+                search_result.elapsed.as_secs_f64()
+            );
+        }
     }
 
     match game.state() {
@@ -167,6 +176,7 @@ mod tests {
             players.clone(),
             Color::White,
             None,
+            true,
         ) {
             Ok(g) => g,
             Err(msg) => panic!("{msg}"),
@@ -262,6 +272,7 @@ mod tests {
             players.clone(),
             Color::Black,
             Some(opening_line),
+            true,
         ) {
             Ok(g) => g,
             Err(msg) => panic!("{msg}"),
@@ -331,9 +342,9 @@ mod tests {
     #[test]
     #[ignore]
     pub fn test_game_3() {
-        let engine1: String = String::from("20 s");
-        let engine2: String = String::from("40 s");
-        let mut players = MatchPlayers::from_depth(engine1.clone(), engine2.clone(), 32, 7, 32, 7);
+        let engine1: String = String::from("192 s");
+        let engine2: String = String::from("384 s");
+        let mut players = MatchPlayers::from_depth(engine1.clone(), engine2.clone(), 40, 7, 40, 7);
 
         players.white.config.limits.soft_time_limit_ms = Some(192_000);
         players.black.config.limits.soft_time_limit_ms = Some(384_000);
@@ -347,6 +358,7 @@ mod tests {
             players.clone(),
             Color::Black,
             Some(opening_line),
+            true,
         ) {
             Ok(g) => g,
             Err(msg) => panic!("{msg}"),

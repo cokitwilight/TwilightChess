@@ -435,7 +435,7 @@ impl Engine {
                     if history_score > self.config.search.fut.good_history {
                         margin += depth * self.config.search.fut.history_margin;
                     } else if history_score < self.config.search.fut.bad_history {
-                        margin += depth * self.config.search.fut.history_margin;
+                        margin -= depth * self.config.search.fut.history_margin;
                     }
                 }
 

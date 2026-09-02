@@ -18,7 +18,7 @@ impl Default for FutilityConfig {
             margin: 110,
             max_depth: 1,
             history_enabled: true,
-            history_margin: 50,
+            history_margin: 20,
             good_history: 16000,
             bad_history: -16000,
         }

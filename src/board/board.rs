@@ -75,6 +75,8 @@ impl Board {
         // returns the bitboard for the exact color and piece type
         self.pieces[color as usize][piece as usize]
     }
+
+    // HOTSPOT. TRY TO OPTIMIZE THIS CODE. COPIES ALL BITBOARDS. CALLED IN MOVE_GIVES_CHECK AND SEE PRIMARILLY
     pub fn all_pieces(&self) -> [[Bitboard; 6]; 2] {
         self.pieces
     }

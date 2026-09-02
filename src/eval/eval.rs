@@ -22,6 +22,49 @@ pub const WHITE_SQUARES: Bitboard = !BLACK_SQUARES;
 
 pub const MAX_DANGER: usize = 100;
 
+#[derive(Clone, Copy, Default)]
+struct AttackCounts {
+    ones: Bitboard,
+    twos: Bitboard,
+    fours: Bitboard,
+    eights: Bitboard,
+}
+
+impl AttackCounts {
+    #[inline(always)]
+    fn add(&mut self, attacks: Bitboard) {
+        // Add one to every square set in `attacks`.
+        let carry_to_twos = self.ones & attacks;
+        self.ones ^= attacks;
+
+        let carry_to_fours = self.twos & carry_to_twos;
+        self.twos ^= carry_to_twos;
+
+        let carry_to_eights = self.fours & carry_to_fours;
+        self.fours ^= carry_to_fours;
+
+        self.eights ^= carry_to_eights;
+    }
+
+    #[inline(always)]
+    fn count_at(&self, sq: Square) -> i32 {
+        let shift = sq as u32;
+
+        let ones = (self.ones >> shift) & 1;
+        let twos = (self.twos >> shift) & 1;
+        let fours = (self.fours >> shift) & 1;
+        let eights = (self.eights >> shift) & 1;
+
+        (ones + 2 * twos + 4 * fours + 8 * eights) as i32
+    }
+
+    #[inline(always)]
+    fn attacked_by_two(&self) -> Bitboard {
+        // Any count with a binary digit above the ones position is >= 2.
+        self.twos | self.fours | self.eights
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct EvalInfo {
     // king info
@@ -52,6 +95,8 @@ impl EvalInfo {
             phase: board.phase(),
         };
 
+        let mut attack_counts = [AttackCounts::default(); 2];
+
         for color in COLORS {
             let mut king = board.pieces(color, PieceType::King);
             let king_sq = pop_lsb(&mut king).expect("No king in Eval Calculations!");
@@ -60,31 +105,22 @@ impl EvalInfo {
             eval_info.king_ring[color.idx()] = king_attacks(king_sq) | bit(king_sq);
         }
 
-        let mut pressure = [0i8; 64]; // pressure is stored as white attacks - black attacks(so always from whites perspective)
-
         let king_rings = [
             king_attacks(eval_info.king_square(Color::White)),
             king_attacks(eval_info.king_square(Color::Black)),
         ];
-
-        let king_zone = king_rings[0] | king_rings[1];
 
         let occupied = board.all_occupancy();
 
         for color in COLORS {
             let color_idx = color.idx();
 
-            let mut once = 0u64;
-            let mut twice = 0u64;
-
             let mut pawns = board.pieces(color, PieceType::Pawn);
             while let Some(sq) = pop_lsb(&mut pawns) {
                 let attacks = pawn_attacks_from_square(color, sq);
 
-                add_pressure(color, attacks, king_zone, &mut pressure);
+                attack_counts[color_idx].add(attacks);
 
-                twice |= once & attacks;
-                once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Pawn.idx()] |= attacks;
             }
 
@@ -92,10 +128,8 @@ impl EvalInfo {
             while let Some(sq) = pop_lsb(&mut knights) {
                 let attacks = knight_attacks(sq);
 
-                add_pressure(color, attacks, king_zone, &mut pressure);
+                attack_counts[color_idx].add(attacks);
 
-                twice |= once & attacks;
-                once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Knight.idx()] |= attacks;
             }
 
@@ -103,10 +137,8 @@ impl EvalInfo {
             while let Some(sq) = pop_lsb(&mut bishops) {
                 let attacks = bishop_attacks(sq, occupied);
 
-                add_pressure(color, attacks, king_zone, &mut pressure);
+                attack_counts[color_idx].add(attacks);
 
-                twice |= once & attacks;
-                once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Bishop.idx()] |= attacks;
             }
 
@@ -114,10 +146,8 @@ impl EvalInfo {
             while let Some(sq) = pop_lsb(&mut rooks) {
                 let attacks = rook_attacks(sq, occupied);
 
-                add_pressure(color, attacks, king_zone, &mut pressure);
+                attack_counts[color_idx].add(attacks);
 
-                twice |= once & attacks;
-                once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Rook.idx()] |= attacks;
             }
 
@@ -125,16 +155,13 @@ impl EvalInfo {
             while let Some(sq) = pop_lsb(&mut queens) {
                 let attacks = queen_attacks(sq, occupied);
 
-                add_pressure(color, attacks, king_zone, &mut pressure);
+                attack_counts[color_idx].add(attacks);
 
-                twice |= once & attacks;
-                once |= attacks;
                 eval_info.attacks[color_idx][PieceType::Queen.idx()] |= attacks;
             }
 
             let king_sq = eval_info.king_squares[color_idx];
             let attacks = king_attacks(king_sq);
-            twice |= once & attacks;
             eval_info.attacks[color_idx][PieceType::King.idx()] |= attacks;
 
             eval_info.all_attacks[color_idx] = eval_info.attacks[color_idx][PieceType::Pawn.idx()]
@@ -144,20 +171,19 @@ impl EvalInfo {
                 | eval_info.attacks[color_idx][PieceType::Queen.idx()]
                 | eval_info.attacks[color_idx][PieceType::King.idx()];
 
-            eval_info.attacked_by_two[color_idx] = twice;
+            eval_info.attacked_by_two[color_idx] = attack_counts[color_idx].attacked_by_two();
         }
 
         for defender in COLORS {
+            let attacker = defender.opposite();
             let mut current_king_ring = king_rings[defender.idx()];
             let mut danger = 0i32;
 
             while let Some(sq) = pop_lsb(&mut current_king_ring) {
-                let pressure = pressure[sq as usize] as i32;
+                let attackers = attack_counts[attacker.idx()].count_at(sq);
+                let defenders = attack_counts[defender.idx()].count_at(sq);
 
-                let surplus = match defender {
-                    Color::White => -pressure,
-                    Color::Black => pressure,
-                };
+                let surplus = attackers - defenders;
 
                 if surplus > 0 {
                     danger += surplus * surplus * surplus;
@@ -199,20 +225,6 @@ impl EvalInfo {
 
     pub fn phase(&self) -> i32 {
         self.phase
-    }
-}
-
-#[inline(always)]
-fn add_pressure(attacker: Color, attacks: Bitboard, king_zone: Bitboard, pressure: &mut [i8; 64]) {
-    let delta: i8 = match attacker {
-        Color::White => 1,
-        Color::Black => -1,
-    };
-
-    let mut hits = attacks & king_zone;
-
-    while let Some(sq) = pop_lsb(&mut hits) {
-        pressure[sq as usize] += delta;
     }
 }
 
