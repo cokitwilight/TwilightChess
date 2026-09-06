@@ -187,5 +187,5 @@ pub fn history_bonus(depth: u16) -> i32 {
 
 #[inline]
 pub fn history_malus(depth: u16) -> i32 {
-    16 * (depth * depth) as i32
+    -16 * (depth * depth) as i32
 }

@@ -3,16 +3,20 @@ use std::time::{Duration, Instant};
 use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 use crate::engine::history::HistoryKey;
-use crate::engine::ordering::ScoredMove;
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
+use crate::engine::staged::ScoredMove;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_to_tt};
 use crate::engine::{
     Engine, MAX_PV, PickerFrame, SearchContext, SearchOptions, SearchResult, SearchTermination,
 };
+use crate::moves::MoveGenInfo;
 use crate::types::PieceType;
 
 // for debug printing
 use thousands::Separable;
+
+pub const MAX_QUIETS: usize = 45;
+pub const MAX_CAPTURES: usize = 45;
 
 impl Engine {
     pub fn iterative_deepening(
@@ -21,10 +25,21 @@ impl Engine {
         ctx: &mut SearchContext,
         can_print: bool,
     ) -> SearchResult {
+        let side_to_move = board.side_to_move();
+        let info = MoveGenInfo::calculate(board, side_to_move);
+        let fallback_move = {
+            let mut move_picker =
+                self.new_move_picker(0, ctx, side_to_move, 0, PickerFrame::ROOT, None, None);
+
+            move_picker
+                .get_next(board, &info, ctx, &self.history)
+                .map(|scored_move| scored_move.mv)
+        };
+
         let mut best_result = SearchResult {
             // A zero-duration/node limit can expire before depth one completes.
             // Keep a legal fallback so callers such as run_game can still move.
-            best_move: board.all_legal_moves().iter().copied().next(),
+            best_move: fallback_move,
             eval: 0,
             depth_reached: 0,
             stats: SearchStats::default(),
@@ -273,9 +288,7 @@ impl Engine {
         let mut best_move = None;
         let mut best_pv = [None; MAX_PV];
 
-        let mut all_moves = board.all_legal_moves();
-
-        let mut legal_moves = 0; // counter of legal moves since pseudo moves might not flag checkmate
+        let mut legal_moves = 0;
 
         let mut stopped = false;
 
@@ -289,25 +302,24 @@ impl Engine {
                     .and_then(|entry| entry.best_move)
             });
 
-        let mut move_picker = self.new_staged_move_selector(
+        let mut move_picker = self.new_move_picker(
             0,
-            board,
-            &mut all_moves,
+            ctx,
             side_to_move,
             0,
             PickerFrame::ROOT,
-            ctx,
             previous_best_move,
             tt_best_move,
         );
 
-        let mut searched_quiets = [ScoredMove::new(); 10];
+        let mut searched_quiets = [ScoredMove::new(); MAX_QUIETS];
         let mut q = 0usize;
-        let mut searched_captures = [ScoredMove::new(); 10];
+        let mut searched_captures = [ScoredMove::new(); MAX_CAPTURES];
         let mut c = 0usize;
 
-        while let Some(scored_mv) = move_picker.get_next(board, ctx, &self.history) {
-            // for mv in all_moves.iter() {
+        let info = MoveGenInfo::calculate(board, side_to_move);
+
+        while let Some(scored_mv) = move_picker.get_next(board, &info, ctx, &self.history) {
             if ctx.should_stop() {
                 stopped = true;
                 break;
@@ -436,10 +448,10 @@ impl Engine {
             }
 
             if !improved_alpha {
-                if is_quiet && q < 10 {
+                if is_quiet && q < MAX_QUIETS {
                     searched_quiets[q] = scored_mv;
                     q += 1;
-                } else if is_capture && c < 10 {
+                } else if is_capture && c < MAX_CAPTURES {
                     searched_captures[c] = scored_mv;
                     c += 1;
                 }
@@ -506,6 +518,35 @@ impl Engine {
             pv: best_pv, // TODO: Implement principal variation
             elapsed: Duration::ZERO,
             termination: SearchTermination::DepthLimit,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::SearchLimits;
+    use crate::engine::configs::EngineConfig;
+
+    #[test]
+    fn staged_root_detects_checkmate_and_stalemate() {
+        let cases = [
+            ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", -CHECKMATE_SCORE),
+            ("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", 0),
+        ];
+
+        for (fen, expected) in cases {
+            let mut config = EngineConfig::standard();
+            config.tt_size = 1;
+            let mut engine = Engine::new(config);
+            let mut board = Board::from_fen(fen).expect("valid terminal FEN");
+            let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.hash()]);
+
+            let result =
+                engine.search_root(&mut board, &mut context, None, 1, NEG_INF + 1, POS_INF - 1);
+
+            assert_eq!(result.eval, expected, "wrong terminal score for {fen}");
+            assert_eq!(result.best_move, None);
         }
     }
 }

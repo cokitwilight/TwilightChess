@@ -381,12 +381,19 @@ pub fn legal_pawn_capture_moves(
 
     match color {
         Color::White => {
+            let promotion_rank = 7;
+
             let mut captures_left = ((pawns & !FILE_A) << 7) & enemies;
 
             let mut captures_right = ((pawns & !FILE_H) << 9) & enemies;
 
             while let Some(to) = pop_lsb(&mut captures_left) {
                 let from = to - 7;
+
+                if rank_of(to) == promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
                 if is_legal_pawn_move(to, from, info) {
                     add_pawn_move(moves, from, to, MoveType::Capture, color);
                 }
@@ -394,6 +401,11 @@ pub fn legal_pawn_capture_moves(
 
             while let Some(to) = pop_lsb(&mut captures_right) {
                 let from = to - 9;
+
+                if rank_of(to) == promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
                 if is_legal_pawn_move(to, from, info) {
                     add_pawn_move(moves, from, to, MoveType::Capture, color);
                 }
@@ -401,12 +413,19 @@ pub fn legal_pawn_capture_moves(
         }
 
         Color::Black => {
+            let promotion_rank = 0;
+
             let mut captures_left = ((pawns & !FILE_A) >> 9) & enemies;
 
             let mut captures_right = ((pawns & !FILE_H) >> 7) & enemies;
 
             while let Some(to) = pop_lsb(&mut captures_left) {
                 let from = to + 9;
+
+                if rank_of(to) == promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
                 if is_legal_pawn_move(to, from, info) {
                     add_pawn_move(moves, from, to, MoveType::Capture, color);
                 }
@@ -414,6 +433,11 @@ pub fn legal_pawn_capture_moves(
 
             while let Some(to) = pop_lsb(&mut captures_right) {
                 let from = to + 7;
+
+                if rank_of(to) == promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
                 if is_legal_pawn_move(to, from, info) {
                     add_pawn_move(moves, from, to, MoveType::Capture, color);
                 }
@@ -499,12 +523,17 @@ pub fn legal_pawn_promotion_moves(
     let pawns = board.pieces(color, PieceType::Pawn);
     let occupancy = board.all_occupancy();
     let empty = !occupancy;
+    let enemies = board.occupancy_of(color.opposite());
 
     match color {
         Color::White => {
             let promotion_rank = 7;
 
             let mut single_pushes = (pawns << 8) & empty;
+
+            let mut captures_left = ((pawns & !FILE_A) << 7) & enemies;
+
+            let mut captures_right = ((pawns & !FILE_H) << 9) & enemies;
 
             while let Some(to) = pop_lsb(&mut single_pushes) {
                 let from = to - 8;
@@ -517,12 +546,40 @@ pub fn legal_pawn_promotion_moves(
                     add_pawn_move(moves, from, to, MoveType::Normal, color);
                 }
             }
+
+            while let Some(to) = pop_lsb(&mut captures_left) {
+                let from = to - 7;
+
+                if rank_of(to) != promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
+                if is_legal_pawn_move(to, from, info) {
+                    add_pawn_move(moves, from, to, MoveType::Capture, color);
+                }
+            }
+
+            while let Some(to) = pop_lsb(&mut captures_right) {
+                let from = to - 9;
+
+                if rank_of(to) != promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
+                if is_legal_pawn_move(to, from, info) {
+                    add_pawn_move(moves, from, to, MoveType::Capture, color);
+                }
+            }
         }
 
         Color::Black => {
             let promotion_rank = 0;
 
             let mut single_pushes = (pawns >> 8) & empty;
+
+            let mut captures_left = ((pawns & !FILE_A) >> 9) & enemies;
+
+            let mut captures_right = ((pawns & !FILE_H) >> 7) & enemies;
 
             while let Some(to) = pop_lsb(&mut single_pushes) {
                 let from = to + 8;
@@ -533,6 +590,30 @@ pub fn legal_pawn_promotion_moves(
 
                 if is_legal_pawn_move(to, from, info) {
                     add_pawn_move(moves, from, to, MoveType::Normal, color);
+                }
+            }
+
+            while let Some(to) = pop_lsb(&mut captures_left) {
+                let from = to + 9;
+
+                if rank_of(to) != promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
+                if is_legal_pawn_move(to, from, info) {
+                    add_pawn_move(moves, from, to, MoveType::Capture, color);
+                }
+            }
+
+            while let Some(to) = pop_lsb(&mut captures_right) {
+                let from = to + 7;
+
+                if rank_of(to) != promotion_rank {
+                    continue; // promotion moves are handled separately
+                }
+
+                if is_legal_pawn_move(to, from, info) {
+                    add_pawn_move(moves, from, to, MoveType::Capture, color);
                 }
             }
         }
@@ -561,7 +642,7 @@ fn add_pawn_move(moves: &mut MoveList, from: Square, to: Square, kind: MoveType,
     }
 }
 
-fn is_legal_pawn_move(to: Square, from: Square, info: &MoveGenInfo) -> bool {
+pub fn is_legal_pawn_move(to: Square, from: Square, info: &MoveGenInfo) -> bool {
     let to_bb = bit(to);
 
     to_bb & info.pin_masks[from as usize] & info.check_mask != 0

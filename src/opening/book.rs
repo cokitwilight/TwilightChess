@@ -2,11 +2,10 @@ use std::{collections::HashMap, fmt};
 
 use rand::RngExt;
 
-use crate::bitboard::Square;
 use crate::board::{Board, Move};
 use crate::engine::Engine;
 use crate::game::Game;
-use crate::types::PieceType;
+use crate::uci::find_legal_move_from_uci;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BookMove {
@@ -197,79 +196,6 @@ impl Default for OpeningBook {
     fn default() -> Self {
         Self::new()
     }
-}
-
-pub fn find_legal_move_from_uci(board: &Board, s: &str) -> Option<Move> {
-    let parsed = parse_uci_move(s)?;
-
-    let mut board_clone = board.clone();
-    let legal_moves = board_clone.all_legal_moves();
-
-    for mv in legal_moves.iter() {
-        if move_matches_uci(*mv, parsed) {
-            return Some(*mv);
-        }
-    }
-
-    None
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct ParsedUciMove {
-    from: Square,
-    to: Square,
-    promotion: Option<PieceType>,
-}
-
-fn parse_uci_move(s: &str) -> Option<ParsedUciMove> {
-    let bytes = s.as_bytes();
-
-    if bytes.len() != 4 && bytes.len() != 5 {
-        return None;
-    }
-
-    let from = square_from_uci(bytes[0], bytes[1])?;
-    let to = square_from_uci(bytes[2], bytes[3])?;
-
-    let promotion = if bytes.len() == 5 {
-        Some(match bytes[4].to_ascii_lowercase() {
-            b'q' => PieceType::Queen,
-            b'r' => PieceType::Rook,
-            b'b' => PieceType::Bishop,
-            b'n' => PieceType::Knight,
-            _ => return None,
-        })
-    } else {
-        None
-    };
-
-    Some(ParsedUciMove {
-        from,
-        to,
-        promotion,
-    })
-}
-
-fn square_from_uci(file_char: u8, rank_char: u8) -> Option<Square> {
-    if !(b'a'..=b'h').contains(&file_char) {
-        return None;
-    }
-
-    if !(b'1'..=b'8').contains(&rank_char) {
-        return None;
-    }
-
-    let file = file_char - b'a';
-    let rank = rank_char - b'1';
-
-    // Bitboard mapping:
-    // a1 = 0, b1 = 1, ..., h1 = 7,
-    // a2 = 8, ..., h8 = 63.
-    Some(rank * 8 + file)
-}
-
-fn move_matches_uci(mv: Move, parsed: ParsedUciMove) -> bool {
-    mv.from() == parsed.from && mv.to() == parsed.to && mv.promotion() == parsed.promotion
 }
 
 #[cfg(test)]

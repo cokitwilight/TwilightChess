@@ -2,6 +2,8 @@ use crate::bitboard::Square;
 use crate::types::PieceType;
 use std::cmp::Reverse;
 
+pub const MAX_MOVES: usize = 256;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub enum MoveType {
@@ -63,14 +65,14 @@ impl Move {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct MoveList {
-    moves: [Move; 256],
+    moves: [Move; MAX_MOVES],
     len: usize,
 }
 
 impl MoveList {
     pub fn new() -> Self {
         Self {
-            moves: [Move::NULL; 256],
+            moves: [Move::NULL; MAX_MOVES],
             len: 0,
         }
     }
@@ -78,7 +80,8 @@ impl MoveList {
     pub fn push(&mut self, mv: Move) {
         assert!(
             self.len < self.moves.len(),
-            "MoveList overflow: more than 256 moves generated"
+            "MoveList overflow: more than {} moves generated",
+            MAX_MOVES
         );
 
         self.moves[self.len] = mv;

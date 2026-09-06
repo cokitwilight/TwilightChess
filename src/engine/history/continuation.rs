@@ -50,7 +50,7 @@ impl ContinuationHistory {
         depth: u16,
     ) {
         let index = index(prev_key, curr_key);
-        let malus = -history_malus(depth);
+        let malus = history_malus(depth);
         match ply {
             1 => update(&mut self.table_one[index], malus),
             2 => update(&mut self.table_two[index], malus),

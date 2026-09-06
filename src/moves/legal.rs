@@ -1,12 +1,18 @@
 use crate::bitboard::pins::{generate_checkers_and_check_mask, generate_pin_masks};
 use crate::bitboard::{Bitboard, Square, pop_lsb};
-use crate::board::{Board, MoveList};
-use crate::moves::king::{legal_king_moves, pseudo_king_capture_moves, pseudo_king_moves};
-use crate::moves::knight::{legal_knight_capture_moves, legal_knight_moves};
-use crate::moves::pawn::{legal_en_passant_moves, legal_pawn_capture_moves, legal_pawn_moves};
+use crate::board::{Board, MoveList, MoveType};
+use crate::moves::king::{legal_king_capture_moves, legal_king_moves, legal_king_quiet_moves};
+use crate::moves::knight::{
+    legal_knight_capture_moves, legal_knight_moves, legal_knight_quiet_moves,
+};
+use crate::moves::pawn::{
+    legal_en_passant_moves, legal_pawn_capture_moves, legal_pawn_moves, legal_pawn_promotion_moves,
+    legal_pawn_quiet_moves,
+};
 use crate::moves::sliders::{
-    legal_bishop_capture_moves, legal_bishop_moves, legal_queen_capture_moves, legal_queen_moves,
-    legal_rook_capture_moves, legal_rook_moves,
+    legal_bishop_capture_moves, legal_bishop_moves, legal_bishop_quiet_moves,
+    legal_queen_capture_moves, legal_queen_moves, legal_queen_quiet_moves,
+    legal_rook_capture_moves, legal_rook_moves, legal_rook_quiet_moves,
 };
 use crate::types::{Color, PieceType};
 
@@ -68,41 +74,24 @@ pub fn all_legal_moves(board: &mut Board, color: Color, moves: &mut MoveList) {
 pub fn all_legal_capture_moves(board: &mut Board, color: Color, moves: &mut MoveList) {
     debug_assert_eq!(
         board.side_to_move, color,
-        "all_legal_moves called with color != board.side_to_move"
+        "all_legal_capture_moves called with color != board.side_to_move"
     );
 
     let info = MoveGenInfo::calculate(board, color);
 
-    let mut all_moves = MoveList::new();
+    legal_king_capture_moves(board, color, moves);
 
     if info.checkers.count_ones() > 1 {
-        pseudo_king_moves(board, color, &mut all_moves);
-        for &mv in all_moves.iter() {
-            let undo = board.make_move(mv);
-
-            let is_legal = !board.in_check(color);
-
-            board.undo_move(undo);
-
-            if is_legal {
-                moves.push(mv);
-            }
-        }
         return;
     }
 
-    // these are special cases since en passant and king double checks so keep make/undo for now
-    legal_pawn_capture_moves(board, color, &info, &mut all_moves);
-    pseudo_king_capture_moves(board, color, &mut all_moves);
+    legal_en_passant_moves(board, color, &info, moves);
+    legal_pawn_capture_moves(board, color, &info, moves);
 
-    for &mv in all_moves.iter() {
-        let undo = board.make_move(mv);
-
-        let is_legal = !board.in_check(color);
-
-        board.undo_move(undo);
-
-        if is_legal {
+    let mut promotions = MoveList::new();
+    legal_pawn_promotion_moves(board, color, &info, &mut promotions);
+    for &mv in promotions.iter() {
+        if mv.kind() == MoveType::Capture {
             moves.push(mv);
         }
     }
@@ -111,4 +100,34 @@ pub fn all_legal_capture_moves(board: &mut Board, color: Color, moves: &mut Move
     legal_bishop_capture_moves(board, color, &info, moves);
     legal_rook_capture_moves(board, color, &info, moves);
     legal_queen_capture_moves(board, color, &info, moves);
+}
+
+pub fn all_legal_quiet_moves(board: &mut Board, color: Color, moves: &mut MoveList) {
+    debug_assert_eq!(
+        board.side_to_move, color,
+        "all_legal_quiet_moves called with color != board.side_to_move"
+    );
+
+    let info = MoveGenInfo::calculate(board, color);
+
+    legal_king_quiet_moves(board, color, moves);
+
+    if info.checkers.count_ones() > 1 {
+        return;
+    }
+
+    legal_pawn_quiet_moves(board, color, &info, moves);
+
+    let mut promotions = MoveList::new();
+    legal_pawn_promotion_moves(board, color, &info, &mut promotions);
+    for &mv in promotions.iter() {
+        if mv.kind() == MoveType::Normal {
+            moves.push(mv);
+        }
+    }
+
+    legal_knight_quiet_moves(board, color, &info, moves);
+    legal_bishop_quiet_moves(board, color, &info, moves);
+    legal_rook_quiet_moves(board, color, &info, moves);
+    legal_queen_quiet_moves(board, color, &info, moves);
 }

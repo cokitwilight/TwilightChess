@@ -11,6 +11,7 @@ pub mod search_options;
 pub mod search_result;
 pub mod search_stack;
 pub mod search_stats;
+pub mod staged;
 pub mod time_manager;
 pub mod tt;
 

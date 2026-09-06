@@ -1,15 +1,17 @@
 use crate::board::{Board, Move, MoveType, null_move_reduction};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::history::HistoryKey;
-use crate::engine::ordering::ScoredMove;
 use crate::engine::ordering::see;
 use crate::engine::pruning::LMR_SCALE_I32;
 use crate::engine::search::is_insufficient_material;
+use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
 use crate::engine::search_stats::{MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS};
+use crate::engine::staged::ScoredMove;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, PickerFrame, SearchStackEntry};
 use crate::engine::{SearchContext, SearchOptions};
 use crate::eval::evaluation_for_turn;
+use crate::moves::MoveGenInfo;
 use crate::types::PieceType;
 
 impl Engine {
@@ -149,6 +151,7 @@ impl Engine {
         }
 
         let mut static_eval: Option<i32> = None;
+        // let mut static_eval: Option<i32> = Some(0);
 
         let can_rfp = !in_check
             && self.config.search.rfp.enabled
@@ -238,20 +241,6 @@ impl Engine {
             }
         }
 
-        // for now call legal moves instead of pseudo moves since it is relatively fast since we added pin and check masks
-        // NOTE: Legal moves will likely equal searched moves
-        let mut moves = board.all_legal_moves();
-
-        if moves.is_empty() {
-            if in_check {
-                context.stats.terminal_stats.checkmates += 1;
-                return -CHECKMATE_SCORE + ply as i32;
-            } else {
-                context.stats.terminal_stats.stalemates += 1;
-                return 0; // Stalemate
-            }
-        }
-
         let mut searched_moves = 0;
 
         let side_to_move = board.side_to_move();
@@ -262,14 +251,12 @@ impl Engine {
             tt_best_move
         };
 
-        let mut move_picker = self.new_staged_move_selector(
+        let mut move_picker = self.new_move_picker(
             0,
-            board,
-            &mut moves,
+            context,
             side_to_move,
             ply,
             picker_frame,
-            context,
             None,
             ordering_tt_move,
         );
@@ -316,13 +303,15 @@ impl Engine {
             false
         };
 
-        let mut searched_quiets = [ScoredMove::new(); 10];
+        let mut searched_quiets = [ScoredMove::new(); MAX_QUIETS];
         let mut q = 0usize;
-        let mut searched_captures = [ScoredMove::new(); 10];
+
+        let mut searched_captures = [ScoredMove::new(); MAX_CAPTURES];
         let mut c = 0usize;
 
-        // for mv in moves.iter() {
-        while let Some(scored_mv) = move_picker.get_next(board, context, &self.history) {
+        let info = MoveGenInfo::calculate(board, side_to_move);
+
+        while let Some(scored_mv) = move_picker.get_next(board, &info, context, &self.history) {
             // singular extension before make move
             let mv = &scored_mv.mv;
             if Some(*mv) == options.excluded_move {
@@ -360,13 +349,6 @@ impl Engine {
                 self.history.get_quiet_score(&context.stack, ply, curr_key)
             } else {
                 0
-            };
-
-            context.stack[ply + 1] = SearchStackEntry {
-                mv: Some(*mv),
-                piece: Some(piece),
-                history_index: Some(curr_key),
-                static_eval: None,
             };
 
             let mut extension: u16 = 0;
@@ -415,7 +397,16 @@ impl Engine {
                 }
             }
 
+            context.stack[ply + 1] = SearchStackEntry {
+                mv: Some(*mv),
+                piece: Some(piece),
+                history_index: Some(curr_key),
+                static_eval: None,
+            };
+
             let full_child_depth = depth.saturating_sub(1).saturating_add(extension);
+
+            // pruning section
 
             let undo = board.make_move(*mv);
 
@@ -454,13 +445,13 @@ impl Engine {
 
             let can_lmr = is_quiet
                 && !in_check
-                && !gives_check
                 && self.config.search.lmr.enabled
                 && options.excluded_move.is_none()
                 && extension == 0
                 && Some(*mv) != tt_best_move
                 && depth >= 3
-                && searched_moves >= 3;
+                && searched_moves >= 3
+                && !gives_check;
 
             let reduction = if can_lmr {
                 let mut current_reduction = self
@@ -748,10 +739,10 @@ impl Engine {
             }
 
             if !improved_alpha {
-                if is_quiet && q < 10 {
+                if is_quiet && q < MAX_QUIETS {
                     searched_quiets[q] = scored_mv;
                     q += 1;
-                } else if is_capture && c < 10 {
+                } else if is_capture && c < MAX_CAPTURES {
                     searched_captures[c] = scored_mv;
                     c += 1;
                 }
@@ -759,13 +750,21 @@ impl Engine {
         }
 
         if searched_moves == 0 {
-            debug_assert!(options.excluded_move.is_some());
+            if options.excluded_move.is_some() {
+                context.stats.singular_stats.no_alternatives += 1;
 
-            context.stats.singular_stats.no_alternatives += 1;
+                // This is the lower edge of the null window:
+                // singular_beta - 1.
+                return alpha;
+            }
 
-            // This is the lower edge of the null window:
-            // singular_beta - 1.
-            return alpha;
+            if in_check {
+                context.stats.terminal_stats.checkmates += 1;
+                return -CHECKMATE_SCORE + ply as i32;
+            }
+
+            context.stats.terminal_stats.stalemates += 1;
+            return 0;
         }
 
         // Store the best move in the search context for later use
@@ -794,5 +793,72 @@ impl Engine {
         }
 
         max_eval
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bitboard::{H8, square};
+    use crate::engine::SearchLimits;
+    use crate::engine::config::POS_INF;
+    use crate::engine::configs::EngineConfig;
+
+    fn test_engine() -> Engine {
+        let mut config = EngineConfig::standard();
+        config.tt_size = 1;
+        Engine::new(config)
+    }
+
+    #[test]
+    fn staged_negamax_detects_checkmate_and_stalemate() {
+        let cases = [
+            ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", -CHECKMATE_SCORE),
+            ("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", 0),
+        ];
+
+        for (fen, expected) in cases {
+            let mut engine = test_engine();
+            let mut board = Board::from_fen(fen).expect("valid terminal FEN");
+            let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.hash()]);
+
+            let score = engine.negamax(
+                &mut board,
+                &mut context,
+                1,
+                NEG_INF + 1,
+                POS_INF - 1,
+                0,
+                PickerFrame::ROOT,
+                SearchOptions::NORMAL,
+            );
+
+            assert_eq!(score, expected, "wrong terminal score for {fen}");
+        }
+    }
+
+    #[test]
+    fn singular_verification_does_not_count_the_excluded_move_as_searched() {
+        let mut engine = test_engine();
+        let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").expect("valid FEN");
+        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.hash()]);
+        let only_legal_move = Move::new(H8, square(6, 6), MoveType::Capture, None);
+        let alpha = -100;
+
+        let score = engine.negamax(
+            &mut board,
+            &mut context,
+            1,
+            alpha,
+            alpha + 1,
+            0,
+            PickerFrame::ROOT,
+            SearchOptions::singular_verification(only_legal_move),
+        );
+
+        assert_eq!(score, alpha);
+        assert_eq!(context.stats.singular_stats.no_alternatives, 1);
+        assert_eq!(context.stats.move_stats.main_searched, 0);
+        assert_eq!(context.stats.terminal_stats.checkmates, 0);
     }
 }

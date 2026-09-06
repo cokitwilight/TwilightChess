@@ -6,6 +6,7 @@ use crate::engine::search::is_insufficient_material;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MAX_PLY, PickerFrame};
 use crate::eval::evaluation_for_turn;
+use crate::moves::MoveGenInfo;
 use crate::types::PieceType;
 
 // const LAZY_MARGIN: i32 = 300;
@@ -117,10 +118,33 @@ impl Engine {
         let mut stand_pat = NEG_INF;
         let mut best_move: Option<Move> = None;
 
-        let mut raw_moves = if in_check {
-            let evasions = board.all_legal_moves();
+        let mut move_picker = if in_check {
+            self.new_move_picker(
+                0,
+                context,
+                side_to_move,
+                ply,
+                picker_frame,
+                None,
+                tt_best_move,
+            )
+        } else {
+            self.new_move_picker(
+                1,
+                context,
+                side_to_move,
+                ply,
+                picker_frame,
+                None,
+                tt_best_move,
+            )
+        };
 
-            if evasions.is_empty() {
+        let info = MoveGenInfo::calculate(board, side_to_move);
+        let mut pending_move = move_picker.get_next(board, &info, context, &self.history);
+
+        if in_check {
+            if pending_move.is_none() {
                 context.stats.terminal_stats.checkmates += 1;
                 let score = -CHECKMATE_SCORE + ply as i32;
                 context.stats.tt_stats.quiescence.stores += 1;
@@ -142,21 +166,58 @@ impl Engine {
                 return score;
             }
 
-            // too many consecutive checks. Most likely a draw anyways.
+            // Too many consecutive checks. Confirm that the position is not
+            // checkmate before returning the fallback score.
             if check_plies > MAX_CHECK_Q_PLIES {
                 context.stats.quiescence_stats.check_ply_limit_returns += 1;
-                // TODO: Later keep searching regardless since in check.
 
-                // since this is an awkward node do not store in tt.
-                // Additionally conservatively make the position worse
-                // maybe return alpha instead
+                // Since this is an awkward node, do not store it in the TT.
                 let fallback = 0.clamp(alpha, beta - 1);
                 return fallback;
             }
-            evasions
         } else {
-            stand_pat = evaluation_for_turn(board);
+            if pending_move.is_none() {
+                // A capture-only picker cannot distinguish stalemate from a
+                // position with only quiet moves. Probe one move from a main
+                // picker on a separate frame while this picker remains alive.
+                let mut legal_move_picker = self.new_move_picker(
+                    0,
+                    context,
+                    side_to_move,
+                    ply,
+                    picker_frame.child(),
+                    None,
+                    None,
+                );
 
+                if legal_move_picker
+                    .get_next(board, &info, context, &self.history)
+                    .is_none()
+                {
+                    context.stats.terminal_stats.stalemates += 1;
+                    let score = 0;
+                    context.stats.tt_stats.quiescence.stores += 1;
+                    let insert_result = self.tt.insert(
+                        hash,
+                        TTEntry {
+                            depth,
+                            eval: score_to_tt(score, ply),
+                            best_move: None,
+                            flag: TTFlag::Exact,
+                            node_type: TTNodeType::Quiescence,
+                        },
+                    );
+                    context
+                        .stats
+                        .tt_stats
+                        .quiescence
+                        .record_insert(insert_result);
+                    return score;
+                }
+            }
+
+            stand_pat = evaluation_for_turn(board);
+            // stand_pat = 0;
             best_eval = stand_pat;
 
             if stand_pat >= beta {
@@ -185,61 +246,42 @@ impl Engine {
             if alpha < stand_pat {
                 alpha = stand_pat;
             }
-            board.all_legal_capture_moves()
-            // includes promotions and quiet promotions
-        };
-
-        if in_check {
-            context.stats.quiescence_stats.check_evasion_candidates += raw_moves.len() as u64;
-        } else {
-            context.stats.quiescence_stats.capture_candidates += raw_moves.len() as u64;
         }
-
-        // do move ordering here
-        let mut move_picker = if in_check {
-            self.new_staged_move_selector(
-                0,
-                board,
-                &mut raw_moves,
-                side_to_move,
-                ply,
-                picker_frame,
-                context,
-                None,
-                tt_best_move,
-            )
-        } else {
-            // only tt and see ordering
-            self.new_staged_move_selector(
-                1,
-                board,
-                &mut raw_moves,
-                side_to_move,
-                ply,
-                picker_frame,
-                context,
-                None,
-                tt_best_move,
-            )
-        };
 
         let mut searched_moves = 0;
 
-        while let Some(scored_mv) = move_picker.get_next(board, context, &self.history) {
+        loop {
+            let scored_mv = if let Some(scored_mv) = pending_move.take() {
+                scored_mv
+            } else if let Some(scored_mv) =
+                move_picker.get_next(board, &info, context, &self.history)
+            {
+                scored_mv
+            } else {
+                break;
+            };
+
+            if in_check {
+                context.stats.quiescence_stats.check_evasion_candidates += 1;
+            } else {
+                context.stats.quiescence_stats.capture_candidates += 1;
+            }
+
             let mv = &scored_mv.mv;
-            let gives_check = board.move_gives_check(mv);
             let captured_value = match mv.kind() {
                 MoveType::EnPassant => PieceType::Pawn.value(),
 
                 _ => board.piece_at(mv.to()).map(|p| p.kind.value()).unwrap_or(0),
             };
 
+            let gives_check = board.move_gives_check(mv);
+
             let can_prune = !in_check
                 && board.phase > 8
                 && mv.promotion().is_none()
                 && alpha.abs() < MATE_THRESHOLD
-                && !gives_check
-                && Some(*mv) != tt_best_move;
+                && Some(*mv) != tt_best_move
+                && !gives_check;
 
             if can_prune {
                 // delta pruning
@@ -356,5 +398,42 @@ impl Engine {
             .record_insert(insert_result);
 
         best_eval
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::config::POS_INF;
+    use crate::engine::configs::EngineConfig;
+    use crate::engine::{SearchContext, SearchLimits};
+
+    #[test]
+    fn staged_quiescence_detects_checkmate_and_stalemate() {
+        let cases = [
+            ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", -CHECKMATE_SCORE),
+            ("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", 0),
+        ];
+
+        for (fen, expected) in cases {
+            let mut config = EngineConfig::standard();
+            config.tt_size = 1;
+            let mut engine = Engine::new(config);
+            let mut board = Board::from_fen(fen).expect("valid terminal FEN");
+            let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.hash()]);
+
+            let score = engine.quiescence(
+                &mut board,
+                &mut context,
+                1,
+                NEG_INF + 1,
+                POS_INF - 1,
+                0,
+                PickerFrame::ROOT,
+                0,
+            );
+
+            assert_eq!(score, expected, "wrong terminal score for {fen}");
+        }
     }
 }

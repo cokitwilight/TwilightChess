@@ -33,6 +33,18 @@ impl KillerTable {
         self.moves[ply][0] = Some(mv);
     }
 
+    pub fn get(&self, ply: usize, number: usize) -> Option<Move> {
+        if ply >= MAX_PLY {
+            return None;
+        }
+
+        if number >= 2 {
+            return None;
+        }
+
+        self.moves[ply][number]
+    }
+
     pub fn contains(&self, ply: usize, mv: Move) -> bool {
         ply < MAX_PLY && (self.moves[ply][0] == Some(mv) || self.moves[ply][1] == Some(mv))
     }

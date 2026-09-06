@@ -30,7 +30,7 @@ impl MainHistory {
     }
 
     pub fn add_malus(&mut self, key: HistoryKey, depth: u16) {
-        let malus = -history_malus(depth);
+        let malus = history_malus(depth);
         update(&mut self.table[key.idx()], malus);
     }
 }

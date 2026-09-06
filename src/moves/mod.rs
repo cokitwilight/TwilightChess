@@ -5,5 +5,5 @@ pub mod pawn;
 pub mod pseudo;
 pub mod sliders;
 
-pub use legal::{MoveGenInfo, all_legal_capture_moves, all_legal_moves};
+pub use legal::{MoveGenInfo, all_legal_capture_moves, all_legal_moves, all_legal_quiet_moves};
 pub use pseudo::{all_pseudo_capture_moves, all_pseudo_moves};

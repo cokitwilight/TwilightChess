@@ -354,7 +354,7 @@ fn legal_castling_moves(board: &Board, color: Color, moves: &mut MoveList) {
     }
 }
 
-fn legal_king_move(board: &Board, mv: Move) -> bool {
+pub fn legal_king_move(board: &Board, mv: Move) -> bool {
     // NOTE: Castling is already checked in the move generator for moving across checks
     let from = mv.from();
     let to = mv.to();

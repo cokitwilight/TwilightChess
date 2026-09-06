@@ -7,3 +7,4 @@ pub mod tournament;
 pub use game_runner::run_game;
 pub use players::MatchPlayers;
 pub use results::*;
+pub use tournament::play_games;

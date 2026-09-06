@@ -41,7 +41,7 @@ The move generator, board representation, GUI, Zobrist hashing, and game-end det
 - [X] Null Move Pruning
 - [ ] Magic Bitboards
 - [X] Pin Masks
-- [ ] UCI Support
+- [x] Basic UCI Support
 - [ ] SMP Search
 
 ## Requirements
@@ -77,6 +77,23 @@ print their overall values side by side. Once loaded, `compare pawns`,
 Comparison deltas are Position 2 minus Position 1. Type `help` for the full
 command list.
 
+## UCI
+
+Build and run the dedicated UCI executable:
+
+```bash
+cargo run --release --bin uci
+```
+
+The main executable can also enter UCI mode with `--uci`. The protocol supports
+`uci`, `isready`, `ucinewgame`, `position startpos`, `position fen`, move lists,
+`setoption` for `Hash`, `Clear Hash`, and `OwnBook`, and `go` limits for depth,
+nodes, move time, and the standard clock/increment fields.
+
+Search is currently synchronous because the engine does not expose external
+cancellation. As a result, interruptible `stop`, `ponder`, `infinite`,
+`searchmoves`, and mate-limited searches are not implemented yet.
+
 ## Testing
 
 Run all tests:
@@ -84,6 +101,16 @@ Run all tests:
 ```bash
 cargo test --release
 ```
+
+Tournament matches are run through the dedicated binary. Pass the former test
+name as the tournament selector:
+
+```bash
+cargo run --release --bin tournament -- test_tournament_lmr
+```
+
+Run `cargo run --release --bin tournament -- --help` to list every configured
+tournament.
 
 ## Performance Notes
 
