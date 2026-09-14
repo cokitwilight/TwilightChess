@@ -190,6 +190,9 @@ impl Engine {
             let elapsed_secs = elapsed.as_secs_f64();
             let depth_stats = ctx.stats - stats_before;
             let depth_nodes = depth_stats.total_nodes();
+            ctx.stats
+                .iterative_deepening_stats
+                .record_iteration(depth, depth_nodes);
 
             let depth_nps = if elapsed_secs > 0.0 {
                 depth_nodes as f64 / elapsed_secs
@@ -219,7 +222,19 @@ impl Engine {
                 0.0
             };
             if can_print {
+                let estimated_node_growth = ctx
+                    .stats
+                    .iterative_deepening_stats
+                    .estimated_growth_factor(depth)
+                    .map_or_else(|| "n/a".to_string(), |factor| format!("{factor:.2}x"));
+
                 depth_stats.print_all(depth, elapsed_secs);
+
+                println!(
+                    "Iteration Nodes: {}. Estimated Increase: {}",
+                    depth_nodes.separate_with_commas(),
+                    estimated_node_growth,
+                );
 
                 println!(
                     "Eval: {}. Time: {:.3}s. NPS: {} | Avg: {} | Median: {} | Weighted: {}",

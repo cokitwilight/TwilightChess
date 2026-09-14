@@ -1,6 +1,6 @@
 use crate::engine::configs::{
-    AspirationConfig, DeltaPruneConfig, FutilityConfig, LMRConfig, NullMoveConfig, RFPConfig,
-    SEEConfig, SingularConfig,
+    AspirationConfig, DeltaPruneConfig, FutilityConfig, LMPConfig, LMRConfig, NullMoveConfig,
+    RFPConfig, SEEConfig, SingularConfig,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -9,6 +9,7 @@ pub struct SearchConfig {
     pub null_move: NullMoveConfig,
     pub delta: DeltaPruneConfig,
     pub lmr: LMRConfig,
+    pub lmp: LMPConfig,
     pub see: SEEConfig,
     pub rfp: RFPConfig,
     pub fut: FutilityConfig, // etc
@@ -22,6 +23,7 @@ impl Default for SearchConfig {
             null_move: NullMoveConfig::default(),
             delta: DeltaPruneConfig::default(),
             lmr: LMRConfig::default(),
+            lmp: LMPConfig::default(),
             see: SEEConfig::default(),
             rfp: RFPConfig::default(),
             fut: FutilityConfig::default(),
@@ -36,6 +38,7 @@ impl SearchConfig {
         let mut null_move = NullMoveConfig::default();
         let mut delta = DeltaPruneConfig::default();
         let mut lmr = LMRConfig::default();
+        let mut lmp = LMPConfig::default();
         let mut see = SEEConfig::default();
         let mut rfp = RFPConfig::default();
         let mut fut = FutilityConfig::default();
@@ -45,6 +48,7 @@ impl SearchConfig {
         null_move.enabled = false;
         delta.enabled = false;
         lmr.enabled = false;
+        lmp.enabled = false;
         see.enabled = false;
         rfp.enabled = false;
         fut.enabled = false;
@@ -55,6 +59,7 @@ impl SearchConfig {
             null_move,
             delta,
             lmr,
+            lmp,
             see,
             rfp,
             fut,

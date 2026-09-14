@@ -14,7 +14,7 @@ impl Default for LMRConfig {
         Self {
             enabled: true,
             base: 0.75,
-            divisor: 2.25,
+            divisor: 2.00,
             history_enabled: true,
             history_scale: 94,
         }
@@ -24,5 +24,17 @@ impl Default for LMRConfig {
         // so approximately 48_000 / scaler = 768 ~= 63, 94 for max 2 plies,
         // General formula -HISTORY_MAX - HISTORY_MAX for ply * LMR_SCALE for range 0-MAX_PLY =
         // HISTORY_MAX / (LMR_SCALE * MAX_PLY) = scaler
+    }
+}
+
+impl LMRConfig {
+    pub fn experimental() -> Self {
+        Self {
+            enabled: true,
+            base: 0.75,
+            divisor: 1.25,
+            history_enabled: true,
+            history_scale: 70,
+        }
     }
 }

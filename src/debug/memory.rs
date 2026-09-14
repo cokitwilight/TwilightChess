@@ -1,3 +1,5 @@
+use crate::engine::tt::TTEntry;
+
 #[test]
 pub fn print_memory_sizes() {
     use crate::board::{Move, MoveType};
@@ -14,4 +16,5 @@ pub fn print_memory_sizes() {
         "Option<Scored Move>: {}",
         std::mem::size_of::<Option<ScoredMove>>()
     );
+    println!("TTEntry: {}", std::mem::size_of::<TTEntry>());
 }

@@ -7,6 +7,8 @@ pub const LMR_SCALE: f64 = 256.0;
 
 pub const LMR_SCALE_I32: i32 = 256;
 
+pub const LMR_CAPTURE_VALUE: [i32; 6] = [51, 153, 166, 230, 512, 0];
+
 #[derive(Clone, Debug)]
 pub struct LmrTable {
     reductions: [[i16; MAX_MOVES]; MAX_PLY],
@@ -21,7 +23,7 @@ impl LmrTable {
                 let d = depth as f64;
                 let m = mv as f64;
 
-                let reduction = config.base + d.ln() * m.ln() / config.divisor;
+                let reduction = config.base + (d.ln() * m.ln() / config.divisor);
 
                 reductions[depth][mv] = (reduction.max(0.0) * LMR_SCALE) as i16;
             }

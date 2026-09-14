@@ -2,7 +2,8 @@ use crate::board::{Board, Move, MoveType, null_move_reduction};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::history::HistoryKey;
 use crate::engine::ordering::see;
-use crate::engine::pruning::LMR_SCALE_I32;
+use crate::engine::pruning::lmr::LMR_CAPTURE_VALUE;
+use crate::engine::pruning::{LMR_SCALE_I32, lmp_history_limit, lmp_threshold};
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
 use crate::engine::search_stats::{MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS};
@@ -305,6 +306,7 @@ impl Engine {
 
         let mut searched_quiets = [ScoredMove::new(); MAX_QUIETS];
         let mut q = 0usize;
+        let mut quiet_moves_seen = 0usize;
 
         let mut searched_captures = [ScoredMove::new(); MAX_CAPTURES];
         let mut c = 0usize;
@@ -322,11 +324,13 @@ impl Engine {
             let is_capture = mv.kind() == MoveType::Capture || mv.kind() == MoveType::EnPassant;
             let gives_check = board.move_gives_check(mv);
 
+            if is_quiet {
+                quiet_moves_seen += 1;
+            }
+
             let piece = board
                 .piecetype_at(mv.from())
                 .expect("No piece in board in negamax!");
-
-            // let curr_key = HistoryKey::new(side_to_move, piece, mv.to());
 
             let curr_key = if let Some(key) = scored_mv.history_key {
                 key
@@ -339,6 +343,11 @@ impl Engine {
                     Some(piece)
                 } else {
                     board.piecetype_at(mv.to())
+                    // match mv.kind() {
+                    //     MoveType::Capture => board.piecetype_at(mv.to()),
+                    //     MoveType::EnPassant => Some(PieceType::Pawn),
+                    //     _ => None,
+                    // }
                 }
             } else {
                 None
@@ -347,6 +356,12 @@ impl Engine {
             let was_killer = context.killer_moves.contains(ply, *mv);
             let history_score = if is_quiet {
                 self.history.get_quiet_score(&context.stack, ply, curr_key)
+            } else if is_capture && Some(*mv) != tt_best_move {
+                // tt best move could be a capture that does not have a capture piece
+                self.history.get_capture_score(
+                    curr_key,
+                    captured_piece.expect("No piece in capture move for history lookup!"),
+                )
             } else {
                 0
             };
@@ -408,15 +423,31 @@ impl Engine {
 
             // pruning section
 
-            let undo = board.make_move(*mv);
-
-            if can_fut
-                && searched_moves > 0
-                && is_quiet
-                && !gives_check
-                && extension == 0
+            let can_reduce = (is_quiet || is_capture)
+                && !in_check
                 && Some(*mv) != tt_best_move
-            {
+                && extension == 0
+                && options.excluded_move.is_none();
+
+            let can_prune =
+                can_reduce && is_quiet && !gives_check && !is_pv && alpha.abs() < MATE_THRESHOLD;
+
+            let can_lmp = can_prune
+                && self.config.search.lmp.enabled
+                && depth <= self.config.search.lmp.max_depth;
+
+            if can_lmp && quiet_moves_seen > lmp_threshold(depth as usize) {
+                context.stats.lmp_stats.attempts += 1;
+
+                if history_score >= lmp_history_limit(depth as usize) {
+                    context.stats.lmp_stats.history_rejections += 1;
+                } else {
+                    context.stats.lmp_stats.pruned_moves += 1;
+                    continue;
+                }
+            }
+
+            if can_fut && can_prune && searched_moves > 0 {
                 context.stats.fut_stats.attempts += 1;
                 let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
                 context.stats.fut_stats.attempts_by_depth.bins[depth_bucket] += 1;
@@ -435,35 +466,47 @@ impl Engine {
                 if eval + margin as i32 <= alpha {
                     context.stats.fut_stats.pruned_moves += 1;
                     context.stats.fut_stats.pruned_moves_by_depth.bins[depth_bucket] += 1;
-                    board.undo_move(undo);
                     continue;
                 }
             }
 
+            let undo = board.make_move(*mv);
+
             let child_hash = board.hash();
             context.repetition_history.push(child_hash); // only store if valid move
 
-            let can_lmr = is_quiet
-                && !in_check
-                && self.config.search.lmr.enabled
-                && options.excluded_move.is_none()
-                && extension == 0
-                && Some(*mv) != tt_best_move
-                && depth >= 3
-                && searched_moves >= 3
-                && !gives_check;
+            let can_lmr =
+                can_reduce && self.config.search.lmr.enabled && depth >= 3 && searched_moves >= 3;
 
             let reduction = if can_lmr {
-                let mut current_reduction = self
+                let base_reduction = self
                     .lmr_table
                     .get(depth as usize, searched_moves as usize + 1);
+                let mut current_reduction = base_reduction;
+                let mut history_delta = 0;
+                let mut non_improving_delta = 0;
+                let mut pv_delta = 0;
+                let mut capture_delta = 0;
+                let mut check_delta = 0;
 
                 if self.config.search.lmr.history_enabled {
                     let baseline_red = current_reduction / LMR_SCALE_I32;
 
-                    let history_adjustement = history_score / self.config.search.lmr.history_scale;
+                    let history_adjustement = if is_quiet {
+                        history_score / self.config.search.lmr.history_scale
+                    } else if is_capture {
+                        // Capture history is less than max quiet history.
+                        history_score * 2 / self.config.search.lmr.history_scale
+                    } else {
+                        0
+                    };
 
-                    current_reduction -= history_adjustement;
+                    history_delta = -history_adjustement;
+                    current_reduction += history_delta;
+
+                    if history_delta != 0 {
+                        context.stats.lmr_stats.history_adjustments += 1;
+                    }
 
                     let history_red = current_reduction / LMR_SCALE_I32;
 
@@ -474,13 +517,63 @@ impl Engine {
                     }
                 }
 
-                if is_improving {
-                    current_reduction -= LMR_SCALE_I32 / 2; // half a ply
+                if !is_improving {
+                    non_improving_delta = base_reduction / 3;
+                    current_reduction += non_improving_delta;
+                    if non_improving_delta != 0 {
+                        context.stats.lmr_stats.non_improving_adjustments += 1;
+                    }
                 }
 
-                let red = current_reduction / LMR_SCALE_I32;
+                if is_pv {
+                    pv_delta = -(base_reduction / 3);
+                    current_reduction += pv_delta;
+                    if pv_delta != 0 {
+                        context.stats.lmr_stats.pv_adjustments += 1;
+                    }
+                }
 
-                red.clamp(0, depth as i32 - 2)
+                if is_capture {
+                    capture_delta =
+                        -(LMR_CAPTURE_VALUE[captured_piece.unwrap().idx()] + LMR_SCALE_I32 / 2);
+                    current_reduction += capture_delta;
+                    context.stats.lmr_stats.capture_adjustments += 1;
+                }
+
+                if gives_check {
+                    check_delta = -(LMR_SCALE_I32 / 2);
+                    current_reduction += check_delta;
+                    context.stats.lmr_stats.check_adjustments += 1;
+                }
+
+                let reduction_in_plies = |scaled_reduction: i32| {
+                    (scaled_reduction / LMR_SCALE_I32).clamp(0, depth as i32 - 2)
+                };
+                let red = reduction_in_plies(current_reduction);
+
+                if history_delta != 0
+                    && reduction_in_plies(current_reduction - history_delta) != red
+                {
+                    context.stats.lmr_stats.history_effects += 1;
+                }
+                if non_improving_delta != 0
+                    && reduction_in_plies(current_reduction - non_improving_delta) != red
+                {
+                    context.stats.lmr_stats.non_improving_effects += 1;
+                }
+                if pv_delta != 0 && reduction_in_plies(current_reduction - pv_delta) != red {
+                    context.stats.lmr_stats.pv_effects += 1;
+                }
+                if capture_delta != 0
+                    && reduction_in_plies(current_reduction - capture_delta) != red
+                {
+                    context.stats.lmr_stats.capture_effects += 1;
+                }
+                if check_delta != 0 && reduction_in_plies(current_reduction - check_delta) != red {
+                    context.stats.lmr_stats.check_effects += 1;
+                }
+
+                red
             } else {
                 0
             };
@@ -545,6 +638,8 @@ impl Engine {
                 }
 
                 if eval > alpha {
+                    let mut research_depth = full_child_depth;
+
                     context.stats.pvs_stats.alpha_improvements += 1;
 
                     if reduction > 0 {
@@ -552,17 +647,46 @@ impl Engine {
                         let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
                         context.stats.lmr_stats.researches_by_depth.bins[depth_bucket] += 1;
 
+                        let deeper_search = reduced_child_depth < depth && eval > max_eval + 50;
+                        let shallow_search = eval < max_eval + 10;
+
+                        research_depth = if deeper_search {
+                            research_depth + 1
+                        } else if shallow_search {
+                            research_depth - 1
+                        } else {
+                            research_depth
+                        };
+
+                        match research_depth.cmp(&full_child_depth) {
+                            std::cmp::Ordering::Greater => {
+                                context.stats.lmr_stats.dynamic_depth_increases += 1;
+                            }
+                            std::cmp::Ordering::Less => {
+                                context.stats.lmr_stats.dynamic_depth_decreases += 1;
+                            }
+                            std::cmp::Ordering::Equal => {
+                                context.stats.lmr_stats.dynamic_depth_unchanged += 1;
+                            }
+                        }
+
                         // null window search full depth
-                        eval = -self.negamax(
-                            board,
-                            context,
-                            full_child_depth,
-                            -alpha - 1,
-                            -alpha,
-                            ply + 1,
-                            picker_frame.child(),
-                            normal_child_options,
-                        );
+                        if research_depth > reduced_child_depth {
+                            context.stats.lmr_stats.dynamic_searches += 1;
+                            if research_depth != full_child_depth {
+                                context.stats.lmr_stats.dynamic_searches_at_modified_depth += 1;
+                            }
+                            eval = -self.negamax(
+                                board,
+                                context,
+                                research_depth,
+                                -alpha - 1,
+                                -alpha,
+                                ply + 1,
+                                picker_frame.child(),
+                                normal_child_options,
+                            );
+                        }
 
                         if context.stopped {
                             context.repetition_history.pop();
@@ -582,10 +706,16 @@ impl Engine {
                         // this move might improve alpha, research it at full depth
                         // full window search, full depth
                         context.stats.pvs_stats.full_window_researches += 1;
+                        if reduction > 0 {
+                            context.stats.lmr_stats.dynamic_searches += 1;
+                            if research_depth != full_child_depth {
+                                context.stats.lmr_stats.dynamic_searches_at_modified_depth += 1;
+                            }
+                        }
                         eval = -self.negamax(
                             board,
                             context,
-                            full_child_depth,
+                            research_depth,
                             -beta,
                             -alpha,
                             ply + 1,

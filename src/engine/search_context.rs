@@ -57,15 +57,6 @@ impl SearchContext {
         self.start_time.elapsed()
     }
 
-    // pub(crate) fn reset_staged_move_buffer(&mut self, picker_frame: PickerFrame) {
-    //     let picker_frame = picker_frame.index();
-    //     assert!(
-    //         picker_frame < self.move_buffers.len(),
-    //         "picker frame {picker_frame} exceeded the preallocated search-frame limit"
-    //     );
-    //     self.move_buffers[picker_frame].clear();
-    // }
-
     pub fn should_stop(&mut self) -> bool {
         if self.stopped {
             return true;

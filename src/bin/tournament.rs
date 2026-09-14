@@ -157,8 +157,8 @@ fn tournament_same_nodes() {
 
 fn tournament_lmr() {
     let mut match_players = MatchPlayers::from_depth(
-        "LMR History on".to_string(),
-        "LMR History off".to_string(),
+        "LMR Special".to_string(),
+        "LMR Base".to_string(),
         24,
         6,
         24,
@@ -168,15 +168,26 @@ fn tournament_lmr() {
     match_players.white.config = EngineConfig::standard();
     match_players.black.config = EngineConfig::standard();
 
+    match_players.white.config.limits.soft_time_limit_ms = Some(1000);
+    match_players.black.config.limits.soft_time_limit_ms = Some(1000);
+
     match_players.white.config.search.lmr.enabled = true;
     match_players.white.config.search.lmr.history_enabled = true;
-    match_players.white.config.search.lmr.history_scale = 94;
+    match_players.white.config.search.lmr.history_scale = 70;
+
+    match_players.white.config.search.lmr.base = 0.75;
+    match_players.white.config.search.lmr.divisor = 1.25;
+
     match_players.black.config.search.lmr.enabled = true;
-    match_players.black.config.search.lmr.history_enabled = false;
+    match_players.black.config.search.lmr.history_enabled = true;
+    match_players.black.config.search.lmr.history_scale = 94;
+
+    match_players.black.config.search.lmr.base = 0.75;
+    match_players.black.config.search.lmr.divisor = 2.25;
 
     let opening_suite = build_opening_book();
 
-    let result = play_games(opening_suite, 6, 1200, match_players, Color::White);
+    let result = play_games(opening_suite, 1, 10, match_players, Color::White);
 
     result.review().expect("IO Error");
 }
@@ -216,26 +227,20 @@ fn tournament_rfp() {
 }
 
 fn tournament_fut() {
-    let mut match_players = MatchPlayers::from_depth(
-        "FUT History on".to_string(),
-        "FUT History off".to_string(),
-        20,
-        6,
-        20,
-        6,
-    );
+    let mut match_players =
+        MatchPlayers::from_depth("FUT on".to_string(), "FUT off".to_string(), 24, 6, 24, 6);
 
     match_players.white.config = EngineConfig::standard();
     match_players.black.config = EngineConfig::standard();
 
     match_players.white.config.search.fut.enabled = true;
-    match_players.white.config.search.fut.history_enabled = true;
-    match_players.black.config.search.fut.enabled = true;
+    match_players.white.config.search.fut.history_enabled = false;
+    match_players.black.config.search.fut.enabled = false;
     match_players.black.config.search.fut.history_enabled = false;
 
     let opening_suite = build_opening_book();
 
-    let result = play_games(opening_suite, 8, 880, match_players, Color::White);
+    let result = play_games(opening_suite, 6, 1200, match_players, Color::White);
 
     result.review().expect("IO Error");
 }

@@ -1,5 +1,6 @@
 pub mod config; // CHANGE NAME LATER TO BE LESS CONFUSING
 pub mod configs;
+pub mod debug;
 pub mod engine;
 pub mod history;
 pub mod ordering;

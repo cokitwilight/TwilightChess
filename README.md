@@ -170,7 +170,7 @@ Estimated +97.6 Elo Difference
 95% Elo Confidence: (+76.1, +119.9) 
 
 
-**Notes**
+**Notes:**
 RFP Demonstrated the strongest superiority over the standard engine. Due to this superiority another tournament should be done to confirm the elo difference.
 
 
@@ -181,7 +181,7 @@ FUT Off: 424.5 (48.14%) | 349 W - 380 L - 151 D
 Estimated +12.2 Elo Difference
 95% Elo Confidence: (-8.7, +33.2)
 
-**Notes**
+**Notes:**
 Due to the fact that the confidence interval falls in both negative and positive elo estimates another tournament should be conducted. Additionally during the tournament there was actually a small bug in the history table. Although this doesn't directly interact with Futility pruning it would still affect engine performance and therefore the tournament result should not be fully trusted.
 
 ## Search Performance Notes

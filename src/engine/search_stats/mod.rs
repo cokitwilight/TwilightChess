@@ -27,6 +27,8 @@ mod formatting;
 mod futility;
 mod histogram;
 mod history;
+mod iterative_deepening;
+mod lmp;
 mod lmr;
 mod move_ordering;
 mod moves;
@@ -49,6 +51,8 @@ pub use histogram::{
     REDUCTION_BUCKETS, ReductionHistogram,
 };
 pub use history::HistoryStats;
+pub use iterative_deepening::IterativeDeepeningStats;
+pub use lmp::LmpStats;
 pub use lmr::LmrStats;
 pub use move_ordering::MoveOrderingStats;
 pub use moves::MoveStats;
@@ -71,12 +75,14 @@ use formatting::{count, report_footer, report_header, section};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SearchStats {
     pub node_stats: NodeStats,
+    pub iterative_deepening_stats: IterativeDeepeningStats,
     pub move_stats: MoveStats,
     pub cutoff_stats: CutoffStats,
     pub aspiration_stats: AspirationStats,
     pub pvs_stats: PvsStats,
     pub move_ordering_stats: MoveOrderingStats,
     pub history_stats: HistoryStats,
+    pub lmp_stats: LmpStats,
     pub lmr_stats: LmrStats,
     pub rfp_stats: ReverseFutilityStats,
     pub fut_stats: FutilityStats,
@@ -99,6 +105,7 @@ impl SearchStats {
         report_header(depth);
 
         self.print_nodes(elapsed_secs);
+        self.print_iterative_deepening();
         self.print_moves();
         self.print_cutoffs();
         self.print_move_ordering();
@@ -119,6 +126,10 @@ impl SearchStats {
 
     pub fn print_nodes(&self, elapsed_secs: f64) {
         self.node_stats.print(elapsed_secs);
+    }
+
+    pub fn print_iterative_deepening(&self) {
+        self.iterative_deepening_stats.print();
     }
 
     pub fn print_moves(&self) {
@@ -152,6 +163,7 @@ impl SearchStats {
     pub fn print_main_pruning(&self) {
         if !self.rfp_stats.has_data()
             && !self.fut_stats.has_data()
+            && !self.lmp_stats.has_data()
             && !self.null_move_stats.has_data()
         {
             return;
@@ -159,6 +171,7 @@ impl SearchStats {
 
         section("Main-Search Pruning");
         self.rfp_stats.print();
+        self.lmp_stats.print();
         self.fut_stats.print();
         self.null_move_stats.print();
     }
@@ -201,12 +214,15 @@ impl Sub for SearchStats {
     fn sub(self, rhs: Self) -> Self {
         Self {
             node_stats: self.node_stats - rhs.node_stats,
+            iterative_deepening_stats: self.iterative_deepening_stats
+                - rhs.iterative_deepening_stats,
             move_stats: self.move_stats - rhs.move_stats,
             cutoff_stats: self.cutoff_stats - rhs.cutoff_stats,
             aspiration_stats: self.aspiration_stats - rhs.aspiration_stats,
             pvs_stats: self.pvs_stats - rhs.pvs_stats,
             move_ordering_stats: self.move_ordering_stats - rhs.move_ordering_stats,
             history_stats: self.history_stats - rhs.history_stats,
+            lmp_stats: self.lmp_stats - rhs.lmp_stats,
             lmr_stats: self.lmr_stats - rhs.lmr_stats,
             rfp_stats: self.rfp_stats - rhs.rfp_stats,
             fut_stats: self.fut_stats - rhs.fut_stats,
@@ -224,12 +240,14 @@ impl Sub for SearchStats {
 impl AddAssign for SearchStats {
     fn add_assign(&mut self, rhs: Self) {
         self.node_stats += rhs.node_stats;
+        self.iterative_deepening_stats += rhs.iterative_deepening_stats;
         self.move_stats += rhs.move_stats;
         self.cutoff_stats += rhs.cutoff_stats;
         self.aspiration_stats += rhs.aspiration_stats;
         self.pvs_stats += rhs.pvs_stats;
         self.move_ordering_stats += rhs.move_ordering_stats;
         self.history_stats += rhs.history_stats;
+        self.lmp_stats += rhs.lmp_stats;
         self.lmr_stats += rhs.lmr_stats;
         self.rfp_stats += rhs.rfp_stats;
         self.fut_stats += rhs.fut_stats;
@@ -278,22 +296,50 @@ mod tests {
     fn grouped_stats_aggregate_and_subtract_per_feature() {
         let mut total = SearchStats::default();
         total.node_stats.main = 100;
+        total.lmp_stats.attempts = 8;
+        total.lmp_stats.history_rejections = 3;
+        total.lmp_stats.pruned_moves = 5;
         total.lmr_stats.attempts = 12;
+        total.lmr_stats.capture_adjustments = 4;
+        total.lmr_stats.capture_effects = 3;
+        total.lmr_stats.dynamic_searches = 5;
+        total.lmr_stats.dynamic_searches_at_modified_depth = 4;
         total.fut_stats.pruned_moves = 7;
 
         let mut additional = SearchStats::default();
         additional.node_stats.main = 25;
+        additional.lmp_stats.attempts = 2;
+        additional.lmp_stats.history_rejections = 1;
+        additional.lmp_stats.pruned_moves = 1;
         additional.lmr_stats.attempts = 3;
+        additional.lmr_stats.capture_adjustments = 1;
+        additional.lmr_stats.capture_effects = 1;
+        additional.lmr_stats.dynamic_searches = 2;
+        additional.lmr_stats.dynamic_searches_at_modified_depth = 1;
         additional.fut_stats.pruned_moves = 2;
 
         total += additional;
         let delta = total - additional;
 
         assert_eq!(total.total_nodes(), 125);
+        assert_eq!(total.lmp_stats.attempts, 10);
+        assert_eq!(total.lmp_stats.history_rejections, 4);
+        assert_eq!(total.lmp_stats.pruned_moves, 6);
         assert_eq!(total.lmr_stats.attempts, 15);
+        assert_eq!(total.lmr_stats.capture_adjustments, 5);
+        assert_eq!(total.lmr_stats.capture_effects, 4);
+        assert_eq!(total.lmr_stats.dynamic_searches, 7);
+        assert_eq!(total.lmr_stats.dynamic_searches_at_modified_depth, 5);
         assert_eq!(total.fut_stats.pruned_moves, 9);
         assert_eq!(delta.node_stats.main, 100);
+        assert_eq!(delta.lmp_stats.attempts, 8);
+        assert_eq!(delta.lmp_stats.history_rejections, 3);
+        assert_eq!(delta.lmp_stats.pruned_moves, 5);
         assert_eq!(delta.lmr_stats.attempts, 12);
+        assert_eq!(delta.lmr_stats.capture_adjustments, 4);
+        assert_eq!(delta.lmr_stats.capture_effects, 3);
+        assert_eq!(delta.lmr_stats.dynamic_searches, 5);
+        assert_eq!(delta.lmr_stats.dynamic_searches_at_modified_depth, 4);
         assert_eq!(delta.fut_stats.pruned_moves, 7);
     }
 
@@ -335,6 +381,11 @@ mod tests {
         stats.lmr_stats.reduction_histogram.bins[1] = 2;
         stats.lmr_stats.attempts_by_depth.bins[4] = 2;
         stats.lmr_stats.researches_by_depth.bins[4] = 1;
+        stats.lmr_stats.non_improving_adjustments = 2;
+        stats.lmr_stats.non_improving_effects = 1;
+        stats.lmr_stats.dynamic_depth_decreases = 1;
+        stats.lmr_stats.dynamic_searches = 1;
+        stats.lmr_stats.dynamic_searches_at_modified_depth = 1;
         stats.rfp_stats.attempts = 2;
         stats.rfp_stats.cutoffs = 1;
         stats.rfp_stats.attempts_by_depth.bins[3] = 2;
@@ -366,6 +417,7 @@ mod tests {
         let game = Game::new();
         let mut config = EngineConfig::default();
         config.tt_size = 1;
+        config.search.lmp.enabled = true;
         let mut engine = Engine::new(config);
 
         let result = engine.search(
@@ -378,6 +430,20 @@ mod tests {
         let stats = result.stats;
 
         assert!(stats.total_nodes() > 0);
+        assert_eq!(
+            stats.iterative_deepening_stats.nodes_by_depth.total(),
+            stats.total_nodes()
+        );
+        for depth in 1..=4 {
+            assert_eq!(stats.iterative_deepening_stats.samples_at_depth(depth), 1);
+            assert!(stats.iterative_deepening_stats.nodes_at_depth(depth) > 0);
+        }
+        assert!(
+            stats
+                .iterative_deepening_stats
+                .estimated_growth_factor(2)
+                .is_some()
+        );
         assert!(stats.pvs_stats.null_window_searches > 0);
         assert_eq!(
             stats
@@ -395,12 +461,26 @@ mod tests {
             stats.lmr_stats.attempts
         );
         assert_eq!(
+            stats.lmr_stats.dynamic_depth_increases
+                + stats.lmr_stats.dynamic_depth_decreases
+                + stats.lmr_stats.dynamic_depth_unchanged,
+            stats.lmr_stats.researches
+        );
+        assert!(
+            stats.lmr_stats.dynamic_searches_at_modified_depth <= stats.lmr_stats.dynamic_searches
+        );
+        assert_eq!(
             stats.rfp_stats.attempts_by_depth.total(),
             stats.rfp_stats.attempts
         );
         assert_eq!(
             stats.fut_stats.attempts_by_depth.total(),
             stats.fut_stats.attempts
+        );
+        assert!(stats.lmp_stats.attempts > 0);
+        assert_eq!(
+            stats.lmp_stats.attempts,
+            stats.lmp_stats.history_rejections + stats.lmp_stats.pruned_moves
         );
         assert_eq!(
             stats.null_move_stats.attempts_by_depth.total(),
