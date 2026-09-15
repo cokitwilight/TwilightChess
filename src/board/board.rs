@@ -27,7 +27,12 @@ pub struct Board {
 
     pub fullmove_number: u16,
 
-    pub hash: u64,
+    pub board_hash: u64,
+    pub pawn_hash: u64,
+
+    // LATER:
+    // pub minor_hash: u64,
+    // pub non_pawn_hash: u64,
     pub material: i32,
 
     pub phase: i32,
@@ -53,7 +58,8 @@ impl Board {
             en_passant: None,
             halfmove_clock: 0,
             fullmove_number: 1,
-            hash: 0,
+            board_hash: 0,
+            pawn_hash: 0,
             material: 0, // in centi pawns
             phase: 24,   // 24 is the default
             mg_pst: 0,
@@ -104,8 +110,13 @@ impl Board {
     }
 
     #[inline]
-    pub fn hash(&self) -> u64 {
-        self.hash
+    pub fn board_hash(&self) -> u64 {
+        self.board_hash
+    }
+
+    #[inline]
+    pub fn pawn_hash(&self) -> u64 {
+        self.pawn_hash
     }
 
     pub fn material(&self) -> i32 {
@@ -368,8 +379,14 @@ impl Board {
 
     pub fn assert_hash(&self) {
         debug_assert_eq!(
-            self.hash,
+            self.board_hash,
             self.compute_hash_from_scratch(),
+            "Stored hash does not match computed hash from scratch!."
+        );
+
+        debug_assert_eq!(
+            self.pawn_hash,
+            self.compute_pawn_hash_from_scratch(),
             "Stored hash does not match computed hash from scratch!."
         );
     }
@@ -445,7 +462,7 @@ mod tests {
             "Black must have exactly one king"
         );
         debug_assert_eq!(
-            board.hash,
+            board.board_hash,
             board.compute_hash_from_scratch(),
             "Board hash mismatch"
         );
@@ -459,8 +476,10 @@ mod tests {
         let b1 = Board::from_fen(STARTPOS_FEN).unwrap();
         let b2 = Board::from_fen(STARTPOS_FEN).unwrap();
 
-        assert_eq!(b1.hash(), b2.hash());
-        assert_eq!(b1.hash(), b1.compute_hash_from_scratch());
+        assert_eq!(b1.board_hash(), b2.board_hash());
+        assert_eq!(b1.board_hash(), b1.compute_hash_from_scratch());
+        assert_eq!(b1.pawn_hash(), b2.pawn_hash());
+        assert_eq!(b1.pawn_hash(), b1.compute_pawn_hash_from_scratch());
     }
     #[test]
     fn side_to_move_changes_hash() {
@@ -468,7 +487,8 @@ mod tests {
 
         let black = Board::from_fen("8/8/8/8/8/8/8/4K2k b - - 0 1").unwrap();
 
-        assert_ne!(white.hash(), black.hash());
+        assert_ne!(white.board_hash(), black.board_hash());
+        assert_eq!(white.pawn_hash(), black.pawn_hash());
     }
     #[test]
     fn castling_rights_change_hash() {
@@ -476,7 +496,8 @@ mod tests {
 
         let castle = Board::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").unwrap();
 
-        assert_ne!(no_castle.hash(), castle.hash());
+        assert_ne!(no_castle.board_hash(), castle.board_hash());
+        assert_eq!(no_castle.pawn_hash(), castle.pawn_hash());
     }
     #[test]
     fn en_passant_changes_hash() {
@@ -484,7 +505,8 @@ mod tests {
 
         let ep = Board::from_fen("8/8/8/8/4Pp2/8/8/4K2k w - f6 0 1").unwrap();
 
-        assert_ne!(no_ep.hash(), ep.hash());
+        assert_ne!(no_ep.board_hash(), ep.board_hash());
+        assert_eq!(no_ep.pawn_hash(), ep.pawn_hash());
     }
     #[test]
     fn piece_square_changes_hash() {
@@ -492,7 +514,45 @@ mod tests {
 
         let b2 = Board::from_fen("8/8/8/8/8/8/5N2/4K2k w - - 0 1").unwrap();
 
-        assert_ne!(b1.hash(), b2.hash());
+        assert_ne!(b1.board_hash(), b2.board_hash());
+        assert_eq!(b1.pawn_hash(), b2.pawn_hash());
+    }
+
+    #[test]
+    fn pawn_hash_depends_only_on_pawn_color_and_square() {
+        let base = Board::from_fen("r3k2r/7p/8/8/4Pp2/8/P7/R3K2R w - - 0 1").unwrap();
+        let variants = [
+            // Side to move, castling rights, en-passant state, and non-pawn
+            // placement all belong to the board hash, not the pawn hash.
+            "r3k2r/7p/8/8/4Pp2/8/P7/R3K2R b - - 0 1",
+            "r3k2r/7p/8/8/4Pp2/8/P7/R3K2R w KQkq - 0 1",
+            "r3k2r/7p/8/8/4Pp2/8/P7/R3K2R w - f6 0 1",
+            "r2qk2r/7p/8/8/4Pp2/8/P7/R3K2R w - - 0 1",
+        ];
+
+        assert_eq!(base.pawn_hash(), base.compute_pawn_hash_from_scratch());
+        for fen in variants {
+            let variant = Board::from_fen(fen).unwrap();
+            assert_eq!(variant.pawn_hash(), base.pawn_hash(), "FEN: {fen}");
+            assert_eq!(
+                variant.pawn_hash(),
+                variant.compute_pawn_hash_from_scratch(),
+                "FEN: {fen}"
+            );
+        }
+
+        let pawn_positions = [
+            Board::from_fen("8/8/8/8/4P3/8/8/4K2k w - - 0 1").unwrap(),
+            Board::from_fen("8/8/8/8/5P2/8/8/4K2k w - - 0 1").unwrap(),
+            Board::from_fen("8/8/8/8/4p3/8/8/4K2k w - - 0 1").unwrap(),
+        ];
+
+        for board in &pawn_positions {
+            assert_eq!(board.pawn_hash(), board.compute_pawn_hash_from_scratch());
+        }
+        assert_ne!(pawn_positions[0].pawn_hash(), pawn_positions[1].pawn_hash());
+        assert_ne!(pawn_positions[0].pawn_hash(), pawn_positions[2].pawn_hash());
+        assert_ne!(pawn_positions[1].pawn_hash(), pawn_positions[2].pawn_hash());
     }
 
     // ************************
@@ -574,7 +634,8 @@ mod tests {
         en_passant: Option<Square>,
         halfmove_clock: u16,
         fullmove_number: u16,
-        hash: u64,
+        board_hash: u64,
+        pawn_hash: u64,
     }
 
     fn snapshot(board: &Board) -> BoardSnapshot {
@@ -587,7 +648,8 @@ mod tests {
             en_passant: board.en_passant,
             halfmove_clock: board.halfmove_clock,
             fullmove_number: board.fullmove_number,
-            hash: board.hash,
+            board_hash: board.board_hash,
+            pawn_hash: board.pawn_hash,
         }
     }
 
@@ -600,7 +662,8 @@ mod tests {
         assert_eq!(board.en_passant, before.en_passant);
         assert_eq!(board.halfmove_clock, before.halfmove_clock);
         assert_eq!(board.fullmove_number, before.fullmove_number);
-        assert_eq!(board.hash, before.hash);
+        assert_eq!(board.board_hash, before.board_hash);
+        assert_eq!(board.pawn_hash, before.pawn_hash);
 
         board.assert_hash();
     }
@@ -634,6 +697,95 @@ mod tests {
         board.undo_move(undo);
 
         assert_restored(&board, &before);
+    }
+
+    fn assert_pawn_hash_make_and_undo(fen: &str, mv: Move, should_change: bool) {
+        let mut board = board_from_fen(fen);
+        let original = board.pawn_hash();
+
+        assert_eq!(original, board.compute_pawn_hash_from_scratch());
+        let undo = board.make_move(mv);
+        assert_eq!(board.pawn_hash(), board.compute_pawn_hash_from_scratch());
+        assert_eq!(board.pawn_hash() != original, should_change, "FEN: {fen}");
+
+        board.undo_move(undo);
+        assert_eq!(board.pawn_hash(), original, "FEN: {fen}");
+        assert_eq!(board.pawn_hash(), board.compute_pawn_hash_from_scratch());
+    }
+
+    #[test]
+    fn incremental_pawn_hash_handles_every_pawn_transition_and_undo() {
+        let cases = [
+            // A pawn moves, including the double-push en-passant metadata.
+            (
+                "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1",
+                Move::new(e2(), e4(), MoveType::Normal, None),
+                true,
+            ),
+            // Black pawn updates use a separate set of Zobrist keys.
+            (
+                "4k3/4p3/8/8/8/8/8/4K3 b - - 0 1",
+                Move::new(sq(4, 6), e5(), MoveType::Normal, None),
+                true,
+            ),
+            // A pawn captures another pawn.
+            (
+                "4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1",
+                Move::new(e4(), d5(), MoveType::Capture, None),
+                true,
+            ),
+            // A non-pawn captures a pawn, so the captured pawn must leave the key.
+            (
+                "4k3/8/8/4p3/8/5N2/8/4K3 w - - 0 1",
+                Move::new(sq(5, 2), e5(), MoveType::Capture, None),
+                true,
+            ),
+            // En passant removes a pawn from a square other than the destination.
+            (
+                "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+                Move::new(e5(), d6(), MoveType::EnPassant, None),
+                true,
+            ),
+            // Promotion removes the pawn without adding the promoted piece.
+            (
+                "4k3/P7/8/8/8/8/8/4K3 w - - 0 1",
+                Move::new(a7(), a8(), MoveType::Normal, Some(PieceType::Queen)),
+                true,
+            ),
+            // Ordinary non-pawn movement must not touch the pawn hash.
+            (
+                "4k3/8/8/8/8/8/4P3/4K1N1 w - - 0 1",
+                Move::new(g1(), sq(5, 2), MoveType::Normal, None),
+                false,
+            ),
+            // Castling moves two non-pawns and changes castling rights.
+            (
+                "4k2r/8/8/8/8/8/4P3/4K2R w Kk - 0 1",
+                Move::new(e1(), g1(), MoveType::Castle, None),
+                false,
+            ),
+        ];
+
+        for (fen, mv, should_change) in cases {
+            assert_pawn_hash_make_and_undo(fen, mv, should_change);
+        }
+    }
+
+    #[test]
+    fn null_move_preserves_pawn_hash() {
+        let mut board = board_from_fen("4k3/8/8/8/4Pp2/8/8/4K3 w - f6 0 1");
+        let original_pawn_hash = board.pawn_hash();
+        let original_board_hash = board.board_hash();
+
+        let undo = board.make_null_move();
+        assert_eq!(board.pawn_hash(), original_pawn_hash);
+        assert_eq!(board.pawn_hash(), board.compute_pawn_hash_from_scratch());
+        assert_ne!(board.board_hash(), original_board_hash);
+
+        board.undo_null_move(undo);
+        assert_eq!(board.pawn_hash(), original_pawn_hash);
+        assert_eq!(board.board_hash(), original_board_hash);
+        assert_eq!(board.pawn_hash(), board.compute_pawn_hash_from_scratch());
     }
 
     #[test]
@@ -887,7 +1039,8 @@ mod tests {
         let mut board =
             Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
 
-        let start_hash = board.hash;
+        let start_board_hash = board.board_hash;
+        let start_pawn_hash = board.pawn_hash;
 
         board.assert_hash();
 
@@ -931,6 +1084,9 @@ mod tests {
             board.assert_hash();
         }
 
-        assert_eq!(board.hash, start_hash);
+        board.assert_hash();
+
+        assert_eq!(start_board_hash, board.board_hash());
+        assert_eq!(start_pawn_hash, board.pawn_hash());
     }
 }

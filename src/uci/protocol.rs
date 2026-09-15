@@ -224,7 +224,7 @@ impl UciPosition {
 
     fn from_fen(fen: &str) -> Result<Self, String> {
         let board = Board::from_fen(fen)?;
-        let hash = board.hash();
+        let hash = board.board_hash();
 
         Ok(Self {
             board,
@@ -260,7 +260,9 @@ impl UciPosition {
         for move_text in tokens {
             let mv = parse_uci_move(&position.board, move_text)?;
             position.board.make_move(mv);
-            position.repetition_history.push(position.board.hash());
+            position
+                .repetition_history
+                .push(position.board.board_hash());
         }
 
         Ok(position)
@@ -468,14 +470,14 @@ mod tests {
     #[test]
     fn invalid_position_does_not_replace_current_position() {
         let mut session = UciSession::new(test_config());
-        let original_hash = session.position.board.hash();
+        let original_hash = session.position.board.board_hash();
         let mut output = Vec::new();
 
         session
             .process_command("position startpos moves e2e5", &mut output)
             .unwrap();
 
-        assert_eq!(session.position.board.hash(), original_hash);
+        assert_eq!(session.position.board.board_hash(), original_hash);
         assert!(
             String::from_utf8(output)
                 .unwrap()

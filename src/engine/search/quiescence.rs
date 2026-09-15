@@ -34,7 +34,11 @@ impl Engine {
 
         // NOTE: These will never be true in the first call to quiescence since negamax does this check first before calling if depth == 0 -> quiescence
         // this is why quiescence qtt probes always equals qnodes.
-        if Engine::repetition_in_search(context, board.hash(), board.halfmove_clock() as usize) {
+        if Engine::repetition_in_search(
+            context,
+            board.board_hash(),
+            board.halfmove_clock() as usize,
+        ) {
             context.stats.draw_stats.repetition_returns += 1;
             return 0;
         }
@@ -64,7 +68,7 @@ impl Engine {
 
         let original_alpha = alpha;
         let original_beta = beta;
-        let hash = board.hash();
+        let hash = board.board_hash();
         let side_to_move = board.side_to_move();
 
         let mut tt_best_move: Option<Move> = None;
@@ -308,7 +312,7 @@ impl Engine {
             }
 
             let undo = board.make_move(*mv);
-            let child_hash = board.hash();
+            let child_hash = board.board_hash();
 
             context.repetition_history.push(child_hash);
 
@@ -420,7 +424,8 @@ mod tests {
             config.tt_size = 1;
             let mut engine = Engine::new(config);
             let mut board = Board::from_fen(fen).expect("valid terminal FEN");
-            let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.hash()]);
+            let mut context =
+                SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
 
             let score = engine.quiescence(
                 &mut board,

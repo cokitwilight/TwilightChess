@@ -40,7 +40,7 @@ impl Game {
 
         let state = board.game_state_basic();
 
-        let repetition_history: Vec<u64> = vec![board.hash()];
+        let repetition_history: Vec<u64> = vec![board.board_hash()];
         let move_history: Vec<Move> = Vec::new();
 
         Ok(Self {
@@ -99,7 +99,7 @@ impl Game {
 
         self.move_history.push(legal_mv);
 
-        self.repetition_history.push(self.board.hash());
+        self.repetition_history.push(self.board.board_hash());
 
         self.update_state();
 
@@ -129,7 +129,7 @@ impl Game {
     }
 
     fn is_threefold_repetition(&self) -> bool {
-        let current_hash = self.board.hash();
+        let current_hash = self.board.board_hash();
 
         self.repetition_history
             .iter()

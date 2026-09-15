@@ -106,7 +106,7 @@ impl OpeningBook {
             .unwrap_or_else(|_| panic!("Invalid opening FEN for `{}`", line.name));
 
         for &mv in &line.game.move_history {
-            let entry = self.entries.entry(board.hash()).or_default();
+            let entry = self.entries.entry(board.board_hash()).or_default();
 
             if let Some(existing) = entry.iter_mut().find(|book_move| book_move.mv == mv) {
                 existing.weight += line.weight;
@@ -153,7 +153,7 @@ impl OpeningBook {
     }
 
     pub fn get_move(&self, board: &Board) -> Option<Move> {
-        let moves = self.entries.get(&board.hash())?;
+        let moves = self.entries.get(&board.board_hash())?;
 
         // Safer than summing raw weights: ignores negative/zero weights for random choice.
         let total_weight: i32 = moves.iter().map(|m| m.weight.max(0)).sum();

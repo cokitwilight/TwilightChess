@@ -476,7 +476,7 @@ mod tests {
                 actual_keys.insert(move_key(scored_move.mv)),
                 "staged picker returned {:?} more than once at hash {:#x}",
                 scored_move.mv,
-                board.hash()
+                board.board_hash()
             );
         }
 
@@ -484,13 +484,13 @@ mod tests {
             actual.len(),
             expected.len(),
             "staged and legal generators returned different move counts at hash {:#x}",
-            board.hash()
+            board.board_hash()
         );
         assert_eq!(
             actual_keys,
             expected_keys,
             "staged picker did not match all_legal_moves at hash {:#x}",
-            board.hash()
+            board.board_hash()
         );
     }
 

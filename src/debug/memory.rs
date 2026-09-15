@@ -1,9 +1,8 @@
-use crate::engine::tt::TTEntry;
-
 #[test]
 pub fn print_memory_sizes() {
     use crate::board::{Move, MoveType};
     use crate::engine::staged::ScoredMove;
+    use crate::engine::tt::TTEntry;
     use crate::types::PieceType;
     println!("Move: {}", std::mem::size_of::<Move>());
     println!("MoveType: {}", std::mem::size_of::<MoveType>());

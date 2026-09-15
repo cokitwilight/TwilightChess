@@ -115,7 +115,8 @@ impl Board {
             .parse::<u16>()
             .map_err(|_| format!("Invalid fullmove number: {}", fullmove))?;
 
-        board.hash = board.compute_hash_from_scratch();
+        board.board_hash = board.compute_hash_from_scratch();
+        board.pawn_hash = board.compute_pawn_hash_from_scratch();
 
         board.assert_hash();
 

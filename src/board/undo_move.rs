@@ -11,10 +11,15 @@ pub struct UndoMove {
 
     pub old_castling_rights: u8,
     pub old_en_passant: Option<Square>,
+
     pub old_halfmove_clock: u16,
     pub old_fullmove_number: u16,
-    pub old_hash: u64,
+
+    pub old_board_hash: u64,
+    pub old_pawn_hash: u64,
+
     pub old_side_to_move: Color,
+
     pub old_material: i32,
     pub old_phase: i32,
     pub old_mg_pst_bonus: i32,
@@ -60,12 +65,9 @@ impl Board {
 
         // self.rebuild_occupancy();  // HOTSPOT. TRY AND MAKE INCREMENTAL
 
-        self.hash = undo.old_hash;
-        debug_assert_eq!(
-            self.hash,
-            self.compute_hash_from_scratch(),
-            "Hash mismatch after undo_move"
-        );
+        self.board_hash = undo.old_board_hash;
+        self.pawn_hash = undo.old_pawn_hash;
+        self.assert_hash();
     }
 
     fn undo_castling_rook(&mut self, color: Color, king_from: Square, king_to: Square) {

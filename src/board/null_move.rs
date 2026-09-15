@@ -5,7 +5,8 @@ use crate::board::Board;
 pub struct UndoNullMove {
     pub en_passant: Option<Square>,
     pub halfmove_clock: u16,
-    pub hash: u64,
+    pub board_hash: u64,
+    pub pawn_hash: u64,
 }
 
 impl Board {
@@ -13,7 +14,8 @@ impl Board {
         let undo = UndoNullMove {
             en_passant: self.en_passant,
             halfmove_clock: self.halfmove_clock,
-            hash: self.hash,
+            board_hash: self.board_hash,
+            pawn_hash: self.pawn_hash,
         };
 
         self.xor_side_to_move_hash();
@@ -30,7 +32,8 @@ impl Board {
 
         self.en_passant = undo.en_passant;
         self.halfmove_clock = undo.halfmove_clock;
-        self.hash = undo.hash;
+        self.board_hash = undo.board_hash;
+        self.pawn_hash = undo.pawn_hash;
     }
 }
 

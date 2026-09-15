@@ -142,7 +142,7 @@ mod move_gives_check_tests {
             "Test move is not legal"
         );
 
-        let original_hash = board.hash();
+        let original_hash = board.board_hash();
 
         // Result from the hypothetical occupancy implementation.
         let predicted = board.move_gives_check(&mv);
@@ -157,7 +157,7 @@ mod move_gives_check_tests {
         board.undo_move(undo);
 
         assert_eq!(
-            board.hash(),
+            board.board_hash(),
             original_hash,
             "Board was not restored after test move"
         );

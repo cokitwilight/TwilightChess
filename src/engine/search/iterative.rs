@@ -293,7 +293,7 @@ impl Engine {
         ctx.stats.node_stats.root += 1;
 
         let original_alpha = alpha;
-        let root_hash = board.hash();
+        let root_hash = board.board_hash();
         let side_to_move = board.side_to_move();
         if board.in_check(side_to_move) {
             ctx.stats.node_stats.in_check += 1;
@@ -309,11 +309,11 @@ impl Engine {
 
         let tt_best_move = self
             .tt
-            .get(board.hash(), TTNodeType::Main)
+            .get(board.board_hash(), TTNodeType::Main)
             .and_then(|entry| entry.best_move)
             .or_else(|| {
                 self.tt
-                    .get_any(board.hash())
+                    .get_any(board.board_hash())
                     .and_then(|entry| entry.best_move)
             });
 
@@ -353,7 +353,7 @@ impl Engine {
 
             let undo = board.make_move(*mv);
 
-            let child_hash = board.hash();
+            let child_hash = board.board_hash();
 
             legal_moves += 1;
 
@@ -555,7 +555,8 @@ mod tests {
             config.tt_size = 1;
             let mut engine = Engine::new(config);
             let mut board = Board::from_fen(fen).expect("valid terminal FEN");
-            let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.hash()]);
+            let mut context =
+                SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
 
             let result =
                 engine.search_root(&mut board, &mut context, None, 1, NEG_INF + 1, POS_INF - 1);

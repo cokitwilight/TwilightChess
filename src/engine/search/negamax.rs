@@ -66,7 +66,11 @@ impl Engine {
 
         // ADD DRAWING LOGIC HERE
 
-        if Engine::repetition_in_search(context, board.hash(), board.halfmove_clock() as usize) {
+        if Engine::repetition_in_search(
+            context,
+            board.board_hash(),
+            board.halfmove_clock() as usize,
+        ) {
             context.stats.draw_stats.repetition_returns += 1;
             return 0;
         }
@@ -96,7 +100,7 @@ impl Engine {
 
         context.stats.tt_stats.main.probes += 1;
 
-        if let Some(entry) = self.tt.get(board.hash, TTNodeType::Main) {
+        if let Some(entry) = self.tt.get(board.board_hash, TTNodeType::Main) {
             context.stats.tt_stats.main.hits += 1;
 
             match entry.flag {
@@ -151,8 +155,11 @@ impl Engine {
             }
         }
 
-        let mut static_eval: Option<i32> = None;
-        // let mut static_eval: Option<i32> = Some(0);
+        let raw_static_eval = evaluation_for_turn(board);
+
+        let correction = self.history.correction.get(board);
+        context.stats.correction_stats.record(correction);
+        let corrected_static_eval = raw_static_eval + correction;
 
         let can_rfp = !in_check
             && self.config.search.rfp.enabled
@@ -173,14 +180,10 @@ impl Engine {
             let margin = self.config.search.rfp.margin_factor * depth as i32;
             // dynamic RFP margin
 
-            let eval = evaluation_for_turn(board);
-
-            if eval - margin >= beta {
+            if corrected_static_eval - margin >= beta {
                 context.stats.rfp_stats.cutoffs += 1;
                 context.stats.rfp_stats.cutoffs_by_depth.bins[depth_bucket] += 1;
                 return beta;
-            } else {
-                static_eval = Some(eval);
             }
         }
 
@@ -197,12 +200,8 @@ impl Engine {
             && beta.abs() < MATE_THRESHOLD
             && !is_pv;
 
-        if can_null_prune {
-            let eval = *static_eval.get_or_insert_with(|| evaluation_for_turn(board));
-
-            if eval < beta {
-                can_null_prune = false;
-            }
+        if can_null_prune && corrected_static_eval < beta {
+            can_null_prune = false;
         }
 
         if can_null_prune {
@@ -275,29 +274,19 @@ impl Engine {
             && depth > 0
             && !is_pv;
 
-        if can_fut && static_eval.is_none() {
-            let eval = evaluation_for_turn(board);
-            static_eval = Some(eval);
-        }
-
         let normal_child_options = SearchOptions {
             allow_null_move: true,
             allow_singular: options.allow_singular,
             excluded_move: None,
         };
 
-        let eval = match static_eval {
-            Some(e) => e,
-            None => evaluation_for_turn(board),
-        };
-
         if !in_check {
-            context.stack[ply].static_eval = Some(eval);
+            context.stack[ply].static_eval = Some(raw_static_eval);
         }
 
         let is_improving = if ply >= 2 && !in_check {
             match context.stack[ply - 2].static_eval {
-                Some(previous_eval) => eval > previous_eval,
+                Some(previous_eval) => raw_static_eval > previous_eval, // since stored value is raw as well only compare to the raw static eval
                 None => false,
             }
         } else {
@@ -461,9 +450,7 @@ impl Engine {
                     }
                 }
 
-                let eval = static_eval.expect("No available static eval in negamax!");
-
-                if eval + margin as i32 <= alpha {
+                if corrected_static_eval + margin as i32 <= alpha {
                     context.stats.fut_stats.pruned_moves += 1;
                     context.stats.fut_stats.pruned_moves_by_depth.bins[depth_bucket] += 1;
                     continue;
@@ -472,7 +459,7 @@ impl Engine {
 
             let undo = board.make_move(*mv);
 
-            let child_hash = board.hash();
+            let child_hash = board.board_hash();
             context.repetition_history.push(child_hash); // only store if valid move
 
             let can_lmr =
@@ -897,6 +884,33 @@ impl Engine {
             return 0;
         }
 
+        // update correction history
+
+        let can_update_correction = !in_check
+            && options.excluded_move.is_none()
+            && alpha.abs() < MATE_THRESHOLD
+            && beta.abs() < MATE_THRESHOLD
+            && depth < 3;
+
+        if can_update_correction {
+            if max_eval > original_alpha && max_eval < beta {
+                // Exact
+                let delta = max_eval - raw_static_eval;
+
+                self.history.correction.update(board, delta, depth);
+            } else if max_eval >= beta && beta > raw_static_eval {
+                // Fail Low
+                let delta = beta - raw_static_eval;
+
+                self.history.correction.update(board, delta, depth);
+            } else if max_eval <= original_alpha && original_alpha < raw_static_eval {
+                // Fail High
+                let delta = original_alpha - raw_static_eval;
+
+                self.history.correction.update(board, delta, depth);
+            }
+        }
+
         // Store the best move in the search context for later use
 
         let flag = if max_eval <= original_alpha {
@@ -910,7 +924,7 @@ impl Engine {
         if options.excluded_move.is_none() {
             context.stats.tt_stats.main.stores += 1;
             let insert_result = self.tt.insert(
-                board.hash,
+                board.board_hash,
                 TTEntry {
                     depth,
                     eval: score_to_tt(max_eval, ply),
@@ -950,7 +964,8 @@ mod tests {
         for (fen, expected) in cases {
             let mut engine = test_engine();
             let mut board = Board::from_fen(fen).expect("valid terminal FEN");
-            let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.hash()]);
+            let mut context =
+                SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
 
             let score = engine.negamax(
                 &mut board,
@@ -971,7 +986,7 @@ mod tests {
     fn singular_verification_does_not_count_the_excluded_move_as_searched() {
         let mut engine = test_engine();
         let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").expect("valid FEN");
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
         let only_legal_move = Move::new(H8, square(6, 6), MoveType::Capture, None);
         let alpha = -100;
 

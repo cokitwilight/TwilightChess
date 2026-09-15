@@ -52,7 +52,7 @@ pub(super) fn negamax(
         );
     }
 
-    if Engine::repetition_in_search(context, board.hash(), board.halfmove_clock() as usize) {
+    if Engine::repetition_in_search(context, board.board_hash(), board.halfmove_clock() as usize) {
         return 0;
     }
 
@@ -69,7 +69,7 @@ pub(super) fn negamax(
     let mut tt_best_move: Option<Move> = None;
     let mut candidate_move: Option<(Move, i32)> = None;
 
-    if let Some(entry) = engine.tt.get(board.hash, TTNodeType::Main) {
+    if let Some(entry) = engine.tt.get(board.board_hash, TTNodeType::Main) {
         let tt_score = score_from_tt(entry.eval, ply);
         tt_best_move = entry.best_move;
 
@@ -365,7 +365,7 @@ pub(super) fn negamax(
         }
 
         let undo = board.make_move(*mv);
-        let child_hash = board.hash();
+        let child_hash = board.board_hash();
         context.repetition_history.push(child_hash);
 
         let can_lmr =
@@ -621,7 +621,7 @@ pub(super) fn negamax(
 
     if options.excluded_move.is_none() {
         engine.tt.insert(
-            board.hash,
+            board.board_hash,
             TTEntry {
                 depth,
                 eval: score_to_tt(max_eval, ply),

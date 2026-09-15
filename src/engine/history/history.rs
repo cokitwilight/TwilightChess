@@ -1,5 +1,5 @@
 use crate::bitboard::Square;
-use crate::engine::history::{CaptureHistory, ContinuationHistory, MainHistory};
+use crate::engine::history::{CaptureHistory, ContinuationHistory, CorrectionHistory, MainHistory};
 use crate::engine::{Engine, MAX_PLY, SearchContext, SearchStackEntry};
 use crate::types::{Color, PieceType};
 
@@ -28,6 +28,7 @@ pub struct HistoryTables {
     pub main: MainHistory,
     pub continuation: ContinuationHistory,
     pub capture: CaptureHistory,
+    pub correction: CorrectionHistory,
 }
 
 impl HistoryTables {

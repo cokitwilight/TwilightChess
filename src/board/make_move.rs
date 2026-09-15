@@ -57,7 +57,8 @@ impl Board {
             old_en_passant: self.en_passant,
             old_halfmove_clock: self.halfmove_clock,
             old_fullmove_number: self.fullmove_number,
-            old_hash: self.hash,
+            old_board_hash: self.board_hash,
+            old_pawn_hash: self.pawn_hash,
             old_side_to_move: self.side_to_move,
             old_material: self.material,
             old_phase: self.phase,
@@ -132,11 +133,8 @@ impl Board {
 
         // self.rebuild_occupancy();
 
-        debug_assert_eq!(
-            self.hash,
-            self.compute_hash_from_scratch(),
-            "Incremental hash mismatch after make_move"
-        );
+        // FOR DEBUG
+        self.assert_hash();
         undo
     }
 

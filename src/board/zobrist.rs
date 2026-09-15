@@ -121,6 +121,24 @@ impl Board {
         hash
     }
 
+    pub fn compute_pawn_hash_from_scratch(&self) -> u64 {
+        let z = zobrist();
+        let mut hash = 0u64;
+
+        for color in [Color::White, Color::Black] {
+            let mut bb = self.pieces(color, PieceType::Pawn);
+
+            while bb != 0 {
+                let sq = bb.trailing_zeros() as Square;
+                bb &= bb - 1;
+
+                hash ^= z.pieces[color.idx()][PieceType::Pawn.idx()][sq as usize];
+            }
+        }
+
+        hash
+    }
+
     // **********************
     // **** HASH HELPERS ****
     // **********************
@@ -129,14 +147,18 @@ impl Board {
     fn xor_piece_hash(&mut self, color: Color, piece: PieceType, sq: Square) {
         let z = zobrist();
 
-        self.hash ^= z.pieces[color.idx()][piece.idx()][sq as usize];
+        self.board_hash ^= z.pieces[color.idx()][piece.idx()][sq as usize];
+
+        if piece == PieceType::Pawn {
+            self.pawn_hash ^= z.pieces[color.idx()][piece.idx()][sq as usize];
+        }
     }
 
     #[inline]
     fn xor_castling_hash(&mut self, castling_rights: u8) {
         let z = zobrist();
 
-        self.hash ^= z.castling[castling_rights as usize];
+        self.board_hash ^= z.castling[castling_rights as usize];
     }
 
     #[inline]
@@ -144,14 +166,14 @@ impl Board {
         let z = zobrist();
 
         let file = file_of(ep) as usize;
-        self.hash ^= z.en_passant_file[file];
+        self.board_hash ^= z.en_passant_file[file];
     }
 
     #[inline]
     pub fn xor_side_to_move_hash(&mut self) {
         let z = zobrist();
 
-        self.hash ^= z.side_to_move;
+        self.board_hash ^= z.side_to_move;
     }
 
     pub fn remove_piece_hashed(&mut self, color: Color, piece: PieceType, sq: Square) {

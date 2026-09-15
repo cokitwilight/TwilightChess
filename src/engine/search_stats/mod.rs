@@ -21,6 +21,7 @@ macro_rules! impl_counter_stats_ops {
 }
 
 mod aspiration;
+mod correction_history;
 mod cutoffs;
 mod draws;
 mod formatting;
@@ -43,12 +44,14 @@ mod terminal;
 mod transposition_table;
 
 pub use aspiration::AspirationStats;
+pub use correction_history::{CORRECTION_BUCKET_WIDTH_CP, CorrectionHistoryStats};
 pub use cutoffs::CutoffStats;
 pub use draws::DrawStats;
 pub use futility::FutilityStats;
 pub use histogram::{
-    DepthHistogram, Histogram, MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, MoveIndexHistogram,
-    REDUCTION_BUCKETS, ReductionHistogram,
+    CORRECTION_MAGNITUDE_BUCKETS, CorrectionMagnitudeHistogram, DepthHistogram, Histogram,
+    MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, MoveIndexHistogram, REDUCTION_BUCKETS,
+    ReductionHistogram,
 };
 pub use history::HistoryStats;
 pub use iterative_deepening::IterativeDeepeningStats;
@@ -82,6 +85,7 @@ pub struct SearchStats {
     pub pvs_stats: PvsStats,
     pub move_ordering_stats: MoveOrderingStats,
     pub history_stats: HistoryStats,
+    pub correction_stats: CorrectionHistoryStats,
     pub lmp_stats: LmpStats,
     pub lmr_stats: LmrStats,
     pub rfp_stats: ReverseFutilityStats,
@@ -112,6 +116,7 @@ impl SearchStats {
         self.print_pvs();
         self.print_aspiration();
         self.print_history();
+        self.print_correction_history();
         self.print_reductions();
         self.print_main_pruning();
         self.print_quiescence();
@@ -154,6 +159,10 @@ impl SearchStats {
 
     pub fn print_history(&self) {
         self.history_stats.print();
+    }
+
+    pub fn print_correction_history(&self) {
+        self.correction_stats.print();
     }
 
     pub fn print_reductions(&self) {
@@ -222,6 +231,7 @@ impl Sub for SearchStats {
             pvs_stats: self.pvs_stats - rhs.pvs_stats,
             move_ordering_stats: self.move_ordering_stats - rhs.move_ordering_stats,
             history_stats: self.history_stats - rhs.history_stats,
+            correction_stats: self.correction_stats - rhs.correction_stats,
             lmp_stats: self.lmp_stats - rhs.lmp_stats,
             lmr_stats: self.lmr_stats - rhs.lmr_stats,
             rfp_stats: self.rfp_stats - rhs.rfp_stats,
@@ -247,6 +257,7 @@ impl AddAssign for SearchStats {
         self.pvs_stats += rhs.pvs_stats;
         self.move_ordering_stats += rhs.move_ordering_stats;
         self.history_stats += rhs.history_stats;
+        self.correction_stats += rhs.correction_stats;
         self.lmp_stats += rhs.lmp_stats;
         self.lmr_stats += rhs.lmr_stats;
         self.rfp_stats += rhs.rfp_stats;
@@ -305,6 +316,8 @@ mod tests {
         total.lmr_stats.dynamic_searches = 5;
         total.lmr_stats.dynamic_searches_at_modified_depth = 4;
         total.fut_stats.pruned_moves = 7;
+        total.correction_stats.record(8);
+        total.correction_stats.record(-16);
 
         let mut additional = SearchStats::default();
         additional.node_stats.main = 25;
@@ -317,6 +330,7 @@ mod tests {
         additional.lmr_stats.dynamic_searches = 2;
         additional.lmr_stats.dynamic_searches_at_modified_depth = 1;
         additional.fut_stats.pruned_moves = 2;
+        additional.correction_stats.record(25);
 
         total += additional;
         let delta = total - additional;
@@ -331,6 +345,8 @@ mod tests {
         assert_eq!(total.lmr_stats.dynamic_searches, 7);
         assert_eq!(total.lmr_stats.dynamic_searches_at_modified_depth, 5);
         assert_eq!(total.fut_stats.pruned_moves, 9);
+        assert_eq!(total.correction_stats.lookups, 3);
+        assert_eq!(total.correction_stats.magnitude_histogram.total(), 3);
         assert_eq!(delta.node_stats.main, 100);
         assert_eq!(delta.lmp_stats.attempts, 8);
         assert_eq!(delta.lmp_stats.history_rejections, 3);
@@ -341,6 +357,10 @@ mod tests {
         assert_eq!(delta.lmr_stats.dynamic_searches, 5);
         assert_eq!(delta.lmr_stats.dynamic_searches_at_modified_depth, 4);
         assert_eq!(delta.fut_stats.pruned_moves, 7);
+        assert_eq!(delta.correction_stats.lookups, 2);
+        assert_eq!(delta.correction_stats.positive_corrections, 1);
+        assert_eq!(delta.correction_stats.negative_corrections, 1);
+        assert_eq!(delta.correction_stats.magnitude_histogram.total(), 2);
     }
 
     #[test]
@@ -377,6 +397,9 @@ mod tests {
         stats.history_stats.bonus_updates = 2;
         stats.history_stats.malus_updates = 1;
         stats.history_stats.continuation_bonus_updates = 1;
+        for correction in [0, 8, -17, 101] {
+            stats.correction_stats.record(correction);
+        }
         stats.lmr_stats.attempts = 2;
         stats.lmr_stats.reduction_histogram.bins[1] = 2;
         stats.lmr_stats.attempts_by_depth.bins[4] = 2;
@@ -407,6 +430,11 @@ mod tests {
                 .cutoff_move_index_histogram
                 .highest_nonzero_bucket(),
             Some(2)
+        );
+        assert_eq!(combined.correction_stats.lookups, 4);
+        assert_eq!(
+            combined.correction_stats.magnitude_histogram.total(),
+            combined.correction_stats.nonzero_corrections()
         );
 
         combined.print_all(4, 1.0);
@@ -492,5 +520,11 @@ mod tests {
                 + stats.tt_stats.main.upper_bound_hits,
             stats.tt_stats.main.hits
         );
+        assert!(stats.correction_stats.lookups > 0);
+        assert_eq!(
+            stats.correction_stats.magnitude_histogram.total(),
+            stats.correction_stats.nonzero_corrections()
+        );
+        assert!(stats.correction_stats.nonzero_corrections() <= stats.correction_stats.lookups);
     }
 }

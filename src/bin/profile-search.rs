@@ -10,7 +10,7 @@ fn main() {
     config.limits = SearchLimits::depth_and_time(64, 20, 10_000);
 
     let mut engine = Engine::new(config);
-    let history = vec![board.hash()];
+    let history = vec![board.board_hash()];
 
     let result = engine.search(
         &board,

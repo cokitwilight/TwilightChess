@@ -12,7 +12,13 @@ fn timed_search(limit_ms: u64) -> (Duration, chess_final::engine::SearchResult) 
     let mut engine = Engine::new(config);
 
     let start = Instant::now();
-    let result = engine.search(&board, config.limits, &vec![board.hash()], false, false);
+    let result = engine.search(
+        &board,
+        config.limits,
+        &vec![board.board_hash()],
+        false,
+        false,
+    );
 
     (start.elapsed(), result)
 }
@@ -54,7 +60,13 @@ fn depth_limit_can_finish_before_a_larger_time_limit() {
     config.limits = SearchLimits::depth_and_time(1, 6, 1_000);
     let mut engine = Engine::new(config);
 
-    let result = engine.search(&board, config.limits, &vec![board.hash()], false, false);
+    let result = engine.search(
+        &board,
+        config.limits,
+        &vec![board.board_hash()],
+        false,
+        false,
+    );
 
     assert_eq!(result.depth_reached, 1);
     assert_eq!(result.termination, SearchTermination::DepthLimit);

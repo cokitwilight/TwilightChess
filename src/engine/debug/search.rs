@@ -288,7 +288,7 @@ fn search_root(
     ctx.stats.node_stats.main += 1;
 
     let original_alpha = alpha;
-    let root_hash = board.hash();
+    let root_hash = board.board_hash();
     let side_to_move = board.side_to_move();
 
     let mut best_eval = NEG_INF;
@@ -299,12 +299,12 @@ fn search_root(
 
     let tt_best_move = engine
         .tt
-        .get(board.hash(), TTNodeType::Main)
+        .get(board.board_hash(), TTNodeType::Main)
         .and_then(|entry| entry.best_move)
         .or_else(|| {
             engine
                 .tt
-                .get_any(board.hash())
+                .get_any(board.board_hash())
                 .and_then(|entry| entry.best_move)
         });
 
@@ -341,7 +341,7 @@ fn search_root(
             .expect("No piece in board in Search Root!");
 
         let undo = board.make_move(*mv);
-        let child_hash = board.hash();
+        let child_hash = board.board_hash();
         legal_moves += 1;
         ctx.repetition_history.push(child_hash);
 
@@ -535,7 +535,7 @@ mod tests {
             &mut engine,
             &board,
             SearchLimits::depth(2, 1),
-            &vec![board.hash()],
+            &vec![board.board_hash()],
             false,
             false,
         );
@@ -562,7 +562,7 @@ mod tests {
         config.search.lmp.enabled = true;
         let board = Board::from_fen(STARTPOS_FEN).expect("valid start position");
         let limits = SearchLimits::depth(3, 3);
-        let repetition_history = vec![board.hash()];
+        let repetition_history = vec![board.board_hash()];
         let mut normal_engine = Engine::new(config);
         let mut uninstrumented_engine = Engine::new(config);
 

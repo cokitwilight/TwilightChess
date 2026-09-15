@@ -6,6 +6,7 @@ pub const MAX_TRACKED_DEPTH: usize = 64;
 // above seven plies into a single bucket.
 pub const REDUCTION_BUCKETS: usize = 64;
 pub const MOVE_INDEX_BUCKETS: usize = 64;
+pub const CORRECTION_MAGNITUDE_BUCKETS: usize = 11;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Histogram<const N: usize> {
@@ -57,6 +58,7 @@ impl<const N: usize> AddAssign for Histogram<N> {
 pub type DepthHistogram = Histogram<MAX_TRACKED_DEPTH>;
 pub type MoveIndexHistogram = Histogram<MOVE_INDEX_BUCKETS>;
 pub type ReductionHistogram = Histogram<REDUCTION_BUCKETS>;
+pub type CorrectionMagnitudeHistogram = Histogram<CORRECTION_MAGNITUDE_BUCKETS>;
 
 #[cfg(test)]
 mod tests {

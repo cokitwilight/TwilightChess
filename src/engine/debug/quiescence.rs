@@ -27,7 +27,7 @@ pub(super) fn quiescence(
 
     context.stats.node_stats.quiescence += 1;
 
-    if Engine::repetition_in_search(context, board.hash(), board.halfmove_clock() as usize) {
+    if Engine::repetition_in_search(context, board.board_hash(), board.halfmove_clock() as usize) {
         return 0;
     }
     if board.halfmove_clock() >= 100 {
@@ -45,7 +45,7 @@ pub(super) fn quiescence(
     let in_check = board.in_check(board.side_to_move());
     let original_alpha = alpha;
     let original_beta = beta;
-    let hash = board.hash();
+    let hash = board.board_hash();
     let side_to_move = board.side_to_move();
     let mut tt_best_move: Option<Move> = None;
 
@@ -217,7 +217,7 @@ pub(super) fn quiescence(
         }
 
         let undo = board.make_move(*mv);
-        let child_hash = board.hash();
+        let child_hash = board.board_hash();
         context.repetition_history.push(child_hash);
         let check_plies = if gives_check { check_plies + 1 } else { 0 };
 
