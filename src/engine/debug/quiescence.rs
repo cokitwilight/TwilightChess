@@ -150,7 +150,12 @@ pub(super) fn quiescence(
             }
         }
 
-        stand_pat = evaluation_for_turn(board);
+        let raw_static_eval = evaluation_for_turn(board);
+        stand_pat = if engine.config.search.correction.enabled {
+            raw_static_eval + engine.history.correction.get(board)
+        } else {
+            raw_static_eval
+        };
         best_eval = stand_pat;
 
         if stand_pat >= beta {
@@ -158,7 +163,7 @@ pub(super) fn quiescence(
                 hash,
                 TTEntry {
                     depth,
-                    eval: score_to_tt(stand_pat, ply),
+                    eval: score_to_tt(raw_static_eval, ply),
                     best_move: None,
                     flag: TTFlag::LowerBound,
                     node_type: TTNodeType::Quiescence,

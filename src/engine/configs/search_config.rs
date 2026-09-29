@@ -1,6 +1,6 @@
 use crate::engine::configs::{
-    AspirationConfig, DeltaPruneConfig, FutilityConfig, LMPConfig, LMRConfig, NullMoveConfig,
-    RFPConfig, SEEConfig, SingularConfig,
+    AspirationConfig, CorrectionConfig, DeltaPruneConfig, ExperimentalConfig, FutilityConfig,
+    LMPConfig, LMRConfig, NullMoveConfig, RFPConfig, SEEConfig, SingularConfig,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -14,6 +14,8 @@ pub struct SearchConfig {
     pub rfp: RFPConfig,
     pub fut: FutilityConfig, // etc
     pub singular: SingularConfig,
+    pub correction: CorrectionConfig,
+    pub experimental: ExperimentalConfig,
 }
 
 impl Default for SearchConfig {
@@ -28,6 +30,8 @@ impl Default for SearchConfig {
             rfp: RFPConfig::default(),
             fut: FutilityConfig::default(),
             singular: SingularConfig::default(),
+            correction: CorrectionConfig::default(),
+            experimental: ExperimentalConfig::default(),
         }
     }
 }
@@ -43,6 +47,8 @@ impl SearchConfig {
         let mut rfp = RFPConfig::default();
         let mut fut = FutilityConfig::default();
         let mut singular = SingularConfig::default();
+        let mut correction = CorrectionConfig::default();
+        let mut experimental = ExperimentalConfig::default();
 
         aspiration.enabled = true;
         null_move.enabled = false;
@@ -53,6 +59,8 @@ impl SearchConfig {
         rfp.enabled = false;
         fut.enabled = false;
         singular.enabled = false;
+        correction.enabled = false;
+        experimental.enabled = false;
 
         Self {
             aspiration,
@@ -64,6 +72,8 @@ impl SearchConfig {
             rfp,
             fut,
             singular,
+            correction,
+            experimental,
         }
     }
 }

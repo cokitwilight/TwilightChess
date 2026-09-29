@@ -101,8 +101,12 @@ pub(super) fn negamax(
         }
     }
 
-    let mut static_eval: Option<i32> = None;
-
+    let raw_static_eval = evaluation_for_turn(board);
+    let corrected_static_eval = if engine.config.search.correction.enabled {
+        raw_static_eval + engine.history.correction.get(board)
+    } else {
+        raw_static_eval
+    };
     let can_rfp = !in_check
         && engine.config.search.rfp.enabled
         && options.excluded_move.is_none()
@@ -115,12 +119,8 @@ pub(super) fn negamax(
 
     if can_rfp {
         let margin = engine.config.search.rfp.margin_factor * depth as i32;
-        let eval = evaluation_for_turn(board);
-
-        if eval - margin >= beta {
+        if corrected_static_eval - margin >= beta {
             return beta;
-        } else {
-            static_eval = Some(eval);
         }
     }
 
@@ -134,9 +134,7 @@ pub(super) fn negamax(
         && !is_pv;
 
     if can_null_prune {
-        let eval = *static_eval.get_or_insert_with(|| evaluation_for_turn(board));
-
-        if eval < beta {
+        if corrected_static_eval < beta {
             can_null_prune = false;
         }
     }
@@ -200,29 +198,19 @@ pub(super) fn negamax(
         && depth > 0
         && !is_pv;
 
-    if can_fut && static_eval.is_none() {
-        let eval = evaluation_for_turn(board);
-        static_eval = Some(eval);
-    }
-
     let normal_child_options = SearchOptions {
         allow_null_move: true,
         allow_singular: options.allow_singular,
         excluded_move: None,
     };
 
-    let eval = match static_eval {
-        Some(e) => e,
-        None => evaluation_for_turn(board),
-    };
-
     if !in_check {
-        context.stack[ply].static_eval = Some(eval);
+        context.stack[ply].static_eval = Some(raw_static_eval);
     }
 
     let is_improving = if ply >= 2 && !in_check {
         match context.stack[ply - 2].static_eval {
-            Some(previous_eval) => eval > previous_eval,
+            Some(previous_eval) => raw_static_eval > previous_eval,
             None => false,
         }
     } else {
@@ -357,9 +345,7 @@ pub(super) fn negamax(
                 }
             }
 
-            let eval = static_eval.expect("No available static eval in negamax!");
-
-            if eval + margin as i32 <= alpha {
+            if corrected_static_eval + margin as i32 <= alpha {
                 continue;
             }
         }
@@ -609,6 +595,26 @@ pub(super) fn negamax(
         }
 
         return 0;
+    }
+
+    let can_update_correction = engine.config.search.correction.enabled
+        && !in_check
+        && options.excluded_move.is_none()
+        && alpha.abs() < MATE_THRESHOLD
+        && beta.abs() < MATE_THRESHOLD
+        && depth < 3;
+
+    if can_update_correction {
+        if max_eval > original_alpha && max_eval < beta {
+            let delta = max_eval - corrected_static_eval;
+            engine.history.correction.update(board, delta, depth);
+        } else if max_eval >= beta && beta > corrected_static_eval {
+            let delta = beta - corrected_static_eval;
+            engine.history.correction.update(board, delta, depth);
+        } else if max_eval <= original_alpha && original_alpha < corrected_static_eval {
+            let delta = original_alpha - corrected_static_eval;
+            engine.history.correction.update(board, delta, depth);
+        }
     }
 
     let flag = if max_eval <= original_alpha {

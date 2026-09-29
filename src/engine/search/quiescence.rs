@@ -220,8 +220,19 @@ impl Engine {
                 }
             }
 
-            stand_pat = evaluation_for_turn(board);
-            // stand_pat = 0;
+            let raw_static_eval = evaluation_for_turn(board);
+
+            stand_pat = if self.config.search.correction.enabled {
+                let correction = self.history.correction.get(board);
+                context
+                    .stats
+                    .correction_stats
+                    .record_quiescence_lookup(correction);
+                raw_static_eval + correction
+            } else {
+                raw_static_eval
+            };
+
             best_eval = stand_pat;
 
             if stand_pat >= beta {
@@ -232,7 +243,7 @@ impl Engine {
                     hash,
                     TTEntry {
                         depth,
-                        eval: score_to_tt(stand_pat, ply),
+                        eval: score_to_tt(raw_static_eval, ply),
                         best_move: None,
                         flag: TTFlag::LowerBound,
                         node_type: TTNodeType::Quiescence,

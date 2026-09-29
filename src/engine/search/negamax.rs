@@ -6,7 +6,9 @@ use crate::engine::pruning::lmr::LMR_CAPTURE_VALUE;
 use crate::engine::pruning::{LMR_SCALE_I32, lmp_history_limit, lmp_threshold};
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
-use crate::engine::search_stats::{MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS};
+use crate::engine::search_stats::{
+    CorrectionUpdateKind, MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS,
+};
 use crate::engine::staged::ScoredMove;
 use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, PickerFrame, SearchStackEntry};
@@ -38,6 +40,7 @@ impl Engine {
 
         // Classify the original window before the TT potentially narrows it.
         let is_pv = beta != alpha + 1;
+
         if is_pv {
             context.stats.node_stats.pv += 1;
         } else {
@@ -157,9 +160,16 @@ impl Engine {
 
         let raw_static_eval = evaluation_for_turn(board);
 
-        let correction = self.history.correction.get(board);
-        context.stats.correction_stats.record(correction);
-        let corrected_static_eval = raw_static_eval + correction;
+        let corrected_static_eval = if self.config.search.correction.enabled {
+            let correction = self.history.correction.get(board);
+            context
+                .stats
+                .correction_stats
+                .record_main_lookup(correction);
+            raw_static_eval + correction
+        } else {
+            raw_static_eval
+        };
 
         let can_rfp = !in_check
             && self.config.search.rfp.enabled
@@ -886,28 +896,40 @@ impl Engine {
 
         // update correction history
 
-        let can_update_correction = !in_check
+        let can_update_correction = self.config.search.correction.enabled
+            && !in_check
             && options.excluded_move.is_none()
             && alpha.abs() < MATE_THRESHOLD
             && beta.abs() < MATE_THRESHOLD
             && depth < 3;
 
         if can_update_correction {
+            context.stats.correction_stats.record_update_opportunity();
+
             if max_eval > original_alpha && max_eval < beta {
                 // Exact
-                let delta = max_eval - raw_static_eval;
-
+                let delta = max_eval - corrected_static_eval;
                 self.history.correction.update(board, delta, depth);
-            } else if max_eval >= beta && beta > raw_static_eval {
-                // Fail Low
-                let delta = beta - raw_static_eval;
-
-                self.history.correction.update(board, delta, depth);
-            } else if max_eval <= original_alpha && original_alpha < raw_static_eval {
+                context
+                    .stats
+                    .correction_stats
+                    .record_update(CorrectionUpdateKind::Exact, delta);
+            } else if max_eval >= beta && beta > corrected_static_eval {
                 // Fail High
-                let delta = original_alpha - raw_static_eval;
-
+                let delta = beta - corrected_static_eval;
                 self.history.correction.update(board, delta, depth);
+                context
+                    .stats
+                    .correction_stats
+                    .record_update(CorrectionUpdateKind::FailHigh, delta);
+            } else if max_eval <= original_alpha && original_alpha < corrected_static_eval {
+                // Fail Low
+                let delta = original_alpha - corrected_static_eval;
+                self.history.correction.update(board, delta, depth);
+                context
+                    .stats
+                    .correction_stats
+                    .record_update(CorrectionUpdateKind::FailLow, delta);
             }
         }
 

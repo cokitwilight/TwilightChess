@@ -44,7 +44,9 @@ mod terminal;
 mod transposition_table;
 
 pub use aspiration::AspirationStats;
-pub use correction_history::{CORRECTION_BUCKET_WIDTH_CP, CorrectionHistoryStats};
+pub use correction_history::{
+    CORRECTION_BUCKET_WIDTH_CP, CorrectionHistoryStats, CorrectionUpdateKind,
+};
 pub use cutoffs::CutoffStats;
 pub use draws::DrawStats;
 pub use futility::FutilityStats;
@@ -106,7 +108,15 @@ impl SearchStats {
     }
 
     pub fn print_all(&self, depth: u16, elapsed_secs: f64) {
-        report_header(depth);
+        self.print_report(&format!("Search Statistics — Depth {depth}"), elapsed_secs);
+    }
+
+    pub fn print_all_with_title(&self, title: &str, elapsed_secs: f64) {
+        self.print_report(title, elapsed_secs);
+    }
+
+    fn print_report(&self, title: &str, elapsed_secs: f64) {
+        report_header(title);
 
         self.print_nodes(elapsed_secs);
         self.print_iterative_deepening();
@@ -524,6 +534,30 @@ mod tests {
         assert_eq!(
             stats.correction_stats.magnitude_histogram.total(),
             stats.correction_stats.nonzero_corrections()
+        );
+        assert_eq!(
+            stats.correction_stats.lookups,
+            stats.correction_stats.main_lookups + stats.correction_stats.quiescence_lookups
+        );
+        assert_eq!(
+            stats.correction_stats.positive_magnitude_histogram.total(),
+            stats.correction_stats.positive_corrections
+        );
+        assert_eq!(
+            stats.correction_stats.negative_magnitude_histogram.total(),
+            stats.correction_stats.negative_corrections
+        );
+        assert_eq!(
+            stats.correction_stats.update_calls,
+            stats.correction_stats.exact_updates
+                + stats.correction_stats.fail_high_updates
+                + stats.correction_stats.fail_low_updates
+        );
+        assert_eq!(
+            stats.correction_stats.update_calls,
+            stats.correction_stats.positive_update_deltas
+                + stats.correction_stats.negative_update_deltas
+                + stats.correction_stats.zero_update_deltas
         );
         assert!(stats.correction_stats.nonzero_corrections() <= stats.correction_stats.lookups);
     }

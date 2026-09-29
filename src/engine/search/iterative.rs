@@ -332,6 +332,8 @@ impl Engine {
         let mut searched_captures = [ScoredMove::new(); MAX_CAPTURES];
         let mut c = 0usize;
 
+        let mut searched = 0usize;
+
         let info = MoveGenInfo::calculate(board, side_to_move);
 
         while let Some(scored_mv) = move_picker.get_next(board, &info, ctx, &self.history) {
@@ -359,10 +361,20 @@ impl Engine {
 
             ctx.repetition_history.push(child_hash);
 
+            let reduction = match searched + 1 {
+                1 => -2,
+                2..4 => -1,
+                4..6 => 0,
+                6..12 => 1,
+                _ => 2,
+            };
+
+            let search_depth = (depth as i32 - reduction).max(1);
+
             let eval = -self.negamax(
                 board,
                 ctx,
-                depth - 1,
+                search_depth as u16,
                 -beta,
                 -alpha,
                 1,
@@ -373,6 +385,8 @@ impl Engine {
             ctx.repetition_history.pop();
 
             board.undo_move(undo);
+
+            searched += 1;
 
             if ctx.stopped {
                 stopped = true;

@@ -1,11 +1,12 @@
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
+use std::time::Duration;
 
 use crate::bitboard::{Square, square_to_algebraic};
 use crate::board::{Move, MoveList};
 use crate::bot::Bot;
 use crate::engine::configs::EngineConfig;
-use crate::engine::{Engine, SearchLimits};
+use crate::engine::{Engine, SearchLimits, SearchResult, SearchStats, SearchTermination};
 use crate::eval::debug::evaluation_breakdown;
 use crate::game::{Game, GameState};
 use crate::types::{Color, PieceType};
@@ -20,6 +21,9 @@ const DEFAULT_BOT_DEPTH: u16 = 25;
 const DEFAULT_Q_BOT_DEPTH: u16 = 4;
 
 const DEFAULT_BOT_TIME_MS: u64 = 2_000;
+
+const OPENING_PLY_LIMIT: usize = 20;
+const ENDGAME_PHASE_MAX: i32 = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoardOrientation {
@@ -39,6 +43,7 @@ enum GameScreenAction {
     None,
     PrintEval,
     TogglePgn,
+    PrintSearchStats,
     NewGame,
     MainMenu,
 }
@@ -56,6 +61,131 @@ struct PendingPromotion {
     moves: Vec<Move>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum SearchStatsReport {
+    #[default]
+    Total,
+    Opening,
+    Middlegame,
+    Endgame,
+}
+
+impl SearchStatsReport {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Total => "Total",
+            Self::Opening => "Opening",
+            Self::Middlegame => "Middlegame",
+            Self::Endgame => "Endgame",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum GamePhase {
+    #[default]
+    Opening,
+    Middlegame,
+    Endgame,
+}
+
+#[derive(Clone, Debug, Default)]
+struct SearchStatsAggregate {
+    stats: SearchStats,
+    elapsed: Duration,
+    move_count: usize,
+}
+
+impl SearchStatsAggregate {
+    fn record(&mut self, result: &SearchResult) {
+        self.stats += result.stats;
+        self.elapsed += result.elapsed;
+
+        if result.best_move.is_some() {
+            self.move_count += 1;
+        }
+    }
+
+    fn print_report(&self, report: SearchStatsReport, game_ply_count: usize) {
+        let full_move_count = game_ply_count.div_ceil(2);
+        let label = report.label();
+
+        println!();
+        println!("{label} Bot Search Statistics");
+        println!("Bot moves in report: {}", self.move_count);
+        println!("Completed game length: {game_ply_count} plies ({full_move_count} full moves)");
+        println!("Search time in report: {:.3}s", self.elapsed.as_secs_f64());
+        println!(
+            "Phase rules: opening = first {} full moves or book; endgame = phase <= {}; middlegame = between",
+            OPENING_PLY_LIMIT / 2,
+            ENDGAME_PHASE_MAX,
+        );
+
+        self.stats.print_all_with_title(
+            &format!("{label} Search Counters"),
+            self.elapsed.as_secs_f64(),
+        );
+    }
+}
+
+/// Aggregated engine-search data for one UI game against the bot.
+#[derive(Clone, Debug, Default)]
+struct BotGameSearchStats {
+    total: SearchStatsAggregate,
+    opening: SearchStatsAggregate,
+    middlegame: SearchStatsAggregate,
+    endgame: SearchStatsAggregate,
+    current_phase: GamePhase,
+}
+
+impl BotGameSearchStats {
+    fn record(&mut self, game_ply_count: usize, board_phase: i32, result: &SearchResult) {
+        let phase = self.phase_for_search(game_ply_count, board_phase, result.termination);
+        self.current_phase = phase;
+
+        self.total.record(result);
+        match phase {
+            GamePhase::Opening => self.opening.record(result),
+            GamePhase::Middlegame => self.middlegame.record(result),
+            GamePhase::Endgame => self.endgame.record(result),
+        }
+    }
+
+    fn phase_for_search(
+        &self,
+        game_ply_count: usize,
+        board_phase: i32,
+        termination: SearchTermination,
+    ) -> GamePhase {
+        match self.current_phase {
+            GamePhase::Opening
+                if termination == SearchTermination::BookMove
+                    || game_ply_count < OPENING_PLY_LIMIT =>
+            {
+                GamePhase::Opening
+            }
+            GamePhase::Opening | GamePhase::Middlegame if board_phase <= ENDGAME_PHASE_MAX => {
+                GamePhase::Endgame
+            }
+            GamePhase::Opening | GamePhase::Middlegame => GamePhase::Middlegame,
+            GamePhase::Endgame => GamePhase::Endgame,
+        }
+    }
+
+    fn aggregate(&self, report: SearchStatsReport) -> &SearchStatsAggregate {
+        match report {
+            SearchStatsReport::Total => &self.total,
+            SearchStatsReport::Opening => &self.opening,
+            SearchStatsReport::Middlegame => &self.middlegame,
+            SearchStatsReport::Endgame => &self.endgame,
+        }
+    }
+
+    fn print_report(&self, report: SearchStatsReport, game_ply_count: usize) {
+        self.aggregate(report).print_report(report, game_ply_count);
+    }
+}
+
 pub struct ChessApp {
     screen: Screen,
     mode: Option<AppMode>,
@@ -71,6 +201,9 @@ pub struct ChessApp {
 
     show_pgn: bool,
     pgn_text: String,
+
+    bot_game_search_stats: BotGameSearchStats,
+    selected_search_stats_report: SearchStatsReport,
 }
 
 impl Default for ChessApp {
@@ -90,6 +223,9 @@ impl Default for ChessApp {
 
             show_pgn: false,
             pgn_text: String::new(),
+
+            bot_game_search_stats: BotGameSearchStats::default(),
+            selected_search_stats_report: SearchStatsReport::default(),
         }
     }
 }
@@ -107,6 +243,7 @@ impl ChessApp {
         self.bot_rx = None;
 
         self.clear_pgn_display();
+        self.clear_search_stats();
         self.clear_selection();
         self.screen = Screen::Game;
     }
@@ -128,6 +265,7 @@ impl ChessApp {
         self.bot_rx = None;
 
         self.clear_pgn_display();
+        self.clear_search_stats();
         self.clear_selection();
         self.screen = Screen::Game;
     }
@@ -141,6 +279,7 @@ impl ChessApp {
         self.bot_rx = None;
 
         self.clear_pgn_display();
+        self.clear_search_stats();
         self.clear_selection();
     }
 
@@ -280,7 +419,8 @@ impl ChessApp {
             match action {
                 GameScreenAction::None
                 | GameScreenAction::PrintEval
-                | GameScreenAction::TogglePgn => {}
+                | GameScreenAction::TogglePgn
+                | GameScreenAction::PrintSearchStats => {}
                 GameScreenAction::NewGame => self.restart_current_game(),
                 GameScreenAction::MainMenu => self.return_to_main_menu(),
             }
@@ -367,6 +507,7 @@ impl ChessApp {
             GameScreenAction::None => {}
             GameScreenAction::PrintEval => self.print_current_eval(),
             GameScreenAction::TogglePgn => self.toggle_pgn_display(),
+            GameScreenAction::PrintSearchStats => {}
             GameScreenAction::NewGame => self.restart_current_game(),
             GameScreenAction::MainMenu => self.return_to_main_menu(),
         }
@@ -402,6 +543,7 @@ impl ChessApp {
         // - PlayerVsBot keeps the same human color
         self.mode = Some(mode);
         self.clear_pgn_display();
+        self.clear_search_stats();
         self.clear_selection();
         self.screen = Screen::Game;
     }
@@ -538,7 +680,8 @@ impl ChessApp {
             match action {
                 GameScreenAction::None
                 | GameScreenAction::PrintEval
-                | GameScreenAction::TogglePgn => {}
+                | GameScreenAction::TogglePgn
+                | GameScreenAction::PrintSearchStats => {}
                 GameScreenAction::NewGame => self.restart_current_game(),
                 GameScreenAction::MainMenu => self.return_to_main_menu(),
             }
@@ -568,6 +711,7 @@ impl ChessApp {
 
         let show_pgn = self.show_pgn;
         let pgn_text = &mut self.pgn_text;
+        let selected_search_stats_report = &mut self.selected_search_stats_report;
 
         let available = ui.available_size();
 
@@ -615,6 +759,7 @@ impl ChessApp {
                         bot_thinking,
                         show_pgn,
                         pgn_text,
+                        selected_search_stats_report,
                     );
                 },
             );
@@ -633,6 +778,7 @@ impl ChessApp {
             GameScreenAction::None => {}
             GameScreenAction::PrintEval => self.print_current_eval(),
             GameScreenAction::TogglePgn => self.toggle_pgn_display(),
+            GameScreenAction::PrintSearchStats => self.print_selected_search_stats(),
             GameScreenAction::NewGame => self.restart_current_game(),
             GameScreenAction::MainMenu => self.return_to_main_menu(),
         }
@@ -650,6 +796,7 @@ impl ChessApp {
         bot_thinking: bool,
         show_pgn: bool,
         pgn_text: &mut String,
+        selected_search_stats_report: &mut SearchStatsReport,
     ) -> GameScreenAction {
         let mut action = GameScreenAction::None;
 
@@ -719,6 +866,36 @@ impl ChessApp {
             let pgn_button_text = if show_pgn { "Hide PGN" } else { "Show PGN" };
             if ui.button(pgn_button_text).clicked() {
                 action = GameScreenAction::TogglePgn;
+            }
+
+            ui.label("Search stats report:");
+            egui::ComboBox::from_id_salt("search_stats_report")
+                .selected_text(selected_search_stats_report.label())
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        selected_search_stats_report,
+                        SearchStatsReport::Total,
+                        "Total",
+                    );
+                    ui.selectable_value(
+                        selected_search_stats_report,
+                        SearchStatsReport::Opening,
+                        "Opening",
+                    );
+                    ui.selectable_value(
+                        selected_search_stats_report,
+                        SearchStatsReport::Middlegame,
+                        "Middlegame",
+                    );
+                    ui.selectable_value(
+                        selected_search_stats_report,
+                        SearchStatsReport::Endgame,
+                        "Endgame",
+                    );
+                });
+
+            if ui.button("Print Selected Search Stats").clicked() {
+                action = GameScreenAction::PrintSearchStats;
             }
 
             if show_pgn {
@@ -840,6 +1017,16 @@ impl ChessApp {
 
     fn apply_bot_search_response(&mut self, response: BotSearchResponse) {
         let BotSearchResponse { engine, result } = response;
+
+        // Every completed engine.search result contributes to this game's
+        // aggregate, including zero-node opening-book results.
+        if let Some(game) = &self.game {
+            self.bot_game_search_stats.record(
+                game.move_history.len(),
+                game.board().phase(),
+                &result,
+            );
+        }
 
         let bot_color = self.bot.as_ref().map(|bot| bot.color);
 
@@ -985,6 +1172,24 @@ impl ChessApp {
     fn clear_pgn_display(&mut self) {
         self.show_pgn = false;
         self.pgn_text.clear();
+    }
+
+    fn print_selected_search_stats(&self) {
+        let Some(game) = &self.game else {
+            return;
+        };
+
+        if game.state() == GameState::Ongoing {
+            return;
+        }
+
+        self.bot_game_search_stats
+            .print_report(self.selected_search_stats_report, game.move_history.len());
+    }
+
+    fn clear_search_stats(&mut self) {
+        self.bot_game_search_stats = BotGameSearchStats::default();
+        self.selected_search_stats_report = SearchStatsReport::default();
     }
 
     fn clear_selection(&mut self) {
@@ -1145,5 +1350,58 @@ impl eframe::App for ChessApp {
         if self.bot_rx.is_some() || self.is_bot_thinking() {
             ui.ctx().request_repaint();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::MAX_PV;
+
+    fn result(main_nodes: u64, elapsed_ms: u64, termination: SearchTermination) -> SearchResult {
+        let mut stats = SearchStats::default();
+        stats.node_stats.main = main_nodes;
+
+        SearchResult {
+            best_move: Some(Move::NULL),
+            eval: 0,
+            depth_reached: 1,
+            stats,
+            pv: [None; MAX_PV],
+            elapsed: Duration::from_millis(elapsed_ms),
+            termination,
+        }
+    }
+
+    #[test]
+    fn bot_game_search_stats_aggregate_total_and_non_regressing_phase_buckets() {
+        let mut totals = BotGameSearchStats::default();
+        totals.record(0, 24, &result(0, 5, SearchTermination::BookMove));
+        totals.record(10, 24, &result(20, 20, SearchTermination::TimeLimit));
+        totals.record(20, 24, &result(30, 30, SearchTermination::TimeLimit));
+        totals.record(30, 12, &result(40, 40, SearchTermination::TimeLimit));
+
+        // A promotion can increase the material phase, but the game must not
+        // move backward from endgame to middlegame.
+        totals.record(32, 16, &result(50, 50, SearchTermination::TimeLimit));
+
+        assert_eq!(totals.current_phase, GamePhase::Endgame);
+        assert_eq!(totals.total.move_count, 5);
+        assert_eq!(totals.opening.move_count, 2);
+        assert_eq!(totals.middlegame.move_count, 1);
+        assert_eq!(totals.endgame.move_count, 2);
+
+        assert_eq!(totals.total.stats.node_stats.main, 140);
+        assert_eq!(totals.opening.stats.node_stats.main, 20);
+        assert_eq!(totals.middlegame.stats.node_stats.main, 30);
+        assert_eq!(totals.endgame.stats.node_stats.main, 90);
+        assert_eq!(totals.total.elapsed, Duration::from_millis(145));
+
+        assert_eq!(
+            totals.opening.stats.node_stats.main
+                + totals.middlegame.stats.node_stats.main
+                + totals.endgame.stats.node_stats.main,
+            totals.total.stats.node_stats.main,
+        );
     }
 }

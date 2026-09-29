@@ -7,7 +7,7 @@ pub mod main_history;
 
 pub use capture::CaptureHistory;
 pub use continuation::ContinuationHistory;
-pub use correction::CorrectionHistory;
+pub use correction::{CorrectionHistory, correction_limit_cp};
 pub use history::{
     HISTORY_KEY_COUNT, HistoryKey, HistoryTables, history_bonus, history_malus, update,
 };

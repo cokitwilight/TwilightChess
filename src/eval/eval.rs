@@ -117,6 +117,7 @@ impl EvalInfo {
 
             let mut pawns = board.pieces(color, PieceType::Pawn);
             while let Some(sq) = pop_lsb(&mut pawns) {
+                // OPTIMIZE THIS TO JUST USE SHIFTS
                 let attacks = pawn_attacks_from_square(color, sq);
 
                 attack_counts[color_idx].add(attacks);

@@ -4,9 +4,13 @@ const CORRECTION_SIZE: usize = 32768; // This is just an experimental values. Ot
 const INDEX_SIZE: usize = 2 * CORRECTION_SIZE; // This is indexed by color so 2 * Correction Size
 
 const UPDATE_LIMIT: i32 = 256;
-const CORRECTION_LIMIT: i32 = 1024;
-const CORRECTION_SCALER: i32 = 10; // this determines how powerful correction can be. A scaler of 1 means the stored value in the table is the CentiPawn value used. 
-//  10 would represent 1/10 of the tables actual value is the cp value. With a max limit of 1024(currently) this means 1024/10 = ~100 max eval bonus
+const CORRECTION_LIMIT: i32 = 4096;
+const CORRECTION_SCALER: i32 = 100;
+
+#[inline]
+pub const fn correction_limit_cp() -> i32 {
+    CORRECTION_LIMIT / CORRECTION_SCALER
+}
 
 #[derive(Clone, Debug)]
 pub struct CorrectionHistory {
@@ -25,10 +29,10 @@ impl CorrectionHistory {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn get(&self, board: &Board) -> i32 {
-        let index = index(board);
 
-        self.table[index] / CORRECTION_SCALER
+    #[inline]
+    pub fn get(&self, board: &Board) -> i32 {
+        self.table[index(board)] / CORRECTION_SCALER
     }
 
     pub fn update(&mut self, board: &Board, delta: i32, depth: u16) {

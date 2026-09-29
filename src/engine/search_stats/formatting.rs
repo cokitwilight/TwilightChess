@@ -27,9 +27,9 @@ pub(super) fn nps(nodes: u64, seconds: f64) -> String {
     }
 }
 
-pub(super) fn report_header(depth: u16) {
+pub(super) fn report_header(title: &str) {
     println!();
-    println!("Search Statistics — Depth {depth}");
+    println!("{title}");
     println!("{}", "─".repeat(REPORT_WIDTH));
 }
 

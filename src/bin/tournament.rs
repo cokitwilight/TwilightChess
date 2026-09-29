@@ -19,12 +19,15 @@ const TOURNAMENTS: &[(&str, fn())] = &[
     ),
     ("test_tournament_same_nodes", tournament_same_nodes),
     ("test_tournament_lmr", tournament_lmr),
+    ("test_tournament_lmp", tournament_lmp),
     ("test_tournament_null", tournament_null),
     ("test_tournament_rfp", tournament_rfp),
     ("test_tournament_fut", tournament_fut),
     ("test_tournament_see", tournament_see),
     ("test_tournament_singular", tournament_singular),
     ("test_tournament_suggestion", tournament_suggestion),
+    ("test_tournament_correction", tournament_correction),
+    ("test_tournament_experimental", tournament_experimental),
 ];
 
 fn main() -> ExitCode {
@@ -280,6 +283,78 @@ fn tournament_singular() {
 
     match_players.white.config.search.singular.enabled = true;
     match_players.black.config.search.singular.enabled = false;
+
+    let opening_suite = build_opening_book();
+
+    let result = play_games(opening_suite, 5, 1000, match_players, Color::White);
+
+    result.review().expect("IO Error");
+}
+
+fn tournament_lmp() {
+    let mut match_players =
+        MatchPlayers::from_depth("LMP On".to_string(), "LMP Off".to_string(), 24, 6, 24, 6);
+
+    match_players.white.config = EngineConfig::standard();
+    match_players.black.config = EngineConfig::standard();
+
+    match_players.white.config.search.lmr.enabled = true;
+    match_players.black.config.search.lmr.enabled = true;
+
+    match_players.white.config.search.lmr.history_enabled = true;
+    match_players.black.config.search.lmr.history_enabled = true;
+
+    match_players.white.config.search.lmp.enabled = true;
+    match_players.black.config.search.lmp.enabled = false;
+
+    let opening_suite = build_opening_book();
+
+    let result = play_games(opening_suite, 6, 1200, match_players, Color::White);
+
+    result.review().expect("IO Error");
+}
+
+fn tournament_correction() {
+    let mut match_players = MatchPlayers::from_depth(
+        "Correction On".to_string(),
+        "Correction Off".to_string(),
+        20,
+        6,
+        20,
+        6,
+    );
+
+    match_players.white.config = EngineConfig::standard();
+    match_players.black.config = EngineConfig::standard();
+
+    match_players.white.config.search.correction.enabled = true;
+    match_players.black.config.search.correction.enabled = false;
+
+    let opening_suite = build_opening_book();
+
+    let result = play_games(opening_suite, 5, 1000, match_players, Color::White);
+
+    result.review().expect("IO Error");
+}
+
+fn tournament_experimental() {
+    let mut match_players = MatchPlayers::from_depth(
+        "Experimental On".to_string(),
+        "Experimental Off".to_string(),
+        30,
+        6,
+        30,
+        6,
+    );
+
+    match_players.white.config = EngineConfig::default();
+    match_players.black.config = EngineConfig::default();
+
+    match_players.white.config.limits.soft_time_limit_ms = Some(250);
+    match_players.black.config.limits.soft_time_limit_ms = Some(250);
+
+    match_players.white.config.search.experimental.enabled = true;
+    match_players.black.config.search.experimental.enabled = false;
 
     let opening_suite = build_opening_book();
 
