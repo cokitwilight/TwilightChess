@@ -243,7 +243,7 @@ fn draw_border(painter: &egui::Painter, board_rect: egui::Rect) {
     painter.rect_stroke(
         board_rect,
         0.0,
-        egui::Stroke::new(2.0, BOARD_COLORS.border),
+        egui::Stroke::new(2.0_f32, BOARD_COLORS.border),
         egui::StrokeKind::Outside,
     );
 }
@@ -307,7 +307,7 @@ fn draw_promotion_picker(
         painter.rect_stroke(
             rect,
             4.0,
-            egui::Stroke::new(1.5, egui::Color32::BLACK),
+            egui::Stroke::new(1.5_f32, egui::Color32::BLACK),
             egui::StrokeKind::Outside,
         );
 

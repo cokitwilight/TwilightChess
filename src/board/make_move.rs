@@ -39,10 +39,8 @@ impl Board {
             self.piece_at(mv.to()).map(|piece| {
                 debug_assert_ne!(piece.color, us, "Tried to capture own piece");
                 if piece.kind == PieceType::King {
-                    // print_all_bitboards(&self);
                     panic!("Move illegally captures king. Move: from: {}, to: {}, kind: {:?}, promtion: {}", mv.from(), mv.to(), mv.kind(), mv.is_promotion());
                 }
-                // debug_assert_ne!(piece.kind, PieceType::King, "Move illegally captures king. Move: from: {}, to: {}, kind: {:?}, promtion: {}", mv.from, mv.to, mv.kind, mv.is_promotion());
 
                 (piece.color, piece.kind, mv.to())
             })
@@ -92,9 +90,6 @@ impl Board {
         let placed_piece = mv.promotion().unwrap_or(moving_piece);
         self.add_piece_hashed(us, placed_piece, mv.to());
         self.add_piece_increment(us, placed_piece, mv.to());
-
-        // TODO: Add/remove piece increment compute phase and material despite the fact that after the move the total phase and material will be the same.
-        // Additionally promotion could mess with material calculations. Ideally add a moved_piece_increment function that takes the from and to squares and handles promotion, but for now this is simpler.
 
         let old_castling_rights = self.castling_rights;
 

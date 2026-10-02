@@ -4,8 +4,6 @@ pub mod gives_check;
 pub mod make_move;
 pub mod mv;
 pub mod null_move;
-pub mod piece;
-pub mod stalemate;
 pub mod undo_move;
 pub mod zobrist;
 

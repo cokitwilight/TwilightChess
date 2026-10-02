@@ -21,7 +21,7 @@ impl Board {
         self.xor_side_to_move_hash();
         self.side_to_move = self.side_to_move.opposite();
 
-        self.clear_en_passant_hashed(); // this checks if en square exists and sets en_passant to None
+        self.clear_en_passant_hashed();
 
         self.halfmove_clock += 1;
 
