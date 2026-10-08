@@ -9,6 +9,12 @@ The goal of this project is to build a solid chess engine with clean architectur
 The current engine is playable but under active development. Currently has basic UCI support, a player vs player or player vs bot gui, and a tournament self play testing framework. 
 Next steps are further improving optimizations, improving/tuning heuristics and hand made eval, continuing to implement pruning techniques, and validating an actual engine elo.
 
+## Estimated Elo: 2486
+
+Twilight v0.1.0 is estimated to perform at approximately 2,486 Elo, based on a 2,000-game match against Stockfish 19 configured with UCI_LimitStrength=true and UCI_Elo=2500. At a time control of 10 seconds + 0.1-second increment, Twilight achieved 872 wins, 953 losses, and 175 draws (47.98% score), corresponding to an Elo difference of −14.1 ± 14.5 relative to the configured opponent.
+
+Testing used randomly selected openings from 8move_v3.pgn, with 16 plies of predetermined moves and each opening played once per color to reduce opening and color bias. This rating is an approximation based on Stockfish's UCI Elo scale, not an independently established competitive rating. Playing strength may vary across time controls, hardware, and opponents; additional testing at longer time controls and against different opponents is needed to establish a more representative rating.
+
 ## Current Features
 
 - Fully Working Basic GUI
