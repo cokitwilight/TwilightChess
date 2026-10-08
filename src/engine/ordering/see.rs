@@ -347,15 +347,15 @@ fn add_xray_attacks(
     attackers & occupied
 }
 
-// regular see knight can take. Target square is D5
-// rn1qkb1r/pp2pppp/2p1bn2/3p4/4P3/2N2B2/PPPP1PPP/R1BQK1NR w KQkq - 0 1
-
-// legal see knight cant take. Target square is D5
-// rn1qk2r/pp3ppp/2p1bn2/3p4/1b1PP3/2N2B2/PPP2PPP/R1BQK1NR w KQkq - 0 1
-
 #[cfg(test)]
 mod see_tests {
     use super::*;
+
+    // regular see knight can take. Target square is D5
+    // rn1qkb1r/pp2pppp/2p1bn2/3p4/4P3/2N2B2/PPPP1PPP/R1BQK1NR w KQkq - 0 1
+
+    // legal see knight cant take. Target square is D5
+    // rn1qk2r/pp3ppp/2p1bn2/3p4/1b1PP3/2N2B2/PPP2PPP/R1BQK1NR w KQkq - 0 1
 
     /// Confirms that `capture_move` is legal, runs SEE, and compares its result.
     #[track_caller]

@@ -78,7 +78,6 @@ impl Board {
 
     #[inline]
     pub fn pieces(&self, color: Color, piece: PieceType) -> Bitboard {
-        // returns the bitboard for the exact color and piece type
         self.pieces[color as usize][piece as usize]
     }
 
@@ -207,6 +206,7 @@ impl Board {
         self.mg_pst = mg_pst_bonus;
         self.eg_pst = eg_pst_bonus;
     }
+
     // *************************
     // **** MOVE GENERATION ****
     // *************************
@@ -271,7 +271,7 @@ impl Board {
     }
 
     pub fn piece_at(&self, sq: Square) -> Option<Piece> {
-        // for debugging and stuff now
+        // for debugging
         let m = bit(sq);
 
         for color in COLORS {
@@ -407,7 +407,7 @@ mod tests {
     // *********************
     #[test]
     pub fn assert_valid() {
-        // checks if there are any overlapping pieces. Use this in make_move/any changing board states
+        // checks if there are any overlapping pieces. Used in make_move/any changing board states
         let board = Board::from_fen(STARTPOS_FEN).expect("From fen produced None.");
         let mut seen = 0u64;
 

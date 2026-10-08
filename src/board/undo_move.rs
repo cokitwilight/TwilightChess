@@ -63,7 +63,7 @@ impl Board {
             self.add_piece(cap_color, cap_piece, cap_sq);
         }
 
-        // self.rebuild_occupancy();  // HOTSPOT. TRY AND MAKE INCREMENTAL
+        // self.rebuild_occupancy();
 
         self.board_hash = undo.old_board_hash;
         self.pawn_hash = undo.old_pawn_hash;
