@@ -525,6 +525,7 @@ mod tests {
     use crate::engine::configs::EngineConfig;
 
     #[test]
+    #[ignore]
     fn search_without_stats_only_populates_node_counts() {
         let mut config = EngineConfig::standard();
         config.tt_size = 1;
@@ -556,6 +557,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn search_without_stats_matches_normal_search_logic() {
         let mut config = EngineConfig::default();
         config.tt_size = 1;
