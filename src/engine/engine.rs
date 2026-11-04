@@ -1,12 +1,12 @@
 use crate::engine::configs::EngineConfig;
 use crate::engine::history::HistoryTables;
 use crate::engine::pruning::LmrTable;
-use crate::engine::tt::{TTEntry, TranspositionTable};
+use crate::engine::tt::TranspositionTable;
 use crate::opening::{OpeningBook, build_opening_book};
 
 #[derive(Debug)]
 pub struct Engine {
-    pub tt: TranspositionTable<TTEntry>,
+    pub tt: TranspositionTable,
 
     pub history: HistoryTables,
     pub lmr_table: LmrTable,

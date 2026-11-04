@@ -2,7 +2,7 @@
 pub fn print_memory_sizes() {
     use crate::board::{Move, MoveType};
     use crate::engine::staged::ScoredMove;
-    use crate::engine::tt::TTEntry;
+    use crate::engine::tt::{TTEntry, table::TTCluster, table::TTSlot};
     use crate::types::PieceType;
     println!("Move: {}", std::mem::size_of::<Move>());
     println!("MoveType: {}", std::mem::size_of::<MoveType>());
@@ -16,4 +16,6 @@ pub fn print_memory_sizes() {
         std::mem::size_of::<Option<ScoredMove>>()
     );
     println!("TTEntry: {}", std::mem::size_of::<TTEntry>());
+    println!("TTSlot: {}", std::mem::size_of::<TTSlot>());
+    println!("TTCluster: {}", std::mem::size_of::<TTCluster>());
 }

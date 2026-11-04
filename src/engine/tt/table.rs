@@ -12,97 +12,35 @@ pub struct TTInsertResult {
     pub collision: bool,
 }
 
-pub trait TTReplace {
-    type Domain: Copy + Eq;
-
-    fn domain(&self) -> Self::Domain;
-
-    fn depth(&self) -> u16;
-
-    fn replacement_bonus(&self) -> i32 {
-        0
-    }
-
-    fn replacement_class(&self) -> u8 {
-        0
-    }
-}
-
-impl TTReplace for TTEntry {
-    type Domain = TTNodeType;
-
-    #[inline(always)]
-    fn depth(&self) -> u16 {
-        self.depth
-    }
-
-    #[inline(always)]
-    fn domain(&self) -> Self::Domain {
-        self.node_type
-    }
-
-    #[inline(always)]
-    fn replacement_bonus(&self) -> i32 {
-        let exact_bonus = match self.flag {
-            TTFlag::Exact => 2,
-            TTFlag::LowerBound | TTFlag::UpperBound => 0,
-        };
-
-        let node_bonus = match self.node_type {
-            TTNodeType::Main => 8,
-            TTNodeType::Quiescence => 0,
-        };
-
-        exact_bonus + node_bonus
-    }
-
-    #[inline(always)]
-    fn replacement_class(&self) -> u8 {
-        match self.node_type {
-            TTNodeType::Quiescence => 0,
-            TTNodeType::Main => 1,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct TTSlot<Entry> {
+#[derive(Clone, Copy, Debug)]
+pub struct TTSlot {
     key: u64,
     generation: u8,
-    entry: Entry,
+    entry: TTEntry,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TTCluster {
+    slots: [Option<TTSlot>; TT_CLUSTER_SIZE],
 }
 
 #[derive(Clone, Debug)]
-struct TTCluster<Entry> {
-    slots: [Option<TTSlot<Entry>>; TT_CLUSTER_SIZE],
-}
-
-impl<Entry> TTCluster<Entry> {
-    fn empty() -> Self {
-        Self {
-            slots: std::array::from_fn(|_| None),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct TranspositionTable<Entry> {
-    table: Box<[TTCluster<Entry>]>,
+pub struct TranspositionTable {
+    table: Box<[TTCluster]>,
     mask: usize,
     generation: u8,
 }
 
-impl<Entry: TTReplace> TranspositionTable<Entry> {
+impl TranspositionTable {
     pub fn new(mb: usize) -> Self {
         let bytes = mb.max(1).saturating_mul(1024 * 1024);
 
-        let cluster_size = size_of::<TTCluster<Entry>>().max(1);
+        let cluster_size = size_of::<TTCluster>();
         let raw_clusters = (bytes / cluster_size).max(1);
 
         let cluster_count = floor_power_of_two(raw_clusters);
 
-        let mut table = Vec::with_capacity(cluster_count);
-        table.resize_with(cluster_count, TTCluster::empty);
+        let table = vec![TTCluster::default(); cluster_count];
 
         Self {
             table: table.into_boxed_slice(),
@@ -117,89 +55,72 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
     }
 
     #[inline(always)]
-    pub fn get(&self, key: u64, domain: Entry::Domain) -> Option<&Entry> {
-        let index = self.index(key);
-        let cluster = &self.table[index];
-
-        for slot in &cluster.slots {
-            if let Some(slot) = slot {
-                if slot.key == key && slot.entry.domain() == domain {
-                    return Some(&slot.entry);
-                }
-            }
-        }
-
-        None
-    }
-
-    #[inline(always)]
-    pub fn get_any(&self, key: u64) -> Option<&Entry> {
+    pub fn get(&self, key: u64, node_type: TTNodeType) -> Option<&TTEntry> {
         let index = self.index(key);
         let cluster = &self.table[index];
 
         cluster
             .slots
             .iter()
-            .filter_map(Option::as_ref)
+            .flatten()
+            .find(|slot| slot.key == key && slot.entry.node_type == node_type)
+            .map(|slot| &slot.entry)
+    }
+
+    #[inline(always)]
+    pub fn get_any(&self, key: u64) -> Option<&TTEntry> {
+        let index = self.index(key);
+        let cluster = &self.table[index];
+
+        cluster
+            .slots
+            .iter()
+            .flatten()
             .find(|slot| slot.key == key)
             .map(|slot| &slot.entry)
     }
 
     #[inline(always)]
-    pub fn insert(&mut self, key: u64, entry: Entry) -> TTInsertResult {
+    pub fn insert(&mut self, key: u64, entry: TTEntry) -> TTInsertResult {
         let index = self.index(key);
         let generation = self.generation;
         let cluster = &mut self.table[index];
 
-        let new_domain = entry.domain();
+        let new_slot = TTSlot {
+            key,
+            generation,
+            entry,
+        };
 
-        // prevent duplicate key values by replacing the existing
-        for slot in &mut cluster.slots {
-            let Some(old_slot) = slot else {
-                continue;
-            };
-
-            if old_slot.key != key || old_slot.entry.domain() != new_domain {
+        // Entries for the same key and node type share a slot.
+        for old_slot in cluster.slots.iter_mut().flatten() {
+            if old_slot.key != key || old_slot.entry.node_type != entry.node_type {
                 continue;
             }
 
-            if should_replace(&old_slot.entry, &entry) {
-                let collision = old_slot.key != key;
-                *slot = Some(TTSlot {
-                    key,
-                    generation,
-                    entry,
-                });
-                return TTInsertResult {
-                    replaced: true,
-                    collision,
-                };
+            // Depths are comparable because both entries have the same node type.
+            let replaced = entry_value(&entry) >= entry_value(&old_slot.entry);
+            if replaced {
+                *old_slot = new_slot;
             } else {
-                // the old entry is better but still useful
+                // The old entry is better but still useful.
                 old_slot.generation = generation;
-                return TTInsertResult {
-                    replaced: false,
-                    collision: old_slot.key != key,
-                };
             }
+            return TTInsertResult {
+                replaced,
+                collision: false,
+            };
         }
 
-        // empty cluster
-
+        // Use an empty slot before evicting an entry.
         for slot in &mut cluster.slots {
             if slot.is_none() {
-                *slot = Some(TTSlot {
-                    key,
-                    generation,
-                    entry,
-                });
+                *slot = Some(new_slot);
                 return TTInsertResult::default();
             }
         }
 
-        // full cluster
-
-        // returns the least valuable clusters index
+        // Evict the least valuable entry from a full cluster.
         let replacement_index = cluster
             .slots
             .iter()
@@ -214,11 +135,7 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
             .map(|(index, _)| index)
             .expect("TT cluster must have at least one slot");
 
-        cluster.slots[replacement_index] = Some(TTSlot {
-            key,
-            generation,
-            entry,
-        });
+        cluster.slots[replacement_index] = Some(new_slot);
 
         TTInsertResult {
             replaced: true,
@@ -231,11 +148,7 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
     }
 
     pub fn clear(&mut self) {
-        for cluster in self.table.iter_mut() {
-            for slot in &mut cluster.slots {
-                *slot = None;
-            }
-        }
+        self.table.fill(TTCluster::default());
     }
 
     pub fn len(&self) -> usize {
@@ -247,7 +160,7 @@ impl<Entry: TTReplace> TranspositionTable<Entry> {
     }
 
     pub fn size_mb_approx(&self) -> usize {
-        self.table.len() * size_of::<TTCluster<Entry>>() / (1024 * 1024)
+        self.table.len() * size_of::<TTCluster>() / (1024 * 1024)
     }
 
     pub fn cluster_count(&self) -> usize {
@@ -267,34 +180,125 @@ fn floor_power_of_two(n: usize) -> usize {
     1usize << ((usize::BITS - 1 - n.leading_zeros()) as usize)
 }
 
-fn should_replace<Entry: TTReplace>(old: &Entry, new: &Entry) -> bool {
-    match new.replacement_class().cmp(&old.replacement_class()) {
-        std::cmp::Ordering::Greater => {
-            // Main-search entry replaces quiescence entry,
-            // regardless of their numerically different depths.
-            return true;
-        }
+#[inline(always)]
+fn entry_value(entry: &TTEntry) -> i32 {
+    let exact_bonus = match entry.flag {
+        TTFlag::Exact => 2,
+        TTFlag::LowerBound | TTFlag::UpperBound => 0,
+    };
+    let node_bonus = match entry.node_type {
+        TTNodeType::Main => 8,
+        TTNodeType::Quiescence => 0,
+    };
 
-        std::cmp::Ordering::Less => {
-            // Quiescence entry must not overwrite a main-search entry.
-            return false;
-        }
-
-        std::cmp::Ordering::Equal => {
-            // Both entries come from the same search domain,
-            // so their depths are comparable.
-        }
-    }
-
-    let old_value = i32::from(old.depth()) + old.replacement_bonus();
-    let new_value = i32::from(new.depth()) + new.replacement_bonus();
-
-    new_value >= old_value
+    i32::from(entry.depth) + exact_bonus + node_bonus
 }
 
 #[inline(always)]
-fn replacement_value<Entry: TTReplace>(slot: &TTSlot<Entry>, current_generation: u8) -> i32 {
+fn replacement_value(slot: &TTSlot, current_generation: u8) -> i32 {
     let age = current_generation.wrapping_sub(slot.generation) as i32;
 
-    i32::from(slot.entry.depth()) + slot.entry.replacement_bonus() - age * AGE_PENALTY
+    entry_value(&slot.entry) - age * AGE_PENALTY
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(depth: u16, node_type: TTNodeType, flag: TTFlag) -> TTEntry {
+        TTEntry {
+            depth,
+            eval: i32::from(depth),
+            best_move: None,
+            flag,
+            node_type,
+        }
+    }
+
+    #[test]
+    fn same_key_can_store_both_node_types() {
+        let mut table = TranspositionTable::new(1);
+        let key = 42;
+
+        assert_eq!(
+            table.insert(key, entry(10, TTNodeType::Main, TTFlag::LowerBound)),
+            TTInsertResult::default()
+        );
+        assert_eq!(
+            table.insert(key, entry(20, TTNodeType::Quiescence, TTFlag::Exact)),
+            TTInsertResult::default()
+        );
+
+        assert_eq!(table.get(key, TTNodeType::Main).unwrap().depth, 10);
+        assert_eq!(table.get(key, TTNodeType::Quiescence).unwrap().depth, 20);
+        assert_eq!(table.get_any(key).unwrap().node_type, TTNodeType::Main);
+        assert!(table.get_any(key + 1).is_none());
+
+        let capacity = table.len();
+        table.clear();
+        assert!(table.get_any(key).is_none());
+        assert!(table.get(key, TTNodeType::Quiescence).is_none());
+        assert_eq!(table.len(), capacity);
+    }
+
+    #[test]
+    fn matching_entry_keeps_quality_and_refreshes_its_generation() {
+        let mut table = TranspositionTable::new(1);
+        let key = 42;
+        table.insert(key, entry(10, TTNodeType::Main, TTFlag::Exact));
+        table.new_search();
+
+        // The exact-score bonus protects against a slightly deeper bound.
+        assert_eq!(
+            table.insert(key, entry(11, TTNodeType::Main, TTFlag::LowerBound)),
+            TTInsertResult::default()
+        );
+        assert_eq!(table.get(key, TTNodeType::Main).unwrap().depth, 10);
+        let slot = table.table[table.index(key)].slots[0].unwrap();
+        assert_eq!(slot.generation, table.generation());
+
+        // Equal quality replaces the old entry without recording a collision.
+        assert_eq!(
+            table.insert(key, entry(12, TTNodeType::Main, TTFlag::UpperBound)),
+            TTInsertResult {
+                replaced: true,
+                collision: false,
+            }
+        );
+        assert_eq!(table.get(key, TTNodeType::Main).unwrap().depth, 12);
+    }
+
+    #[test]
+    fn full_cluster_eviction_accounts_for_depth_bonuses_and_wrapping_age() {
+        let mut table = TranspositionTable::new(1);
+        let stride = table.cluster_count() as u64;
+        table.generation = u8::MAX;
+        table.insert(0, entry(10, TTNodeType::Main, TTFlag::LowerBound));
+        table.new_search();
+        assert_eq!(table.generation(), 0);
+
+        for (key, candidate) in [
+            (stride, entry(10, TTNodeType::Main, TTFlag::LowerBound)),
+            (2 * stride, entry(10, TTNodeType::Main, TTFlag::Exact)),
+            (3 * stride, entry(10, TTNodeType::Quiescence, TTFlag::Exact)),
+        ] {
+            assert_eq!(table.insert(key, candidate), TTInsertResult::default());
+        }
+
+        let candidate = entry(30, TTNodeType::Main, TTFlag::Exact);
+        let collision = TTInsertResult {
+            replaced: true,
+            collision: true,
+        };
+        // The main-search bonus outweighs the quiescence exact-score bonus.
+        assert_eq!(table.insert(4 * stride, candidate), collision);
+        assert!(table.get_any(3 * stride).is_none());
+        // Age breaks the tie between otherwise identical main-search entries.
+        assert_eq!(table.insert(5 * stride, candidate), collision);
+        assert!(table.get_any(0).is_none());
+        // The exact-score bonus protects the next entry at the same depth.
+        assert_eq!(table.insert(6 * stride, candidate), collision);
+        assert!(table.get_any(stride).is_none());
+        assert!(table.get_any(2 * stride).is_some());
+    }
 }
