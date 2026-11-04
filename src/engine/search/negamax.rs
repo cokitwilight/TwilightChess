@@ -118,7 +118,7 @@ impl Engine {
                 context.stats.tt_stats.main.depth_rejected_hits += 1;
             }
 
-            let tt_score = score_from_tt(entry.eval, ply);
+            let tt_score = score_from_tt(entry.eval as i32, ply);
 
             tt_best_move = entry.best_move;
 

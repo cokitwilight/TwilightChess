@@ -17,25 +17,25 @@ pub enum TTNodeType {
 #[derive(Clone, Copy, Debug)]
 pub struct TTEntry {
     pub depth: u16,
-    pub eval: i32,
+    pub eval: i16,
     pub best_move: Option<Move>,
     pub flag: TTFlag,
     pub node_type: TTNodeType,
 }
 
 #[inline(always)]
-pub fn score_to_tt(score: i32, ply: usize) -> i32 {
+pub fn score_to_tt(score: i32, ply: usize) -> i16 {
     let ply = ply as i32;
 
     if score >= MATE_THRESHOLD {
         // Winning mate: convert root-relative distance
         // into position-relative distance.
-        score + ply
+        (score + ply) as i16
     } else if score <= -MATE_THRESHOLD {
         // Losing mate.
-        score - ply
+        (score - ply) as i16
     } else {
-        score
+        score as i16
     }
 }
 

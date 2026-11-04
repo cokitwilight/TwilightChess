@@ -91,7 +91,7 @@ impl Engine {
             }
             tt_best_move = entry.best_move;
 
-            let tt_score = score_from_tt(entry.eval, ply);
+            let tt_score = score_from_tt(entry.eval as i32, ply);
 
             if entry.depth >= depth {
                 context.stats.tt_stats.quiescence.usable += 1;

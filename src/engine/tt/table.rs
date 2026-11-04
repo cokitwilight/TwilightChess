@@ -14,9 +14,9 @@ pub struct TTInsertResult {
 
 #[derive(Clone, Copy, Debug)]
 pub struct TTSlot {
-    key: u64,
-    generation: u8,
-    entry: TTEntry,
+    pub key: u16,
+    pub entry: TTEntry,
+    pub generation: u8,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -58,12 +58,13 @@ impl TranspositionTable {
     pub fn get(&self, key: u64, node_type: TTNodeType) -> Option<&TTEntry> {
         let index = self.index(key);
         let cluster = &self.table[index];
+        let entry_key = (key >> 48) as u16;
 
         cluster
             .slots
             .iter()
             .flatten()
-            .find(|slot| slot.key == key && slot.entry.node_type == node_type)
+            .find(|slot| slot.key == entry_key && slot.entry.node_type == node_type)
             .map(|slot| &slot.entry)
     }
 
@@ -71,12 +72,13 @@ impl TranspositionTable {
     pub fn get_any(&self, key: u64) -> Option<&TTEntry> {
         let index = self.index(key);
         let cluster = &self.table[index];
+        let entry_key = (key >> 48) as u16;
 
         cluster
             .slots
             .iter()
             .flatten()
-            .find(|slot| slot.key == key)
+            .find(|slot| slot.key == entry_key)
             .map(|slot| &slot.entry)
     }
 
@@ -85,16 +87,17 @@ impl TranspositionTable {
         let index = self.index(key);
         let generation = self.generation;
         let cluster = &mut self.table[index];
+        let entry_key = (key >> 48) as u16;
 
         let new_slot = TTSlot {
-            key,
+            key: entry_key,
             generation,
             entry,
         };
 
         // Entries for the same key and node type share a slot.
         for old_slot in cluster.slots.iter_mut().flatten() {
-            if old_slot.key != key || old_slot.entry.node_type != entry.node_type {
+            if old_slot.key != entry_key || old_slot.entry.node_type != entry.node_type {
                 continue;
             }
 
@@ -208,7 +211,7 @@ mod tests {
     fn entry(depth: u16, node_type: TTNodeType, flag: TTFlag) -> TTEntry {
         TTEntry {
             depth,
-            eval: i32::from(depth),
+            eval: depth as i16,
             best_move: None,
             flag,
             node_type,

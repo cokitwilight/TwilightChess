@@ -51,7 +51,7 @@ pub(super) fn quiescence(
 
     if let Some(entry) = engine.tt.get(hash, TTNodeType::Quiescence) {
         tt_best_move = entry.best_move;
-        let tt_score = score_from_tt(entry.eval, ply);
+        let tt_score = score_from_tt(entry.eval as i32, ply);
 
         if entry.depth >= depth {
             match entry.flag {
