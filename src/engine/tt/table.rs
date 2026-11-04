@@ -274,16 +274,17 @@ mod tests {
     #[test]
     fn full_cluster_eviction_accounts_for_depth_bonuses_and_wrapping_age() {
         let mut table = TranspositionTable::new(1);
-        let stride = table.cluster_count() as u64;
+        // All keys index cluster zero, but have distinct stored 16-bit signatures.
+        let key = |signature: u64| signature << 48;
         table.generation = u8::MAX;
-        table.insert(0, entry(10, TTNodeType::Main, TTFlag::LowerBound));
+        table.insert(key(0), entry(10, TTNodeType::Main, TTFlag::LowerBound));
         table.new_search();
         assert_eq!(table.generation(), 0);
 
         for (key, candidate) in [
-            (stride, entry(10, TTNodeType::Main, TTFlag::LowerBound)),
-            (2 * stride, entry(10, TTNodeType::Main, TTFlag::Exact)),
-            (3 * stride, entry(10, TTNodeType::Quiescence, TTFlag::Exact)),
+            (key(1), entry(10, TTNodeType::Main, TTFlag::LowerBound)),
+            (key(2), entry(10, TTNodeType::Main, TTFlag::Exact)),
+            (key(3), entry(10, TTNodeType::Quiescence, TTFlag::Exact)),
         ] {
             assert_eq!(table.insert(key, candidate), TTInsertResult::default());
         }
@@ -294,14 +295,14 @@ mod tests {
             collision: true,
         };
         // The main-search bonus outweighs the quiescence exact-score bonus.
-        assert_eq!(table.insert(4 * stride, candidate), collision);
-        assert!(table.get_any(3 * stride).is_none());
+        assert_eq!(table.insert(key(4), candidate), collision);
+        assert!(table.get_any(key(3)).is_none());
         // Age breaks the tie between otherwise identical main-search entries.
-        assert_eq!(table.insert(5 * stride, candidate), collision);
-        assert!(table.get_any(0).is_none());
+        assert_eq!(table.insert(key(5), candidate), collision);
+        assert!(table.get_any(key(0)).is_none());
         // The exact-score bonus protects the next entry at the same depth.
-        assert_eq!(table.insert(6 * stride, candidate), collision);
-        assert!(table.get_any(stride).is_none());
-        assert!(table.get_any(2 * stride).is_some());
+        assert_eq!(table.insert(key(6), candidate), collision);
+        assert!(table.get_any(key(1)).is_none());
+        assert!(table.get_any(key(2)).is_some());
     }
 }

@@ -33,6 +33,7 @@ pub fn print_memory_sizes() {
     }
 
     println!("Move: {}", std::mem::size_of::<Move>());
+    println!("Option<Move>: {}", std::mem::size_of::<Option<Move>>());
     println!("MoveType: {}", std::mem::size_of::<MoveType>());
     println!(
         "Option<PieceType>: {}",
