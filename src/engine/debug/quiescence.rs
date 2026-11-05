@@ -2,7 +2,7 @@ use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
 use crate::engine::search::is_insufficient_material;
-use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
+use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MAX_PLY, PickerFrame, SearchContext};
 use crate::eval::evaluation_for_turn;
 use crate::moves::MoveGenInfo;
@@ -53,20 +53,18 @@ pub(super) fn quiescence(
         tt_best_move = entry.best_move;
         let tt_score = score_from_tt(entry.eval as i32, ply);
 
-        if entry.depth >= depth {
-            match entry.flag {
-                TTFlag::Exact => return tt_score,
-                TTFlag::LowerBound => {
-                    alpha = alpha.max(tt_score);
-                }
-                TTFlag::UpperBound => {
-                    beta = beta.min(tt_score);
-                }
+        match entry.flag.bound_type() {
+            TTFlag::Exact => return tt_score,
+            TTFlag::LowerBound => {
+                alpha = alpha.max(tt_score);
             }
+            TTFlag::UpperBound => {
+                beta = beta.min(tt_score);
+            }
+        }
 
-            if alpha >= beta {
-                return tt_score;
-            }
+        if alpha >= beta {
+            return tt_score;
         }
     }
 
@@ -104,13 +102,12 @@ pub(super) fn quiescence(
             let score = -CHECKMATE_SCORE + ply as i32;
             engine.tt.insert(
                 hash,
-                TTEntry {
-                    depth,
-                    eval: score_to_tt(score, ply),
-                    best_move: None,
-                    flag: TTFlag::Exact,
-                    node_type: TTNodeType::Quiescence,
-                },
+                false,
+                TTFlag::Exact,
+                0,
+                score_to_tt(score, ply),
+                i16::MIN,
+                None,
             );
             return score;
         }
@@ -138,13 +135,12 @@ pub(super) fn quiescence(
                 let score = 0;
                 engine.tt.insert(
                     hash,
-                    TTEntry {
-                        depth,
-                        eval: score_to_tt(score, ply),
-                        best_move: None,
-                        flag: TTFlag::Exact,
-                        node_type: TTNodeType::Quiescence,
-                    },
+                    false,
+                    TTFlag::Exact,
+                    0,
+                    score_to_tt(score, ply),
+                    i16::MIN,
+                    None,
                 );
                 return score;
             }
@@ -161,13 +157,12 @@ pub(super) fn quiescence(
         if stand_pat >= beta {
             engine.tt.insert(
                 hash,
-                TTEntry {
-                    depth,
-                    eval: score_to_tt(raw_static_eval, ply),
-                    best_move: None,
-                    flag: TTFlag::LowerBound,
-                    node_type: TTNodeType::Quiescence,
-                },
+                false,
+                TTFlag::LowerBound,
+                0,
+                score_to_tt(raw_static_eval, ply),
+                i16::MIN,
+                None,
             );
 
             return stand_pat;
@@ -257,13 +252,12 @@ pub(super) fn quiescence(
         if eval >= beta {
             engine.tt.insert(
                 hash,
-                TTEntry {
-                    depth,
-                    eval: score_to_tt(eval, ply),
-                    best_move,
-                    flag: TTFlag::LowerBound,
-                    node_type: TTNodeType::Quiescence,
-                },
+                false,
+                TTFlag::LowerBound,
+                0,
+                score_to_tt(eval, ply),
+                i16::MIN,
+                best_move,
             );
             return eval;
         }
@@ -279,13 +273,12 @@ pub(super) fn quiescence(
 
     engine.tt.insert(
         hash,
-        TTEntry {
-            depth,
-            eval: score_to_tt(best_eval, ply),
-            best_move,
-            flag,
-            node_type: TTNodeType::Quiescence,
-        },
+        false,
+        flag,
+        0,
+        score_to_tt(best_eval, ply),
+        i16::MIN,
+        best_move,
     );
 
     best_eval

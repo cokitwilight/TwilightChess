@@ -5,7 +5,7 @@ use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 use crate::engine::history::HistoryKey;
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
 use crate::engine::staged::ScoredMove;
-use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_to_tt};
+use crate::engine::tt::{TTFlag, TTNodeType, score_to_tt};
 use crate::engine::{
     Engine, MAX_PV, PickerFrame, SearchContext, SearchOptions, SearchResult, SearchTermination,
 };
@@ -529,13 +529,12 @@ impl Engine {
         ctx.stats.tt_stats.main.stores += 1;
         let insert_result = self.tt.insert(
             root_hash,
-            TTEntry {
-                eval: score_to_tt(best_eval, 1),
-                depth,
-                flag,
-                best_move,
-                node_type: TTNodeType::Main,
-            },
+            true,
+            flag,
+            u8::try_from(depth).unwrap_or(u8::MAX),
+            score_to_tt(best_eval, 1),
+            i16::MIN,
+            best_move,
         );
         ctx.stats.tt_stats.main.record_insert(insert_result);
 
@@ -556,6 +555,38 @@ mod tests {
     use super::*;
     use crate::engine::SearchLimits;
     use crate::engine::configs::EngineConfig;
+
+    #[test]
+    fn root_stores_large_depths_without_wrapping() {
+        for depth in [255, 256, 257, u16::MAX] {
+            let mut config = EngineConfig::standard();
+            config.tt_size = 1;
+            let mut engine = Engine::new(config);
+            // Black's only move captures the queen, leaving insufficient
+            // material. Even a huge requested depth finishes immediately.
+            let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").unwrap();
+            let mut context =
+                SearchContext::new(SearchLimits::depth(depth, 1), vec![board.board_hash()]);
+            let result = engine.search_root(
+                &mut board,
+                &mut context,
+                None,
+                depth,
+                NEG_INF + 1,
+                POS_INF - 1,
+            );
+            assert!(result.best_move.is_some());
+            assert_eq!(result.eval, 0);
+            assert_eq!(
+                engine
+                    .tt
+                    .get(board.board_hash(), TTNodeType::Main)
+                    .unwrap()
+                    .depth,
+                255
+            );
+        }
+    }
 
     #[test]
     fn staged_root_detects_checkmate_and_stalemate() {

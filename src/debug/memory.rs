@@ -2,7 +2,7 @@
 pub fn print_memory_sizes() {
     use crate::board::{Move, MoveType};
     use crate::engine::staged::ScoredMove;
-    use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, table::TTCluster, table::TTSlot};
+    use crate::engine::tt::{TTEntry, TTFlag, table::TTCluster};
     use crate::types::PieceType;
 
     use std::mem::{align_of, offset_of, size_of, size_of_val};
@@ -45,27 +45,27 @@ pub fn print_memory_sizes() {
         std::mem::size_of::<Option<ScoredMove>>()
     );
 
-    println!("Option<TTSlot>: {}", std::mem::size_of::<Option<TTSlot>>());
+    println!(
+        "Option<TTEntry>: {}",
+        std::mem::size_of::<Option<TTEntry>>()
+    );
 
     // Option<TTSlot>
 
     println!();
 
-    let entry = TTEntry {
-        depth: 0,
-        eval: 0,
-        best_move: None,
-        flag: TTFlag::Exact,
-        node_type: TTNodeType::Main,
-    };
-    print_layout!(TTEntry, entry, depth, eval, best_move, flag, node_type);
+    let entry = TTEntry::new(0, false, TTFlag::Exact, 0, 0, 0, 0, None);
 
-    let slot = TTSlot {
-        key: 0,
+    print_layout!(
+        TTEntry,
         entry,
-        generation: 0,
-    };
-    print_layout!(TTSlot, slot, key, entry, generation);
+        key,
+        flag,
+        depth,
+        eval,
+        static_eval,
+        best_move
+    );
 
     println!("TTCluster: {}", std::mem::size_of::<TTCluster>());
 }

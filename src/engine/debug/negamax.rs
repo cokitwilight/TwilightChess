@@ -7,7 +7,7 @@ use crate::engine::pruning::{LMR_SCALE_I32, lmp_history_limit, lmp_threshold};
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
 use crate::engine::staged::ScoredMove;
-use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
+use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{
     Engine, MATE_THRESHOLD, MAX_PLY, PickerFrame, SearchContext, SearchOptions, SearchStackEntry,
 };
@@ -68,13 +68,15 @@ pub(super) fn negamax(
     let in_check = board.in_check(board.side_to_move());
     let mut tt_best_move: Option<Move> = None;
     let mut candidate_move: Option<(Move, i32)> = None;
+    let mut tt_eval = i16::MIN;
 
     if let Some(entry) = engine.tt.get(board.board_hash, TTNodeType::Main) {
         let tt_score = score_from_tt(entry.eval as i32, ply);
         tt_best_move = entry.best_move;
+        tt_eval = entry.static_eval;
 
-        if entry.depth >= depth && options.excluded_move.is_none() {
-            match entry.flag {
+        if u16::from(entry.depth) >= depth && options.excluded_move.is_none() {
+            match entry.flag.bound_type() {
                 TTFlag::Exact => return tt_score,
                 TTFlag::LowerBound => {
                     alpha = alpha.max(tt_score);
@@ -92,16 +94,23 @@ pub(super) fn negamax(
             && engine.config.search.singular.enabled
             && options.allow_singular
             && depth >= engine.config.search.singular.minimum_depth
-            && entry.depth >= depth.saturating_sub(2)
-            && matches!(entry.flag, TTFlag::Exact | TTFlag::LowerBound)
+            && u16::from(entry.depth) >= depth.saturating_sub(2)
+            && matches!(entry.flag.bound_type(), TTFlag::Exact | TTFlag::LowerBound)
             && tt_score.abs() < MATE_THRESHOLD;
 
         if suitable_for_singular && let Some(mv) = entry.best_move {
             candidate_move = Some((mv, tt_score));
         }
+    } else if let Some(entry) = engine.tt.get_any(board.board_hash) {
+        tt_best_move = entry.best_move;
+        tt_eval = entry.static_eval;
     }
 
-    let raw_static_eval = evaluation_for_turn(board);
+    let raw_static_eval = if tt_eval != i16::MIN {
+        i32::from(tt_eval)
+    } else {
+        evaluation_for_turn(board)
+    };
     let corrected_static_eval = if engine.config.search.correction.enabled {
         raw_static_eval + engine.history.correction.get(board)
     } else {
@@ -443,18 +452,32 @@ pub(super) fn negamax(
             }
 
             if eval > alpha {
+                let mut research_depth = full_child_depth;
                 if reduction > 0 {
-                    eval = -negamax(
-                        engine,
-                        board,
-                        context,
-                        full_child_depth,
-                        -alpha - 1,
-                        -alpha,
-                        ply + 1,
-                        picker_frame.child(),
-                        normal_child_options,
-                    );
+                    let deeper_search = reduced_child_depth < depth && eval > max_eval + 50;
+                    let shallow_search = eval < max_eval + 10;
+
+                    research_depth = if deeper_search {
+                        research_depth + 1
+                    } else if shallow_search {
+                        research_depth - 1
+                    } else {
+                        research_depth
+                    };
+
+                    if research_depth > reduced_child_depth {
+                        eval = -negamax(
+                            engine,
+                            board,
+                            context,
+                            research_depth,
+                            -alpha - 1,
+                            -alpha,
+                            ply + 1,
+                            picker_frame.child(),
+                            normal_child_options,
+                        );
+                    }
 
                     if context.stopped {
                         context.repetition_history.pop();
@@ -468,7 +491,7 @@ pub(super) fn negamax(
                         engine,
                         board,
                         context,
-                        full_child_depth,
+                        research_depth,
                         -beta,
                         -alpha,
                         ply + 1,
@@ -628,13 +651,12 @@ pub(super) fn negamax(
     if options.excluded_move.is_none() {
         engine.tt.insert(
             board.board_hash,
-            TTEntry {
-                depth,
-                eval: score_to_tt(max_eval, ply),
-                best_move,
-                flag,
-                node_type: TTNodeType::Main,
-            },
+            is_pv,
+            flag,
+            u8::try_from(depth).unwrap_or(u8::MAX),
+            score_to_tt(max_eval, ply),
+            raw_static_eval as i16,
+            best_move,
         );
     }
 
