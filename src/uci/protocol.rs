@@ -195,7 +195,7 @@ impl UciSession {
             })
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
 
-        let result = self.engine.search(
+        let result = self.engine.search_without_stats(
             &self.position.board,
             limits,
             &self.position.repetition_history,

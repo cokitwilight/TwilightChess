@@ -254,8 +254,11 @@ mod tests {
     }
 
     #[test]
-    fn cluster_packs_four_optional_entries_into_forty_bytes() {
-        assert_eq!(size_of::<TTCluster>(), 40);
+    fn cluster_packs_three_optional_entries_into_thirty_two_bytes() {
+        assert_eq!(TT_CLUSTER_SIZE, 3);
+        assert_eq!(size_of::<[Option<TTEntry>; TT_CLUSTER_SIZE]>(), 30);
+        assert_eq!(size_of::<TTCluster>(), 32);
+        assert_eq!(std::mem::align_of::<TTCluster>(), 32);
     }
 
     #[test]
@@ -268,7 +271,7 @@ mod tests {
             assert!(table.cluster_count().is_power_of_two());
             assert!(allocated <= budget);
             assert!(allocated * 2 > budget);
-            assert_eq!(table.len(), table.cluster_count() * 4);
+            assert_eq!(table.len(), table.cluster_count() * TT_CLUSTER_SIZE);
             assert_eq!(table.size_mb_approx(), allocated / (1024 * 1024));
             assert!(!table.is_empty());
             assert_eq!(table.generation(), 1);
@@ -319,13 +322,14 @@ mod tests {
     #[test]
     fn probes_check_the_signature_and_cluster_index() {
         let mut table = TranspositionTable::new(1);
-        for signature in [0, 1, 2, u16::MAX] {
+        // Fill the three slots without causing an unrelated eviction.
+        for signature in [0, 1, u16::MAX] {
             assert_eq!(
                 insert(&mut table, key(signature), entry(10, false, TTFlag::Exact)),
                 TTInsertResult::default(),
             );
         }
-        for signature in [0, 1, 2, u16::MAX] {
+        for signature in [0, 1, u16::MAX] {
             let stored_key = key(signature);
             assert_eq!(
                 table.get(stored_key, TTNodeType::Main).unwrap().key,
@@ -445,33 +449,50 @@ mod tests {
 
     #[test]
     fn full_cluster_eviction_accounts_for_age_exact_and_pv_bonuses() {
-        let mut table = TranspositionTable::new(1);
-        insert(&mut table, key(0), entry(10, false, TTFlag::LowerBound));
-        table.new_search();
-        for (signature, candidate) in [
-            (1, entry(10, false, TTFlag::LowerBound)),
-            (2, entry(10, false, TTFlag::Exact)),
-            (3, entry(10, true, TTFlag::Exact)),
+        // Check exact and PV bonuses separately: each must protect the third
+        // entry over a fresh bound of equal depth. Age breaks the other tie.
+        for protected in [
+            entry(10, false, TTFlag::Exact),
+            entry(10, true, TTFlag::LowerBound),
         ] {
+            let mut table = TranspositionTable::new(1);
+            // Put the fresh entry first so an eviction that ignores age
+            // cannot accidentally choose the expected victim by slot order.
             assert_eq!(
-                insert(&mut table, key(signature), candidate),
+                insert(&mut table, key(1), entry(10, false, TTFlag::LowerBound)),
                 TTInsertResult::default()
             );
-        }
-
-        for (signature, victim) in [(4, 0), (5, 1), (6, 2)] {
             assert_eq!(
-                insert(&mut table, key(signature), entry(30, false, TTFlag::Exact)),
+                insert(&mut table, key(0), entry(10, false, TTFlag::LowerBound)),
+                TTInsertResult::default()
+            );
+            table.new_search();
+            assert_eq!(
+                insert(&mut table, key(1), entry(10, false, TTFlag::LowerBound)),
                 TTInsertResult {
                     replaced: true,
-                    collision: true
-                },
+                    collision: false
+                }
             );
-            assert!(table.get(key(victim), TTNodeType::Main).is_none());
-            assert!(table.get_any(key(victim)).is_none());
-            assert!(table.get(key(signature), TTNodeType::Main).is_some());
+            assert_eq!(
+                insert(&mut table, key(2), protected),
+                TTInsertResult::default()
+            );
+
+            for (signature, victim) in [(3, 0), (4, 1)] {
+                assert_eq!(
+                    insert(&mut table, key(signature), entry(30, false, TTFlag::Exact)),
+                    TTInsertResult {
+                        replaced: true,
+                        collision: true
+                    },
+                );
+                assert!(table.get(key(victim), TTNodeType::Main).is_none());
+                assert!(table.get_any(key(victim)).is_none());
+                assert!(table.get(key(signature), TTNodeType::Main).is_some());
+                assert!(table.get(key(2), TTNodeType::Main).is_some());
+            }
         }
-        assert!(table.get(key(3), TTNodeType::Main).unwrap().flag.is_pv());
     }
 
     #[test]
@@ -566,15 +587,19 @@ mod tests {
         insert(&mut table, key(0), entry(20, false, TTFlag::LowerBound));
         table.new_search();
         assert_eq!(table.generation(), 1);
-        for (signature, depth) in [(1, 1), (2, 8), (3, 9)] {
-            insert(
-                &mut table,
-                key(signature),
-                entry(depth, false, TTFlag::LowerBound),
+        // Leave all three original entries present until the eviction below.
+        for (signature, depth) in [(1, 1), (2, 8)] {
+            assert_eq!(
+                insert(
+                    &mut table,
+                    key(signature),
+                    entry(depth, false, TTFlag::LowerBound)
+                ),
+                TTInsertResult::default(),
             );
         }
         assert_eq!(
-            insert(&mut table, key(4), entry(30, false, TTFlag::Exact)),
+            insert(&mut table, key(3), entry(30, false, TTFlag::Exact)),
             TTInsertResult {
                 replaced: true,
                 collision: true
@@ -587,7 +612,7 @@ mod tests {
             "the previous generation is only one search old"
         );
         assert!(table.get(key(1), TTNodeType::Main).is_none());
-        for signature in [2, 3, 4] {
+        for signature in [2, 3] {
             assert!(table.get_any(key(signature)).is_some());
         }
     }
