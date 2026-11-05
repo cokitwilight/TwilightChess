@@ -3,7 +3,7 @@ use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
 use crate::engine::search::is_insufficient_material;
-use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
+use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MAX_PLY, PickerFrame};
 use crate::eval::evaluation_for_turn;
 use crate::moves::MoveGenInfo;
@@ -78,7 +78,7 @@ impl Engine {
         if let Some(entry) = self.tt.get(hash, TTNodeType::Quiescence) {
             context.stats.tt_stats.quiescence.hits += 1;
 
-            match entry.flag {
+            match entry.flag.bound_type() {
                 TTFlag::Exact => context.stats.tt_stats.quiescence.exact_hits += 1,
                 TTFlag::LowerBound => context.stats.tt_stats.quiescence.lower_bound_hits += 1,
                 TTFlag::UpperBound => context.stats.tt_stats.quiescence.upper_bound_hits += 1,
@@ -86,36 +86,38 @@ impl Engine {
             if entry.best_move.is_some() {
                 context.stats.tt_stats.quiescence.move_hits += 1;
             }
-            if entry.depth < depth {
-                context.stats.tt_stats.quiescence.depth_rejected_hits += 1;
-            }
+
+            // if entry.depth < depth as u8 {
+            //     context.stats.tt_stats.quiescence.depth_rejected_hits += 1;
+            // }
+
             tt_best_move = entry.best_move;
 
-            let tt_score = score_from_tt(entry.eval, ply);
+            let tt_score = score_from_tt(entry.eval as i32, ply);
 
-            if entry.depth >= depth {
-                context.stats.tt_stats.quiescence.usable += 1;
+            // if entry.depth == 0 {
+            context.stats.tt_stats.quiescence.usable += 1;
 
-                match entry.flag {
-                    TTFlag::Exact => {
-                        context.stats.tt_stats.quiescence.exact_returns += 1;
-                        return tt_score;
-                    }
-
-                    TTFlag::LowerBound => {
-                        alpha = alpha.max(tt_score);
-                    }
-
-                    TTFlag::UpperBound => {
-                        beta = beta.min(tt_score);
-                    }
-                }
-
-                if alpha >= beta {
-                    context.stats.tt_stats.quiescence.bound_cutoffs += 1;
+            match entry.flag.bound_type() {
+                TTFlag::Exact => {
+                    context.stats.tt_stats.quiescence.exact_returns += 1;
                     return tt_score;
                 }
+
+                TTFlag::LowerBound => {
+                    alpha = alpha.max(tt_score);
+                }
+
+                TTFlag::UpperBound => {
+                    beta = beta.min(tt_score);
+                }
             }
+
+            if alpha >= beta {
+                context.stats.tt_stats.quiescence.bound_cutoffs += 1;
+                return tt_score;
+            }
+            // }
         }
 
         let mut best_eval = NEG_INF;
@@ -154,13 +156,12 @@ impl Engine {
                 context.stats.tt_stats.quiescence.stores += 1;
                 let insert_result = self.tt.insert(
                     hash,
-                    TTEntry {
-                        depth,
-                        eval: score_to_tt(score, ply),
-                        best_move: None,
-                        flag: TTFlag::Exact,
-                        node_type: TTNodeType::Quiescence,
-                    },
+                    false,
+                    TTFlag::Exact,
+                    0,
+                    score_to_tt(score, ply),
+                    i16::MIN,
+                    None,
                 );
                 context
                     .stats
@@ -203,13 +204,12 @@ impl Engine {
                     context.stats.tt_stats.quiescence.stores += 1;
                     let insert_result = self.tt.insert(
                         hash,
-                        TTEntry {
-                            depth,
-                            eval: score_to_tt(score, ply),
-                            best_move: None,
-                            flag: TTFlag::Exact,
-                            node_type: TTNodeType::Quiescence,
-                        },
+                        false,
+                        TTFlag::Exact,
+                        0,
+                        score_to_tt(score, ply),
+                        i16::MIN,
+                        None,
                     );
                     context
                         .stats
@@ -241,13 +241,12 @@ impl Engine {
                 context.stats.tt_stats.quiescence.stores += 1;
                 let insert_result = self.tt.insert(
                     hash,
-                    TTEntry {
-                        depth,
-                        eval: score_to_tt(raw_static_eval, ply),
-                        best_move: None,
-                        flag: TTFlag::LowerBound,
-                        node_type: TTNodeType::Quiescence,
-                    },
+                    false,
+                    TTFlag::LowerBound,
+                    0,
+                    score_to_tt(raw_static_eval, ply),
+                    i16::MIN,
+                    None,
                 );
                 context
                     .stats
@@ -370,13 +369,12 @@ impl Engine {
                 context.stats.tt_stats.quiescence.stores += 1;
                 let insert_result = self.tt.insert(
                     hash,
-                    TTEntry {
-                        depth,
-                        eval: score_to_tt(eval, ply),
-                        best_move,
-                        flag: TTFlag::LowerBound,
-                        node_type: TTNodeType::Quiescence,
-                    },
+                    false,
+                    TTFlag::LowerBound,
+                    0,
+                    score_to_tt(eval, ply),
+                    i16::MIN,
+                    best_move,
                 );
                 context
                     .stats
@@ -398,13 +396,12 @@ impl Engine {
         context.stats.tt_stats.quiescence.stores += 1;
         let insert_result = self.tt.insert(
             hash,
-            TTEntry {
-                depth,
-                eval: score_to_tt(best_eval, ply),
-                best_move,
-                flag,
-                node_type: TTNodeType::Quiescence,
-            },
+            false,
+            flag,
+            0,
+            score_to_tt(best_eval, ply),
+            i16::MIN,
+            best_move,
         );
         context
             .stats
@@ -451,5 +448,75 @@ mod tests {
 
             assert_eq!(score, expected, "wrong terminal score for {fen}");
         }
+    }
+
+    #[test]
+    fn quiescence_reuses_its_depth_zero_exact_entry() {
+        let mut config = EngineConfig::standard();
+        config.tt_size = 1;
+        let mut engine = Engine::new(config);
+        let mut board = Board::from_fen("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1").unwrap();
+        let mut context = SearchContext::new(SearchLimits::depth(1, 6), vec![board.board_hash()]);
+
+        for _ in 0..2 {
+            assert_eq!(
+                engine.quiescence(
+                    &mut board,
+                    &mut context,
+                    6,
+                    NEG_INF + 1,
+                    POS_INF - 1,
+                    0,
+                    PickerFrame::ROOT,
+                    0,
+                ),
+                -CHECKMATE_SCORE,
+            );
+        }
+
+        assert_eq!(
+            engine
+                .tt
+                .get(board.board_hash(), TTNodeType::Quiescence)
+                .unwrap()
+                .depth,
+            0
+        );
+        assert_eq!(context.stats.tt_stats.quiescence.hits, 1);
+        // Regression: qsearch stores zero but still compares it with `depth`.
+        assert_eq!(context.stats.tt_stats.quiescence.exact_returns, 1);
+        assert_eq!(context.stats.tt_stats.quiescence.depth_rejected_hits, 0);
+    }
+
+    #[test]
+    fn quiescence_can_reuse_a_main_search_entry() {
+        let mut config = EngineConfig::standard();
+        config.tt_size = 1;
+        let mut engine = Engine::new(config);
+        let mut board = Board::from_fen("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1").unwrap();
+        engine.tt.insert(
+            board.board_hash(),
+            true,
+            TTFlag::Exact,
+            10,
+            123,
+            i16::MIN,
+            None,
+        );
+        let mut context = SearchContext::new(SearchLimits::depth(1, 6), vec![board.board_hash()]);
+
+        let score = engine.quiescence(
+            &mut board,
+            &mut context,
+            6,
+            NEG_INF + 1,
+            POS_INF - 1,
+            0,
+            PickerFrame::ROOT,
+            0,
+        );
+
+        assert_eq!(score, 123);
+        assert_eq!(context.stats.tt_stats.quiescence.exact_returns, 1);
     }
 }

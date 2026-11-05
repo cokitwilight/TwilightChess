@@ -7,7 +7,7 @@ use crate::engine::history::HistoryKey;
 use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
 use crate::engine::staged::ScoredMove;
-use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_to_tt};
+use crate::engine::tt::{TTFlag, TTNodeType, score_to_tt};
 use crate::engine::{
     Engine, MAX_PV, PickerFrame, SearchContext, SearchLimits, SearchOptions, SearchResult,
     SearchTermination,
@@ -322,6 +322,7 @@ fn search_root(
     let mut q = 0usize;
     let mut searched_captures = [ScoredMove::new(); MAX_CAPTURES];
     let mut c = 0usize;
+    let mut searched = 0usize;
 
     let info = MoveGenInfo::calculate(board, side_to_move);
 
@@ -345,11 +346,20 @@ fn search_root(
         legal_moves += 1;
         ctx.repetition_history.push(child_hash);
 
+        let reduction = match searched + 1 {
+            1 => -2,
+            2..4 => -1,
+            4..6 => 0,
+            6..12 => 1,
+            _ => 2,
+        };
+        let search_depth = (depth as i32 - reduction).max(1);
+
         let eval = -negamax(
             engine,
             board,
             ctx,
-            depth - 1,
+            search_depth as u16,
             -beta,
             -alpha,
             1,
@@ -359,6 +369,7 @@ fn search_root(
 
         ctx.repetition_history.pop();
         board.undo_move(undo);
+        searched += 1;
 
         if ctx.stopped {
             stopped = true;
@@ -498,13 +509,12 @@ fn search_root(
     };
     engine.tt.insert(
         root_hash,
-        TTEntry {
-            eval: score_to_tt(best_eval, 1),
-            depth,
-            flag,
-            best_move,
-            node_type: TTNodeType::Main,
-        },
+        true,
+        flag,
+        u8::try_from(depth).unwrap_or(u8::MAX),
+        score_to_tt(best_eval, 1),
+        i16::MIN,
+        best_move,
     );
 
     SearchResult {
@@ -525,7 +535,6 @@ mod tests {
     use crate::engine::configs::EngineConfig;
 
     #[test]
-    #[ignore]
     fn search_without_stats_only_populates_node_counts() {
         let mut config = EngineConfig::standard();
         config.tt_size = 1;
@@ -557,37 +566,163 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn search_without_stats_matches_normal_search_logic() {
         let mut config = EngineConfig::default();
         config.tt_size = 1;
         config.search.lmp.enabled = true;
-        let board = Board::from_fen(STARTPOS_FEN).expect("valid start position");
-        let limits = SearchLimits::depth(3, 3);
-        let repetition_history = vec![board.board_hash()];
-        let mut normal_engine = Engine::new(config);
-        let mut uninstrumented_engine = Engine::new(config);
+        for (fen, depth) in [
+            (STARTPOS_FEN, 3),
+            (
+                "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                2,
+            ),
+            ("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1", 3),
+            ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", 2),
+            ("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", 2),
+        ] {
+            let board = Board::from_fen(fen).unwrap();
+            let limits = SearchLimits::depth(depth, 3);
+            let history = vec![board.board_hash()];
+            let mut normal_engine = Engine::new(config);
+            let mut debug_engine = Engine::new(config);
 
-        let normal = normal_engine.search(&board, limits, &repetition_history, false, false);
-        let uninstrumented = uninstrumented_engine.search_without_stats(
-            &board,
-            limits,
-            &repetition_history,
-            false,
-            false,
-        );
+            // Compare both an empty TT and a repeated search using cached data.
+            for _ in 0..2 {
+                let normal = normal_engine.search(&board, limits, &history, false, false);
+                let debug =
+                    debug_engine.search_without_stats(&board, limits, &history, false, false);
+                assert_search_matches(&debug, &normal);
+                let root_entry = |engine: &Engine| {
+                    engine.tt.get_any(board.board_hash()).map(|entry| {
+                        (
+                            entry.flag.is_pv(),
+                            entry.flag.bound_type(),
+                            entry.flag.generation(),
+                            entry.depth,
+                            entry.eval,
+                            entry.static_eval,
+                            entry.best_move,
+                        )
+                    })
+                };
+                assert_eq!(
+                    root_entry(&debug_engine),
+                    root_entry(&normal_engine),
+                    "{fen}"
+                );
+            }
+        }
+    }
 
-        assert_eq!(uninstrumented.best_move, normal.best_move);
-        assert_eq!(uninstrumented.eval, normal.eval);
-        assert_eq!(uninstrumented.depth_reached, normal.depth_reached);
-        assert_eq!(uninstrumented.termination, normal.termination);
+    fn assert_search_matches(debug: &SearchResult, normal: &SearchResult) {
+        assert_eq!(debug.best_move, normal.best_move);
+        assert_eq!(debug.eval, normal.eval);
+        assert_eq!(debug.pv, normal.pv);
+        assert_eq!(debug.depth_reached, normal.depth_reached);
+        assert_eq!(debug.termination, normal.termination);
+        assert_eq!(debug.stats.node_stats.main, normal.stats.node_stats.main);
         assert_eq!(
-            uninstrumented.stats.node_stats.main,
-            normal.stats.node_stats.main
-        );
-        assert_eq!(
-            uninstrumented.stats.node_stats.quiescence,
+            debug.stats.node_stats.quiescence,
             normal.stats.node_stats.quiescence
         );
+        let expected = SearchStats {
+            node_stats: debug.stats.node_stats,
+            ..SearchStats::default()
+        };
+        assert_eq!(format!("{:?}", debug.stats), format!("{expected:?}"));
+    }
+
+    #[test]
+    fn search_without_stats_preserves_time_and_node_limits() {
+        let mut config = EngineConfig::default();
+        config.tt_size = 1;
+        let board = Board::from_fen(STARTPOS_FEN).unwrap();
+        let history = vec![board.board_hash()];
+        let mut zero_nodes = SearchLimits::depth(5, 3);
+        zero_nodes.max_nodes = Some(0);
+        let mut bounded_nodes = zero_nodes;
+        bounded_nodes.max_nodes = Some(2048);
+        for limits in [
+            SearchLimits::depth_and_time(5, 3, 0),
+            zero_nodes,
+            bounded_nodes,
+        ] {
+            let mut normal_engine = Engine::new(config);
+            let mut debug_engine = Engine::new(config);
+            let normal = normal_engine.search(&board, limits, &history, false, false);
+            let debug = debug_engine.search_without_stats(&board, limits, &history, false, false);
+            assert_search_matches(&debug, &normal);
+        }
+    }
+
+    #[test]
+    fn debug_negamax_rejects_insufficient_tt_depth() {
+        let mut config = EngineConfig::standard();
+        config.tt_size = 1;
+        for stored_depth in [0, 255] {
+            let mut engine = Engine::new(config);
+            let mut board = Board::from_fen("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1").unwrap();
+            engine.tt.insert(
+                board.board_hash(),
+                false,
+                TTFlag::Exact,
+                stored_depth,
+                123,
+                i16::MIN,
+                None,
+            );
+            let mut context =
+                SearchContext::new(SearchLimits::depth(256, 3), vec![board.board_hash()]);
+            assert_eq!(
+                negamax(
+                    &mut engine,
+                    &mut board,
+                    &mut context,
+                    256,
+                    NEG_INF + 1,
+                    POS_INF - 1,
+                    0,
+                    PickerFrame::ROOT,
+                    SearchOptions::NORMAL,
+                ),
+                -CHECKMATE_SCORE
+            );
+        }
+    }
+
+    #[test]
+    fn debug_quiescence_reuses_quiescence_and_main_tt_scores() {
+        let mut config = EngineConfig::standard();
+        config.tt_size = 1;
+        for stored_depth in [0, 10] {
+            let mut engine = Engine::new(config);
+            let mut board = Board::from_fen(STARTPOS_FEN).unwrap();
+            engine.tt.insert(
+                board.board_hash(),
+                false,
+                TTFlag::Exact,
+                stored_depth,
+                123,
+                i16::MIN,
+                None,
+            );
+            let mut context =
+                SearchContext::new(SearchLimits::depth(1, 6), vec![board.board_hash()]);
+            assert_eq!(
+                super::super::quiescence::quiescence(
+                    &mut engine,
+                    &mut board,
+                    &mut context,
+                    6,
+                    NEG_INF + 1,
+                    POS_INF - 1,
+                    0,
+                    PickerFrame::ROOT,
+                    0,
+                ),
+                123
+            );
+            assert_eq!(context.stats.node_stats.quiescence, 1);
+        }
     }
 }

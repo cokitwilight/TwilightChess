@@ -10,7 +10,7 @@ use crate::engine::search_stats::{
     CorrectionUpdateKind, MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS,
 };
 use crate::engine::staged::ScoredMove;
-use crate::engine::tt::{TTEntry, TTFlag, TTNodeType, score_from_tt, score_to_tt};
+use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, PickerFrame, SearchStackEntry};
 use crate::engine::{SearchContext, SearchOptions};
 use crate::eval::evaluation_for_turn;
@@ -103,10 +103,12 @@ impl Engine {
 
         context.stats.tt_stats.main.probes += 1;
 
+        let mut tt_eval = i16::MIN;
+
         if let Some(entry) = self.tt.get(board.board_hash, TTNodeType::Main) {
             context.stats.tt_stats.main.hits += 1;
 
-            match entry.flag {
+            match entry.flag.bound_type() {
                 TTFlag::Exact => context.stats.tt_stats.main.exact_hits += 1,
                 TTFlag::LowerBound => context.stats.tt_stats.main.lower_bound_hits += 1,
                 TTFlag::UpperBound => context.stats.tt_stats.main.upper_bound_hits += 1,
@@ -114,18 +116,20 @@ impl Engine {
             if entry.best_move.is_some() {
                 context.stats.tt_stats.main.move_hits += 1;
             }
-            if entry.depth < depth && options.excluded_move.is_none() {
+            if u16::from(entry.depth) < depth && options.excluded_move.is_none() {
                 context.stats.tt_stats.main.depth_rejected_hits += 1;
             }
 
-            let tt_score = score_from_tt(entry.eval, ply);
+            let tt_score = score_from_tt(entry.eval as i32, ply);
 
             tt_best_move = entry.best_move;
 
-            if entry.depth >= depth && options.excluded_move.is_none() {
+            tt_eval = entry.static_eval;
+
+            if u16::from(entry.depth) >= depth && options.excluded_move.is_none() {
                 context.stats.tt_stats.main.usable += 1;
 
-                match entry.flag {
+                match entry.flag.bound_type() {
                     TTFlag::Exact => {
                         context.stats.tt_stats.main.exact_returns += 1;
                         return tt_score;
@@ -147,8 +151,8 @@ impl Engine {
                 && self.config.search.singular.enabled
                 && options.allow_singular
                 && depth >= self.config.search.singular.minimum_depth
-                && entry.depth >= depth.saturating_sub(2)
-                && matches!(entry.flag, TTFlag::Exact | TTFlag::LowerBound)
+                && u16::from(entry.depth) >= depth.saturating_sub(2)
+                && matches!(entry.flag.bound_type(), TTFlag::Exact | TTFlag::LowerBound)
                 && tt_score.abs() < MATE_THRESHOLD;
 
             if suitable_for_singular {
@@ -156,9 +160,18 @@ impl Engine {
                     candidate_move = Some((mv, tt_score));
                 }
             }
+        } else if let Some(entry) = self.tt.get_any(board.board_hash) {
+            // A quiescence score cannot supply a main-search cutoff, but its
+            // move and static evaluation remain useful at any search depth.
+            tt_best_move = entry.best_move;
+            tt_eval = entry.static_eval;
         }
 
-        let raw_static_eval = evaluation_for_turn(board);
+        let raw_static_eval = if tt_eval != i16::MIN {
+            tt_eval as i32
+        } else {
+            evaluation_for_turn(board)
+        };
 
         let corrected_static_eval = if self.config.search.correction.enabled {
             let correction = self.history.correction.get(board);
@@ -945,15 +958,15 @@ impl Engine {
 
         if options.excluded_move.is_none() {
             context.stats.tt_stats.main.stores += 1;
+            let adjusted_depth = u8::try_from(depth).unwrap_or(u8::MAX);
             let insert_result = self.tt.insert(
                 board.board_hash,
-                TTEntry {
-                    depth,
-                    eval: score_to_tt(max_eval, ply),
-                    best_move,
-                    flag,
-                    node_type: TTNodeType::Main,
-                },
+                is_pv,
+                flag,
+                adjusted_depth,
+                score_to_tt(max_eval, ply),
+                raw_static_eval as i16,
+                best_move,
             );
             context.stats.tt_stats.main.record_insert(insert_result);
         }
@@ -1027,5 +1040,216 @@ mod tests {
         assert_eq!(context.stats.singular_stats.no_alternatives, 1);
         assert_eq!(context.stats.move_stats.main_searched, 0);
         assert_eq!(context.stats.terminal_stats.checkmates, 0);
+    }
+
+    fn assert_static_eval_is_available(cached: Option<(u8, i16)>) {
+        let mut engine = test_engine();
+        let mut board = Board::from_fen("7k/8/8/8/8/8/4Q3/4K3 w - - 0 1").unwrap();
+        let computed_eval = evaluation_for_turn(&board);
+        assert_ne!(
+            computed_eval, 0,
+            "the fixture must expose a missing evaluation"
+        );
+        let expected_eval = match cached {
+            Some((_, static_eval)) if static_eval != i16::MIN => i32::from(static_eval),
+            _ => computed_eval,
+        };
+        if let Some((depth, static_eval)) = cached {
+            engine.tt.insert(
+                board.board_hash(),
+                false,
+                TTFlag::LowerBound,
+                depth,
+                -20_000,
+                static_eval,
+                None,
+            );
+        }
+        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+        engine.negamax(
+            &mut board,
+            &mut context,
+            1,
+            NEG_INF + 1,
+            POS_INF - 1,
+            0,
+            PickerFrame::ROOT,
+            SearchOptions::NORMAL,
+        );
+
+        // Static evaluation is valid regardless of the stored search depth.
+        // It must feed the search stack and survive the subsequent TT store.
+        assert_eq!(
+            (
+                context.stack[0].static_eval,
+                i32::from(
+                    engine
+                        .tt
+                        .get(board.board_hash(), TTNodeType::Main)
+                        .unwrap()
+                        .static_eval
+                ),
+            ),
+            (Some(expected_eval), expected_eval),
+            "cached entry: {cached:?}",
+        );
+    }
+
+    #[test]
+    fn tt_miss_computes_and_stores_static_evaluation() {
+        assert_static_eval_is_available(None);
+    }
+
+    #[test]
+    fn shallow_tt_hit_reuses_cached_static_evaluation() {
+        assert_static_eval_is_available(Some((0, 321)));
+    }
+
+    #[test]
+    fn shallow_tt_hit_with_missing_static_evaluation_recomputes_it() {
+        assert_static_eval_is_available(Some((0, i16::MIN)));
+    }
+
+    #[test]
+    fn usable_tt_bound_reuses_cached_static_evaluation() {
+        assert_static_eval_is_available(Some((1, 321)));
+    }
+
+    #[test]
+    fn quiescence_entry_cannot_supply_a_main_search_score() {
+        let mut engine = test_engine();
+        let mut board = Board::from_fen("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1").unwrap();
+        engine.tt.insert(
+            board.board_hash(),
+            false,
+            TTFlag::Exact,
+            0,
+            123,
+            i16::MIN,
+            None,
+        );
+        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+
+        let score = engine.negamax(
+            &mut board,
+            &mut context,
+            1,
+            NEG_INF + 1,
+            POS_INF - 1,
+            0,
+            PickerFrame::ROOT,
+            SearchOptions::NORMAL,
+        );
+
+        assert_eq!(score, -CHECKMATE_SCORE);
+        assert_eq!(context.stats.tt_stats.main.hits, 0);
+        assert_eq!(context.stats.tt_stats.main.depth_rejected_hits, 0);
+        assert_eq!(context.stats.tt_stats.main.exact_returns, 0);
+    }
+
+    #[test]
+    fn singular_eligibility_does_not_wrap_requested_depth() {
+        let mut engine = test_engine();
+        let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").unwrap();
+        let only_legal_move = Move::new(H8, square(6, 6), MoveType::Capture, None);
+        engine.tt.insert(
+            board.board_hash(),
+            false,
+            TTFlag::LowerBound,
+            1,
+            -123,
+            i16::MIN,
+            Some(only_legal_move),
+        );
+        let mut context = SearchContext::new(SearchLimits::depth(258, 1), vec![board.board_hash()]);
+        let score = engine.negamax(
+            &mut board,
+            &mut context,
+            258,
+            NEG_INF + 1,
+            POS_INF - 1,
+            0,
+            PickerFrame::ROOT,
+            SearchOptions::NORMAL,
+        );
+        assert_eq!(score, 0);
+        assert_eq!(context.stats.singular_stats.attempts, 0);
+        assert_eq!(
+            engine
+                .tt
+                .get(board.board_hash(), TTNodeType::Main)
+                .unwrap()
+                .depth,
+            255
+        );
+    }
+
+    #[test]
+    fn requested_depth_256_rejects_a_255_depth_entry() {
+        let mut engine = test_engine();
+        let mut board = Board::from_fen("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1").unwrap();
+        engine.tt.insert(
+            board.board_hash(),
+            false,
+            TTFlag::Exact,
+            255,
+            123,
+            i16::MIN,
+            None,
+        );
+        let mut context = SearchContext::new(SearchLimits::depth(256, 1), vec![board.board_hash()]);
+
+        let score = engine.negamax(
+            &mut board,
+            &mut context,
+            256,
+            NEG_INF + 1,
+            POS_INF - 1,
+            0,
+            PickerFrame::ROOT,
+            SearchOptions::NORMAL,
+        );
+
+        // Saturating a requested depth still overstates the cached result's
+        // coverage. Widen the stored depth for comparison instead.
+        assert_eq!(score, -CHECKMATE_SCORE);
+        assert_eq!(context.stats.tt_stats.main.exact_returns, 0);
+        assert_eq!(context.stats.tt_stats.main.depth_rejected_hits, 1);
+    }
+
+    #[test]
+    fn requested_depth_above_u8_range_does_not_wrap_to_quiescence_depth() {
+        // Regression: `depth as u8` turns 256 into zero, accepting a qsearch
+        // exact score as a 256-ply result. A terminal board keeps this bounded.
+        let mut engine = test_engine();
+        let mut board = Board::from_fen("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1").unwrap();
+        engine.tt.insert(
+            board.board_hash(),
+            false,
+            TTFlag::Exact,
+            0,
+            123,
+            i16::MIN,
+            None,
+        );
+        let depth = u16::from(u8::MAX) + 1;
+        let mut context =
+            SearchContext::new(SearchLimits::depth(depth, 1), vec![board.board_hash()]);
+
+        let score = engine.negamax(
+            &mut board,
+            &mut context,
+            depth,
+            NEG_INF + 1,
+            POS_INF - 1,
+            0,
+            PickerFrame::ROOT,
+            SearchOptions::NORMAL,
+        );
+
+        assert_eq!(score, -CHECKMATE_SCORE);
+        assert_eq!(context.stats.tt_stats.main.exact_returns, 0);
+        assert_eq!(context.stats.tt_stats.main.depth_rejected_hits, 0);
+        assert_eq!(context.stats.tt_stats.main.hits, 0);
     }
 }
