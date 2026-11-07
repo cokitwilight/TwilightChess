@@ -48,6 +48,8 @@ impl Engine {
             termination: SearchTermination::DepthLimit,
         };
 
+        let mut cumulative_stats = ctx.stats;
+
         let mut total_time: f64 = 0.0;
         let mut total_nodes: u64 = 0;
         let mut nps_samples = [0.0f64; 128];
@@ -66,6 +68,7 @@ impl Engine {
             }
 
             let stats_before = ctx.stats;
+
             let start = Instant::now();
 
             let full_alpha = NEG_INF + 1;
@@ -189,7 +192,15 @@ impl Engine {
 
             let elapsed_secs = elapsed.as_secs_f64();
             let depth_stats = ctx.stats - stats_before;
+
+            cumulative_stats += depth_stats;
+
             let depth_nodes = depth_stats.total_nodes();
+
+            cumulative_stats
+                .iterative_deepening_stats
+                .record_iteration(depth, depth_nodes);
+
             ctx.stats
                 .iterative_deepening_stats
                 .record_iteration(depth, depth_nodes);
@@ -237,7 +248,8 @@ impl Engine {
                 );
 
                 println!(
-                    "Eval: {}. Time: {:.3}s. NPS: {} | Avg: {} | Median: {} | Weighted: {}",
+                    "Depth: {}. Eval: {}. Time: {:.3}s. NPS: {} | Avg: {} | Median: {} | Weighted: {}",
+                    depth,
                     result.eval,
                     elapsed_secs,
                     fmt_nps(depth_nps),
@@ -271,6 +283,9 @@ impl Engine {
                 total_time,
                 format!("{:.2}", total_nps).separate_with_commas()
             );
+            println!();
+            println!("Cummulative Stats:");
+            cumulative_stats.print_all(best_result.depth_reached, total_time);
         }
 
         best_result.stats = ctx.stats;

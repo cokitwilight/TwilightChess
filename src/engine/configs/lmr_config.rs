@@ -1,6 +1,9 @@
 #[derive(Clone, Copy, Debug)]
 pub struct LMRConfig {
     pub enabled: bool,
+    pub min_depth: u16,       // minimum depth to apply LMR
+    pub min_move_number: i32, // minimum move number to apply LMR
+
     // add different values here
     pub base: f64,
     pub divisor: f64,
@@ -13,6 +16,8 @@ impl Default for LMRConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            min_depth: 3,
+            min_move_number: 1,
             base: 0.75,
             divisor: 2.00,
             history_enabled: true,
@@ -31,6 +36,8 @@ impl LMRConfig {
     pub fn experimental() -> Self {
         Self {
             enabled: true,
+            min_depth: 3,
+            min_move_number: 3,
             base: 0.75,
             divisor: 1.25,
             history_enabled: true,

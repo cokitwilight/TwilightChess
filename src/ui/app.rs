@@ -17,10 +17,10 @@ use crate::ui::{
 
 use eframe::egui;
 
-const DEFAULT_BOT_DEPTH: u16 = 25;
+const DEFAULT_BOT_DEPTH: u16 = 30;
 const DEFAULT_Q_BOT_DEPTH: u16 = 4;
 
-const DEFAULT_BOT_TIME_MS: u64 = 2_000;
+const DEFAULT_BOT_TIME_MS: u64 = 8_000;
 
 const OPENING_PLY_LIMIT: usize = 20;
 const ENDGAME_PHASE_MAX: i32 = 12;

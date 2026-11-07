@@ -149,6 +149,8 @@ impl Engine {
         let info = MoveGenInfo::calculate(board, side_to_move);
         let mut pending_move = move_picker.get_next(board, &info, context, &self.history);
 
+        let mut raw_static_eval = i16::MIN as i32;
+
         if in_check {
             if pending_move.is_none() {
                 context.stats.terminal_stats.checkmates += 1;
@@ -220,7 +222,7 @@ impl Engine {
                 }
             }
 
-            let raw_static_eval = evaluation_for_turn(board);
+            raw_static_eval = evaluation_for_turn(board);
 
             stand_pat = if self.config.search.correction.enabled {
                 let correction = self.history.correction.get(board);
@@ -245,7 +247,7 @@ impl Engine {
                     TTFlag::LowerBound,
                     0,
                     score_to_tt(raw_static_eval, ply),
-                    i16::MIN,
+                    raw_static_eval as i16,
                     None,
                 );
                 context
@@ -373,7 +375,7 @@ impl Engine {
                     TTFlag::LowerBound,
                     0,
                     score_to_tt(eval, ply),
-                    i16::MIN,
+                    raw_static_eval as i16,
                     best_move,
                 );
                 context
@@ -400,7 +402,7 @@ impl Engine {
             flag,
             0,
             score_to_tt(best_eval, ply),
-            i16::MIN,
+            raw_static_eval as i16,
             best_move,
         );
         context

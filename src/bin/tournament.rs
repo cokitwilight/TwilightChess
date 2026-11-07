@@ -160,37 +160,29 @@ fn tournament_same_nodes() {
 
 fn tournament_lmr() {
     let mut match_players = MatchPlayers::from_depth(
-        "LMR Special".to_string(),
-        "LMR Base".to_string(),
+        "LMR 1 move".to_string(),
+        "LMR 3 move".to_string(),
         24,
         6,
         24,
         6,
     );
 
-    match_players.white.config = EngineConfig::standard();
-    match_players.black.config = EngineConfig::standard();
+    match_players.white.config = EngineConfig::default();
+    match_players.black.config = EngineConfig::default();
 
-    match_players.white.config.limits.soft_time_limit_ms = Some(1000);
-    match_players.black.config.limits.soft_time_limit_ms = Some(1000);
+    match_players.white.config.limits.soft_time_limit_ms = Some(250);
+    match_players.black.config.limits.soft_time_limit_ms = Some(250);
 
     match_players.white.config.search.lmr.enabled = true;
-    match_players.white.config.search.lmr.history_enabled = true;
-    match_players.white.config.search.lmr.history_scale = 70;
-
-    match_players.white.config.search.lmr.base = 0.75;
-    match_players.white.config.search.lmr.divisor = 1.25;
+    match_players.white.config.search.lmr.min_move_number = 1;
 
     match_players.black.config.search.lmr.enabled = true;
-    match_players.black.config.search.lmr.history_enabled = true;
-    match_players.black.config.search.lmr.history_scale = 94;
-
-    match_players.black.config.search.lmr.base = 0.75;
-    match_players.black.config.search.lmr.divisor = 2.25;
+    match_players.black.config.search.lmr.min_move_number = 3;
 
     let opening_suite = build_opening_book();
 
-    let result = play_games(opening_suite, 1, 10, match_players, Color::White);
+    let result = play_games(opening_suite, 1, 200, match_players, Color::White);
 
     result.review().expect("IO Error");
 }

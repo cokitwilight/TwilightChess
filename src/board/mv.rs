@@ -5,18 +5,23 @@ use std::num::NonZeroU16;
 
 pub const MAX_MOVES: usize = 256;
 
+// Bits 0..=5 store the source, bits 6..=11 the destination, and bits 12..=15 the flags.
+const SQUARE_MASK: u16 = 0x003F;
+const TO_SHIFT: u32 = 6;
+
 // Every supported flag encoding is nonzero, reserving zero for Option<Move>::None.
-const NORMAL: u16 = 0x0001;
-const EN_PASSANT: u16 = 0x0002;
-const CASTLE: u16 = 0x0003;
-const PROMOTION_KNIGHT: u16 = 0x0004;
-const PROMOTION_BISHOP: u16 = 0x0005;
-const PROMOTION_ROOK: u16 = 0x0006;
-const PROMOTION_QUEEN: u16 = 0x0007;
+const NORMAL: u16 = 0x1000;
+const EN_PASSANT: u16 = 0x2000;
+const CASTLE: u16 = 0x3000;
+const PROMOTION_KNIGHT: u16 = 0x4000;
+const PROMOTION_BISHOP: u16 = 0x5000;
+const PROMOTION_ROOK: u16 = 0x6000;
+const PROMOTION_QUEEN: u16 = 0x7000;
 
-const IS_PROMOTION: u16 = 0x0004; // promotion is the third bit(decimal 4)
-
-const CAPTURE: u16 = 0x0008; // a promotion can also be a capture so 4 bit is only for capture
+const IS_PROMOTION: u16 = 0x4000;
+const CAPTURE: u16 = 0x8000;
+const CODE_MASK: u16 = 0x7000;
+const FLAGS_MASK: u16 = CODE_MASK | CAPTURE;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
@@ -39,8 +44,8 @@ impl Move {
     };
 
     pub fn new(from: Square, to: Square, kind: MoveType, promotion: Option<PieceType>) -> Self {
-        let from = (from as u16) << 10;
-        let to = (to as u16) << 4;
+        let from = from as u16;
+        let to = (to as u16) << TO_SHIFT;
         let kind = match kind {
             MoveType::Normal => NORMAL,
             MoveType::Capture => CAPTURE,
@@ -68,7 +73,7 @@ impl Move {
     }
 
     pub fn is_capture(self) -> bool {
-        return self.mv.get() & CAPTURE == CAPTURE || self.mv.get() & 0x0007 == EN_PASSANT;
+        return self.mv.get() & CAPTURE == CAPTURE || self.mv.get() & CODE_MASK == EN_PASSANT;
     }
 
     pub fn is_promotion(self) -> bool {
@@ -76,17 +81,17 @@ impl Move {
     }
 
     pub fn is_castle(self) -> bool {
-        self.mv.get() & 0x000F == CASTLE
+        self.mv.get() & FLAGS_MASK == CASTLE
     }
 
     pub fn from(self) -> Square {
-        (self.mv.get() >> 10) as Square
+        (self.mv.get() & SQUARE_MASK) as Square
     }
     pub fn to(self) -> Square {
-        ((self.mv.get() >> 4) & 0x003F) as Square
+        ((self.mv.get() >> TO_SHIFT) & SQUARE_MASK) as Square
     }
     pub fn kind(self) -> MoveType {
-        match self.mv.get() & 0x000F {
+        match self.mv.get() & FLAGS_MASK {
             NORMAL => MoveType::Normal,
             CAPTURE => MoveType::Capture,
             EN_PASSANT => MoveType::EnPassant,
@@ -101,7 +106,7 @@ impl Move {
         }
     }
     pub fn promotion(self) -> Option<PieceType> {
-        let promo = Option::from(match self.mv.get() & PROMOTION_QUEEN {
+        let promo = Option::from(match self.mv.get() & CODE_MASK {
             PROMOTION_KNIGHT => PieceType::Knight,
             PROMOTION_BISHOP => PieceType::Bishop,
             PROMOTION_ROOK => PieceType::Rook,
@@ -224,6 +229,7 @@ mod tests {
             for to in 0..64 {
                 for &(kind, promotion) in &cases {
                     let mv = Move::new(from, to, kind, promotion);
+                    assert_eq!(mv.mv.get() & 0x0FFF, (u16::from(to) << 6) | u16::from(from));
                     assert_eq!(mv.from(), from);
                     assert_eq!(mv.to(), to);
                     assert_eq!(mv.kind(), kind);

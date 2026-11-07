@@ -307,8 +307,17 @@ impl Engine {
             context.stack[ply].static_eval = Some(raw_static_eval);
         }
 
-        let is_improving = if ply >= 2 && !in_check {
+        let is_improving_2_plies = if ply >= 2 && !in_check {
             match context.stack[ply - 2].static_eval {
+                Some(previous_eval) => raw_static_eval > previous_eval, // since stored value is raw as well only compare to the raw static eval
+                None => false,
+            }
+        } else {
+            false
+        };
+
+        let is_improving_4_plies = if ply >= 4 && !in_check {
+            match context.stack[ply - 4].static_eval {
                 Some(previous_eval) => raw_static_eval > previous_eval, // since stored value is raw as well only compare to the raw static eval
                 None => false,
             }
@@ -485,8 +494,10 @@ impl Engine {
             let child_hash = board.board_hash();
             context.repetition_history.push(child_hash); // only store if valid move
 
-            let can_lmr =
-                can_reduce && self.config.search.lmr.enabled && depth >= 3 && searched_moves >= 3;
+            let can_lmr = can_reduce
+                && self.config.search.lmr.enabled
+                && depth >= self.config.search.lmr.min_depth
+                && searched_moves >= self.config.search.lmr.min_move_number;
 
             let reduction = if can_lmr {
                 let base_reduction = self
@@ -527,7 +538,13 @@ impl Engine {
                     }
                 }
 
-                if !is_improving {
+                if !is_improving_2_plies && !is_improving_4_plies {
+                    non_improving_delta = base_reduction / 2;
+                    current_reduction += non_improving_delta;
+                    if non_improving_delta != 0 {
+                        context.stats.lmr_stats.non_improving_adjustments += 1;
+                    }
+                } else if !is_improving_2_plies || !is_improving_4_plies {
                     non_improving_delta = base_reduction / 3;
                     current_reduction += non_improving_delta;
                     if non_improving_delta != 0 {
