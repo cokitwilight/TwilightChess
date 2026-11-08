@@ -316,15 +316,6 @@ impl Engine {
             false
         };
 
-        let is_improving_4_plies = if ply >= 4 && !in_check {
-            match context.stack[ply - 4].static_eval {
-                Some(previous_eval) => raw_static_eval > previous_eval, // since stored value is raw as well only compare to the raw static eval
-                None => false,
-            }
-        } else {
-            false
-        };
-
         let mut searched_quiets = [ScoredMove::new(); MAX_QUIETS];
         let mut q = 0usize;
         let mut quiet_moves_seen = 0usize;
@@ -538,13 +529,7 @@ impl Engine {
                     }
                 }
 
-                if !is_improving_2_plies && !is_improving_4_plies {
-                    non_improving_delta = base_reduction / 2;
-                    current_reduction += non_improving_delta;
-                    if non_improving_delta != 0 {
-                        context.stats.lmr_stats.non_improving_adjustments += 1;
-                    }
-                } else if !is_improving_2_plies || !is_improving_4_plies {
+                if !is_improving_2_plies {
                     non_improving_delta = base_reduction / 3;
                     current_reduction += non_improving_delta;
                     if non_improving_delta != 0 {

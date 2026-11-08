@@ -363,8 +363,10 @@ pub(super) fn negamax(
         let child_hash = board.board_hash();
         context.repetition_history.push(child_hash);
 
-        let can_lmr =
-            can_reduce && engine.config.search.lmr.enabled && depth >= 3 && searched_moves >= 3;
+        let can_lmr = can_reduce
+            && engine.config.search.lmr.enabled
+            && depth >= engine.config.search.lmr.min_depth
+            && searched_moves >= engine.config.search.lmr.min_move_number;
 
         let reduction = if can_lmr {
             let base_reduction = engine
