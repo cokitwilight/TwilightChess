@@ -5,6 +5,6 @@ pub struct CorrectionConfig {
 
 impl Default for CorrectionConfig {
     fn default() -> Self {
-        Self { enabled: true }
+        Self { enabled: false }
     }
 }

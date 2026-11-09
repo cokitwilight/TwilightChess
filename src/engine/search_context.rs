@@ -25,6 +25,8 @@ impl PickerFrame {
 pub struct SearchContext {
     pub limits: SearchLimits,
     pub stats: SearchStats,
+    /// Deepest root-relative ply visited in the current iteration, including quiescence.
+    pub seldepth: usize,
     pub stack: [SearchStackEntry; MAX_PLY as usize],
 
     pub move_buffers: Box<[MoveBuffer]>,
@@ -42,6 +44,7 @@ impl SearchContext {
         Self {
             limits,
             stats: SearchStats::default(),
+            seldepth: 0,
             stack: [SearchStackEntry::default(); MAX_PLY as usize],
             move_buffers: vec![MoveBuffer::new(); PICKER_FRAME_COUNT].into_boxed_slice(),
             killer_moves: KillerTable::new(),

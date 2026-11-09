@@ -27,6 +27,7 @@ impl Engine {
                 best_move: Some(book_mv),
                 eval: 0,
                 depth_reached: 0,
+                seldepth: 0,
                 stats: context.stats,
                 pv: [None; MAX_PV],
                 elapsed: context.elapsed(),

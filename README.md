@@ -78,6 +78,10 @@ The main executable can also enter UCI mode with `--uci`. The protocol supports
 `setoption` for `Hash`, `Clear Hash`, and `OwnBook`, and `go` limits for depth,
 nodes, move time, and the standard clock/increment fields.
 
+After each completed search iteration, UCI reports `depth` and `seldepth` for
+GUI displays such as Cute Chess's depth pair. `seldepth` is the deepest ply
+visited during that iteration, including quiescence search.
+
 Search is currently synchronous because the engine does not expose external
 cancellation. As a result, interruptible `stop`, `ponder`, `infinite`,
 `searchmoves`, and mate-limited searches are not implemented yet.

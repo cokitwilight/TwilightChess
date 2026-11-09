@@ -31,6 +31,7 @@ pub(super) fn negamax(
     }
 
     context.stats.node_stats.main += 1;
+    context.seldepth = context.seldepth.max(ply);
 
     let is_pv = beta != alpha + 1;
 

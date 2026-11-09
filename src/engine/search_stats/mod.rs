@@ -455,7 +455,7 @@ mod tests {
         let game = Game::new();
         let mut config = EngineConfig::default();
         config.tt_size = 1;
-        config.search.lmp.enabled = true;
+        config.search.all_enabled();
         let mut engine = Engine::new(config);
 
         let result = engine.search(

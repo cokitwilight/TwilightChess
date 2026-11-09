@@ -1366,6 +1366,7 @@ mod tests {
             best_move: Some(Move::NULL),
             eval: 0,
             depth_reached: 1,
+            seldepth: 1,
             stats,
             pv: [None; MAX_PV],
             elapsed: Duration::from_millis(elapsed_ms),

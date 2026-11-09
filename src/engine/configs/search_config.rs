@@ -76,4 +76,18 @@ impl SearchConfig {
             experimental,
         }
     }
+
+    pub fn all_enabled(&mut self) {
+        self.aspiration.enabled = true;
+        self.null_move.enabled = true;
+        self.delta.enabled = true;
+        self.lmr.enabled = true;
+        self.lmp.enabled = true;
+        self.see.enabled = true;
+        self.rfp.enabled = true;
+        self.fut.enabled = true;
+        self.singular.enabled = true;
+        self.correction.enabled = true;
+        self.experimental.enabled = true;
+    }
 }

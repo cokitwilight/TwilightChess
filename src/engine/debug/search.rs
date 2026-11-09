@@ -36,6 +36,26 @@ impl Engine {
             can_print,
         )
     }
+
+    /// Reports each completed iteration without enabling detailed instrumentation.
+    pub(crate) fn search_without_stats_with_progress(
+        &mut self,
+        board: &Board,
+        limits: SearchLimits,
+        repetition_history: &Vec<u64>,
+        opening_allowed: bool,
+        on_iteration: &mut dyn FnMut(&SearchResult),
+    ) -> SearchResult {
+        search_with_progress(
+            self,
+            board,
+            limits,
+            repetition_history,
+            opening_allowed,
+            false,
+            on_iteration,
+        )
+    }
 }
 
 /// Runs the normal engine search without collecting instrumentation other than
@@ -47,6 +67,26 @@ pub fn search_without_stats(
     repetition_history: &Vec<u64>,
     opening_allowed: bool,
     can_print: bool,
+) -> SearchResult {
+    search_with_progress(
+        engine,
+        board,
+        limits,
+        repetition_history,
+        opening_allowed,
+        can_print,
+        &mut |_| {},
+    )
+}
+
+fn search_with_progress(
+    engine: &mut Engine,
+    board: &Board,
+    limits: SearchLimits,
+    repetition_history: &Vec<u64>,
+    opening_allowed: bool,
+    can_print: bool,
+    on_iteration: &mut dyn FnMut(&SearchResult),
 ) -> SearchResult {
     let mut context = SearchContext::new(limits, repetition_history.clone());
     let mut board = board.clone();
@@ -60,6 +100,7 @@ pub fn search_without_stats(
             best_move: Some(book_mv),
             eval: 0,
             depth_reached: 0,
+            seldepth: 0,
             stats: context.stats,
             pv: [None; MAX_PV],
             elapsed: context.elapsed(),
@@ -68,7 +109,7 @@ pub fn search_without_stats(
     }
 
     engine.tt.new_search();
-    iterative_deepening(engine, &mut board, &mut context, can_print)
+    iterative_deepening(engine, &mut board, &mut context, can_print, on_iteration)
 }
 
 fn iterative_deepening(
@@ -76,6 +117,7 @@ fn iterative_deepening(
     board: &mut Board,
     ctx: &mut SearchContext,
     can_print: bool,
+    on_iteration: &mut dyn FnMut(&SearchResult),
 ) -> SearchResult {
     let side_to_move = board.side_to_move();
     let info = MoveGenInfo::calculate(board, side_to_move);
@@ -92,6 +134,7 @@ fn iterative_deepening(
         best_move: fallback_move,
         eval: 0,
         depth_reached: 0,
+        seldepth: 0,
         stats: SearchStats::default(),
         pv: [None; MAX_PV],
         elapsed: Duration::ZERO,
@@ -113,6 +156,7 @@ fn iterative_deepening(
             break;
         }
 
+        ctx.seldepth = 0;
         let nodes_before_depth = ctx.stats.total_nodes();
         let start = Instant::now();
 
@@ -250,6 +294,9 @@ fn iterative_deepening(
 
         best_result = result;
         best_result.depth_reached = depth;
+        best_result.stats = ctx.stats;
+        best_result.elapsed = ctx.elapsed();
+        on_iteration(&best_result);
     }
 
     total_time = ctx.elapsed().as_secs_f64();
@@ -476,6 +523,7 @@ fn search_root(
             best_move,
             eval: best_eval,
             depth_reached: depth,
+            seldepth: ctx.seldepth,
             stats: ctx.stats,
             pv: best_pv,
             elapsed: Duration::ZERO,
@@ -493,6 +541,7 @@ fn search_root(
             best_move: None,
             eval,
             depth_reached: depth,
+            seldepth: ctx.seldepth,
             stats: ctx.stats,
             pv: best_pv,
             elapsed: Duration::ZERO,
@@ -521,6 +570,7 @@ fn search_root(
         best_move,
         eval: best_eval,
         depth_reached: depth,
+        seldepth: ctx.seldepth,
         stats: ctx.stats,
         pv: best_pv,
         elapsed: Duration::ZERO,
@@ -533,6 +583,39 @@ mod tests {
     use super::*;
     use crate::board::STARTPOS_FEN;
     use crate::engine::configs::EngineConfig;
+
+    #[test]
+    fn interrupted_iteration_keeps_the_last_completed_depth_pair() {
+        let config = EngineConfig {
+            tt_size: 1,
+            ..EngineConfig::default()
+        };
+        let board = Board::from_fen(STARTPOS_FEN).unwrap();
+        let history = vec![board.board_hash()];
+        let completed = Engine::new(config).search_without_stats(
+            &board,
+            SearchLimits::depth(1, 2),
+            &history,
+            false,
+            false,
+        );
+        let mut limits = SearchLimits::depth(3, 2);
+        limits.max_nodes = Some(completed.stats.total_nodes() + 1);
+        let mut iterations = Vec::new();
+        let result = Engine::new(config).search_without_stats_with_progress(
+            &board,
+            limits,
+            &history,
+            false,
+            &mut |iteration| iterations.push((iteration.depth_reached, iteration.seldepth)),
+        );
+
+        assert_eq!(result.termination, SearchTermination::NodeLimit);
+        assert_eq!(iterations, vec![(1, completed.seldepth)]);
+        assert_eq!(result.depth_reached, completed.depth_reached);
+        assert_eq!(result.seldepth, completed.seldepth);
+        assert!(result.stats.total_nodes() > completed.stats.total_nodes());
+    }
 
     #[test]
     fn search_without_stats_only_populates_node_counts() {
@@ -619,6 +702,7 @@ mod tests {
         assert_eq!(debug.eval, normal.eval);
         assert_eq!(debug.pv, normal.pv);
         assert_eq!(debug.depth_reached, normal.depth_reached);
+        assert_eq!(debug.seldepth, normal.seldepth);
         assert_eq!(debug.termination, normal.termination);
         assert_eq!(debug.stats.node_stats.main, normal.stats.node_stats.main);
         assert_eq!(

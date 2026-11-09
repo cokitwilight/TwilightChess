@@ -42,6 +42,7 @@ impl Engine {
             best_move: fallback_move,
             eval: 0,
             depth_reached: 0,
+            seldepth: 0,
             stats: SearchStats::default(),
             pv: [None; MAX_PV],
             elapsed: Duration::ZERO,
@@ -67,6 +68,7 @@ impl Engine {
                 break;
             }
 
+            ctx.seldepth = 0;
             let stats_before = ctx.stats;
 
             let start = Instant::now();
@@ -508,6 +510,7 @@ impl Engine {
                 best_move,
                 eval: best_eval,
                 depth_reached: depth,
+                seldepth: ctx.seldepth,
                 stats: ctx.stats,
                 pv: best_pv,
                 elapsed: Duration::ZERO,
@@ -527,6 +530,7 @@ impl Engine {
                 best_move: None,
                 eval,
                 depth_reached: depth,
+                seldepth: ctx.seldepth,
                 stats: ctx.stats,
                 pv: best_pv,
                 elapsed: Duration::ZERO,
@@ -557,6 +561,7 @@ impl Engine {
             best_move,
             eval: best_eval,
             depth_reached: depth,
+            seldepth: ctx.seldepth,
             stats: ctx.stats,
             pv: best_pv, // TODO: Implement principal variation
             elapsed: Duration::ZERO,

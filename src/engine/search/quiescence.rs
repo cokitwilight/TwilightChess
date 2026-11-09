@@ -31,6 +31,7 @@ impl Engine {
         }
 
         context.stats.node_stats.quiescence += 1;
+        context.seldepth = context.seldepth.max(ply);
 
         // NOTE: These will never be true in the first call to quiescence since negamax does this check first before calling if depth == 0 -> quiescence
         // this is why quiescence qtt probes always equals qnodes.

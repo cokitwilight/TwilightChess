@@ -26,6 +26,7 @@ pub(super) fn quiescence(
     }
 
     context.stats.node_stats.quiescence += 1;
+    context.seldepth = context.seldepth.max(ply);
 
     if Engine::repetition_in_search(context, board.board_hash(), board.halfmove_clock() as usize) {
         return 0;

@@ -195,14 +195,24 @@ impl UciSession {
             })
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
 
-        let result = self.engine.search_without_stats(
+        let mut output_error = None;
+        let result = self.engine.search_without_stats_with_progress(
             &self.position.board,
             limits,
             &self.position.repetition_history,
             self.own_book,
-            false,
+            &mut |iteration| {
+                if output_error.is_none() {
+                    output_error = write_search_info(output, iteration)
+                        .and_then(|()| output.flush())
+                        .err();
+                }
+            },
         );
 
+        if let Some(error) = output_error {
+            return Err(error);
+        }
         write_search_info(output, &result)?;
 
         match result.best_move {
@@ -391,8 +401,9 @@ fn write_search_info<W: Write>(output: &mut W, result: &SearchResult) -> io::Res
 
     write!(
         output,
-        "info depth {} score {} nodes {nodes} time {time_ms} nps {nps}",
+        "info depth {} seldepth {} score {} nodes {nodes} time {time_ms} nps {nps}",
         result.depth_reached,
+        result.seldepth,
         format_uci_score(result.eval)
     )?;
 
@@ -509,9 +520,65 @@ mod tests {
         run_uci_with_config(input, &mut output, test_config()).unwrap();
 
         let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("info depth 1 score "));
+        assert!(output.contains("info depth 1 seldepth "));
         assert!(output.contains("bestmove "));
         assert!(!output.contains("bestmove 0000"));
+    }
+
+    #[test]
+    fn completed_depths_are_reported_and_flushed_during_search() {
+        #[derive(Default)]
+        struct ProgressOutput {
+            bytes: Vec<u8>,
+            flushed_depths: Vec<u16>,
+        }
+
+        impl Write for ProgressOutput {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.bytes.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                let text = std::str::from_utf8(&self.bytes).unwrap();
+                let fields: Vec<_> = text.lines().last().unwrap().split_whitespace().collect();
+                assert_eq!(&fields[..2], &["info", "depth"]);
+                self.flushed_depths.push(fields[2].parse().unwrap());
+                Ok(())
+            }
+        }
+
+        let mut session = UciSession::new(test_config());
+        let mut output = ProgressOutput::default();
+        session.go("depth 3", &mut output).unwrap();
+
+        assert_eq!(output.flushed_depths, vec![1, 2, 3]);
+        let text = String::from_utf8(output.bytes).unwrap();
+        for line in text.lines().filter(|line| line.starts_with("info depth ")) {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            let depth: usize = fields[2].parse().unwrap();
+            assert_eq!(fields[3], "seldepth");
+            let seldepth: usize = fields[4].parse().unwrap();
+            assert!(seldepth >= depth, "{line}");
+        }
+        assert!(text.lines().last().unwrap().starts_with("bestmove "));
+    }
+
+    #[test]
+    fn selective_depth_includes_quiescence() {
+        let mut session = UciSession::new(test_config());
+        session
+            .set_position(
+                "fen r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            )
+            .unwrap();
+        let mut output = Vec::new();
+        session.go("depth 1", &mut output).unwrap();
+
+        let text = String::from_utf8(output).unwrap();
+        let fields: Vec<_> = text.lines().next().unwrap().split_whitespace().collect();
+        assert_eq!(&fields[..4], &["info", "depth", "1", "seldepth"]);
+        assert!(fields[4].parse::<usize>().unwrap() > 1, "{text}");
     }
 
     #[test]

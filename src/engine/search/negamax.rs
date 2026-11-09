@@ -37,6 +37,7 @@ impl Engine {
         }
 
         context.stats.node_stats.main += 1;
+        context.seldepth = context.seldepth.max(ply);
 
         // Classify the original window before the TT potentially narrows it.
         let is_pv = beta != alpha + 1;

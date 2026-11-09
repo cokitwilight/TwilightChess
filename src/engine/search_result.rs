@@ -19,6 +19,8 @@ pub struct SearchResult {
     pub best_move: Option<Move>,
     pub eval: i32,
     pub depth_reached: u16,
+    /// Deepest root-relative ply visited in the last completed iteration.
+    pub seldepth: usize,
     pub stats: SearchStats,
     pub pv: [Option<Move>; MAX_PV],
     pub elapsed: Duration,
