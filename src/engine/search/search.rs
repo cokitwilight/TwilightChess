@@ -79,8 +79,8 @@ pub fn is_insufficient_material(board: &Board) -> bool {
     let w_bishops = board.pieces(Color::White, PieceType::Bishop);
     let b_bishops = board.pieces(Color::Black, PieceType::Bishop);
 
-    let knights = w_knights & b_knights;
-    let bishops = w_bishops & b_bishops;
+    let knights = w_knights | b_knights;
+    let bishops = w_bishops | b_bishops;
 
     let knight_count = knights.count_ones();
     let bishop_count = bishops.count_ones();
