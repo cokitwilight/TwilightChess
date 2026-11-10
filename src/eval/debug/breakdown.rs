@@ -50,11 +50,11 @@ pub fn evaluation_breakdown(board: &Board) -> EvalBreakdown {
     let eg_phase = MAX_PHASE - phase;
     let pst = (board.mg_pst() * phase + board.eg_pst() * eg_phase) / MAX_PHASE;
     let material = board.material();
-    let mobility = mobility_score(board, &eval_info);
-    let pawns = pawn_eval(board, &eval_info);
-    let knights = knight_eval(board, &eval_info);
-    let sliders = sliders_eval(board, &eval_info);
-    let king = king_eval(board, &eval_info);
+    let mobility = mobility_score(board, &eval_info).0;
+    let pawns = pawn_eval(board, &eval_info).0;
+    let knights = knight_eval(board, &eval_info).0;
+    let sliders = sliders_eval(board, &eval_info).0;
+    let king = king_eval(board, &eval_info).0;
     let tempo = match board.side_to_move() {
         Color::White => 15,
         Color::Black => -15,
@@ -139,28 +139,28 @@ pub(super) fn summary_breakdown(board: &Board, info: &EvalInfo) -> SummaryBreakd
         ScoreLine::with_net("Piece-square tables", white_pst, black_pst, compact.pst),
         ScoreLine::from_sides(
             "Mobility",
-            mobility_score_raw(board, Color::White, info),
-            mobility_score_raw(board, Color::Black, info),
+            mobility_score_raw(board, Color::White, info).0,
+            mobility_score_raw(board, Color::Black, info).0,
         ),
         ScoreLine::from_sides(
             "Pawns",
-            pawn_eval_raw(board, Color::White, info),
-            pawn_eval_raw(board, Color::Black, info),
+            pawn_eval_raw(board, Color::White, info).0,
+            pawn_eval_raw(board, Color::Black, info).0,
         ),
         ScoreLine::from_sides(
             "Knights",
-            knight_eval_raw(board, Color::White, info),
-            knight_eval_raw(board, Color::Black, info),
+            knight_eval_raw(board, Color::White, info).0,
+            knight_eval_raw(board, Color::Black, info).0,
         ),
         ScoreLine::from_sides(
             "Sliders",
-            sliders_eval_raw(board, Color::White, info),
-            sliders_eval_raw(board, Color::Black, info),
+            sliders_eval_raw(board, Color::White, info).0,
+            sliders_eval_raw(board, Color::Black, info).0,
         ),
         ScoreLine::from_sides(
             "King safety",
-            king_eval_danger_raw(board, Color::White, info),
-            king_eval_danger_raw(board, Color::Black, info),
+            king_eval_danger_raw(board, Color::White, info).0,
+            king_eval_danger_raw(board, Color::Black, info).0,
         ),
         ScoreLine::from_sides("Tempo", tempo_white, tempo_black),
     ];
@@ -216,43 +216,43 @@ pub(super) fn pawn_lines(board: &Board, info: &EvalInfo) -> Vec<ScoreLine> {
     vec![
         ScoreLine::from_sides(
             "Stacked pawns",
-            stacked_pawns_bonus(board, Color::White, white_pawns, info),
-            stacked_pawns_bonus(board, Color::Black, black_pawns, info),
+            stacked_pawns_bonus(board, Color::White, white_pawns, info).0,
+            stacked_pawns_bonus(board, Color::Black, black_pawns, info).0,
         ),
         ScoreLine::from_sides(
             "Center pawns",
-            center_pawns_bonus(board, Color::White, white_pawns, info),
-            center_pawns_bonus(board, Color::Black, black_pawns, info),
+            center_pawns_bonus(board, Color::White, white_pawns, info).0,
+            center_pawns_bonus(board, Color::Black, black_pawns, info).0,
         ),
         ScoreLine::from_sides(
             "Pawn tempo",
-            pawn_tempo_bonus(board, Color::White, white_pawns, info),
-            pawn_tempo_bonus(board, Color::Black, black_pawns, info),
+            pawn_tempo_bonus(board, Color::White, white_pawns, info).0,
+            pawn_tempo_bonus(board, Color::Black, black_pawns, info).0,
         ),
         ScoreLine::from_sides(
             "Passed pawns",
-            passed_pawn_bonus(board, Color::White, white_pawns, info),
-            passed_pawn_bonus(board, Color::Black, black_pawns, info),
+            passed_pawn_bonus(board, Color::White, white_pawns, info).0,
+            passed_pawn_bonus(board, Color::Black, black_pawns, info).0,
         ),
         ScoreLine::from_sides(
             "Pawn storm",
-            pawn_storm_bonus(board, Color::White, white_pawns, info),
-            pawn_storm_bonus(board, Color::Black, black_pawns, info),
+            pawn_storm_bonus(board, Color::White, white_pawns, info).0,
+            pawn_storm_bonus(board, Color::Black, black_pawns, info).0,
         ),
         ScoreLine::from_sides(
             "Pawn chain",
-            pawn_chain(board, Color::White, white_pawns, info),
-            pawn_chain(board, Color::Black, black_pawns, info),
+            pawn_chain(board, Color::White, white_pawns, info).0,
+            pawn_chain(board, Color::Black, black_pawns, info).0,
         ),
         ScoreLine::from_sides(
             "Isolated pawns",
-            isolated_pawns_bonus(board, Color::White, white_pawns, info),
-            isolated_pawns_bonus(board, Color::Black, black_pawns, info),
+            isolated_pawns_bonus(board, Color::White, white_pawns, info).0,
+            isolated_pawns_bonus(board, Color::Black, black_pawns, info).0,
         ),
         ScoreLine::from_sides(
             "Backward pawns",
-            backwards_pawn_bonus(board, Color::White, white_pawns, info),
-            backwards_pawn_bonus(board, Color::Black, black_pawns, info),
+            backwards_pawn_bonus(board, Color::White, white_pawns, info).0,
+            backwards_pawn_bonus(board, Color::Black, black_pawns, info).0,
         ),
     ]
 }
@@ -265,13 +265,15 @@ pub(super) fn knight_lines(board: &Board, info: &EvalInfo) -> Vec<ScoreLine> {
             Color::White,
             board.pieces(Color::White, PieceType::Knight),
             info,
-        ),
+        )
+        .0,
         knight_outpost_bonus(
             board,
             Color::Black,
             board.pieces(Color::Black, PieceType::Knight),
             info,
-        ),
+        )
+        .0,
     )]
 }
 
@@ -311,43 +313,43 @@ pub(super) fn slider_lines(board: &Board, info: &EvalInfo) -> Vec<ScoreLine> {
     vec![
         ScoreLine::from_sides(
             "Connected diagonals (B/Q)",
-            connected_diagonals_bonus(board, Color::White, white_diagonals, info),
-            connected_diagonals_bonus(board, Color::Black, black_diagonals, info),
+            connected_diagonals_bonus(board, Color::White, white_diagonals, info).0,
+            connected_diagonals_bonus(board, Color::Black, black_diagonals, info).0,
         ),
         ScoreLine::from_sides(
             "Diagonal x-ray pressure",
-            xray_pressure_diagonal_bonus(board, Color::White, white_diagonals, info),
-            xray_pressure_diagonal_bonus(board, Color::Black, black_diagonals, info),
+            xray_pressure_diagonal_bonus(board, Color::White, white_diagonals, info).0,
+            xray_pressure_diagonal_bonus(board, Color::Black, black_diagonals, info).0,
         ),
         ScoreLine::from_sides(
             "Bishop pair",
-            bishop_pair_bonus(board, Color::White),
-            bishop_pair_bonus(board, Color::Black),
+            bishop_pair_bonus(board, Color::White).0,
+            bishop_pair_bonus(board, Color::Black).0,
         ),
         ScoreLine::from_sides(
             "Bishops blocked by pawns",
-            bishop_blocked_by_pawns_bonus(board, Color::White, info),
-            bishop_blocked_by_pawns_bonus(board, Color::Black, info),
+            bishop_blocked_by_pawns_bonus(board, Color::White, info).0,
+            bishop_blocked_by_pawns_bonus(board, Color::Black, info).0,
         ),
         ScoreLine::from_sides(
             "Connected files (R/Q)",
-            connected_file_bonus(board, Color::White, white_straights, info),
-            connected_file_bonus(board, Color::Black, black_straights, info),
+            connected_file_bonus(board, Color::White, white_straights, info).0,
+            connected_file_bonus(board, Color::Black, black_straights, info).0,
         ),
         ScoreLine::from_sides(
             "Rook on seventh",
-            rook_on_the_seventh(board, Color::White, info),
-            rook_on_the_seventh(board, Color::Black, info),
+            rook_on_the_seventh(board, Color::White, info).0,
+            rook_on_the_seventh(board, Color::Black, info).0,
         ),
         ScoreLine::from_sides(
             "Open/semi-open files",
-            straights_on_open_file(board, Color::White, white_straights, info),
-            straights_on_open_file(board, Color::Black, black_straights, info),
+            straights_on_open_file(board, Color::White, white_straights, info).0,
+            straights_on_open_file(board, Color::Black, black_straights, info).0,
         ),
         ScoreLine::from_sides(
             "Straight x-ray pressure",
-            straights_xray_bonus(board, Color::White, white_straights, info),
-            straights_xray_bonus(board, Color::Black, black_straights, info),
+            straights_xray_bonus(board, Color::White, white_straights, info).0,
+            straights_xray_bonus(board, Color::Black, black_straights, info).0,
         ),
     ]
 }
@@ -389,7 +391,7 @@ pub(super) fn tempo_lines(board: &Board) -> Vec<ScoreLine> {
 
 fn side_feature_lines<const N: usize>(
     names: [&'static str; N],
-    functions: [fn(&Board, Color, &EvalInfo) -> i32; N],
+    functions: [fn(&Board, Color, &EvalInfo) -> (i32, i32); N],
     board: &Board,
     info: &EvalInfo,
 ) -> Vec<ScoreLine> {
@@ -399,8 +401,8 @@ fn side_feature_lines<const N: usize>(
         .map(|(name, function)| {
             ScoreLine::from_sides(
                 name,
-                function(board, Color::White, info),
-                function(board, Color::Black, info),
+                function(board, Color::White, info).0,
+                function(board, Color::Black, info).0,
             )
         })
         .collect()
@@ -409,16 +411,16 @@ fn side_feature_lines<const N: usize>(
 fn king_side_breakdown(board: &Board, color: Color, info: &EvalInfo) -> KingSideBreakdown {
     let king_sq = info.king_square(color);
     let attacker_weight = info.king_attack_weight(color);
-    let pawn_shield = pawn_shield_danger_score(board, color, king_sq, info);
-    let open_files = open_file_danger_bonus(board, color, king_sq, info);
-    let open_diagonals = open_diagonal_danger_bonus(board, color, king_sq, info);
-    let escape_squares = escape_score_danger_bonus(board, color, info);
-    let defenders = defender_danger_bonus(board, color, info);
+    let pawn_shield = pawn_shield_danger_score(board, color, king_sq, info).0;
+    let open_files = open_file_danger_bonus(board, color, king_sq, info).0;
+    let open_diagonals = open_diagonal_danger_bonus(board, color, king_sq, info).0;
+    let escape_squares = escape_score_danger_bonus(board, color, info).0;
+    let defenders = defender_danger_bonus(board, color, info).0;
     let raw_danger =
         attacker_weight + pawn_shield + open_files + open_diagonals + escape_squares + defenders;
     let clamped_danger = raw_danger.clamp(0, MAX_DANGER as i32);
     let table_penalty = -KING_DANGER_TABLE[clamped_danger as usize];
-    let final_score = king_eval_danger_raw(board, color, info);
+    let final_score = king_eval_danger_raw(board, color, info).0;
 
     KingSideBreakdown {
         attacker_weight,
@@ -524,38 +526,38 @@ mod tests {
 
             assert_section(
                 &pawn_lines(&board, &info),
-                pawn_eval_raw(&board, Color::White, &info),
-                pawn_eval_raw(&board, Color::Black, &info),
+                pawn_eval_raw(&board, Color::White, &info).0,
+                pawn_eval_raw(&board, Color::Black, &info).0,
                 fen,
             );
             assert_section(
                 &knight_lines(&board, &info),
-                knight_eval_raw(&board, Color::White, &info),
-                knight_eval_raw(&board, Color::Black, &info),
+                knight_eval_raw(&board, Color::White, &info).0,
+                knight_eval_raw(&board, Color::Black, &info).0,
                 fen,
             );
             assert_section(
                 &mobility_lines(&board, &info),
-                mobility_score_raw(&board, Color::White, &info),
-                mobility_score_raw(&board, Color::Black, &info),
+                mobility_score_raw(&board, Color::White, &info).0,
+                mobility_score_raw(&board, Color::Black, &info).0,
                 fen,
             );
             assert_section(
                 &slider_lines(&board, &info),
-                sliders_eval_raw(&board, Color::White, &info),
-                sliders_eval_raw(&board, Color::Black, &info),
+                sliders_eval_raw(&board, Color::White, &info).0,
+                sliders_eval_raw(&board, Color::Black, &info).0,
                 fen,
             );
 
             let king = king_breakdown(&board, &info);
             assert_eq!(
                 king.white.final_score,
-                king_eval_danger_raw(&board, Color::White, &info),
+                king_eval_danger_raw(&board, Color::White, &info).0,
                 "FEN: {fen}"
             );
             assert_eq!(
                 king.black.final_score,
-                king_eval_danger_raw(&board, Color::Black, &info),
+                king_eval_danger_raw(&board, Color::Black, &info).0,
                 "FEN: {fen}"
             );
         }

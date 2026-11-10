@@ -5,18 +5,23 @@ use crate::eval::lookup::KNIGHT_OUTPOSTS;
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
-pub fn knight_eval(board: &Board, info: &EvalInfo) -> i32 {
-    knight_eval_raw(board, Color::White, info) - knight_eval_raw(board, Color::Black, info)
+pub fn knight_eval(board: &Board, info: &EvalInfo) -> (i32, i32) {
+    let (white_mg, white_eg) = knight_eval_raw(board, Color::White, info);
+    let (black_mg, black_eg) = knight_eval_raw(board, Color::Black, info);
+    (white_mg - black_mg, white_eg - black_eg)
 }
 
-pub fn knight_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
-    let mut score = 0;
+pub fn knight_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> (i32, i32) {
+    let mut mg = 0;
+    let mut eg = mg;
 
     let knights = board.pieces(color, PieceType::Knight);
 
-    score += knight_outpost_bonus(board, color, knights, info);
+    let (term_mg, term_eg) = knight_outpost_bonus(board, color, knights, info);
+    mg += term_mg;
+    eg += term_eg;
 
-    score
+    (mg, eg)
 }
 
 // range per knight: -40 <-> 60
@@ -25,8 +30,9 @@ pub fn knight_outpost_bonus(
     color: Color,
     knights: Bitboard,
     info: &EvalInfo,
-) -> i32 {
-    let mut score = 0;
+) -> (i32, i32) {
+    let mut mg = 0;
+    let mut eg = mg;
 
     let enemy = color.opposite();
 
@@ -64,21 +70,26 @@ pub fn knight_outpost_bonus(
 
             if defended {
                 // friendly pawn defending knight
-                score += 30;
+                mg += 30;
+                eg += 30;
             } else {
-                score += 10;
+                mg += 10;
+                eg += 10;
             }
 
             if attacked {
-                score -= 50;
+                mg -= 50;
+                eg -= 50;
             } else {
-                score += 30;
+                mg += 30;
+                eg += 30;
             }
             // TODO: Later add more detail like how valuable the knight outpost is
         }
     }
 
-    score = scale_by_phase(score, info.phase(), 4, 8);
+    mg = scale_by_phase(mg, info.phase(), 4, 8);
+    eg = scale_by_phase(eg, info.phase(), 4, 8);
 
-    score
+    (mg, eg)
 }

@@ -7,28 +7,43 @@ use crate::eval::lookup::{KING_DANGER_TABLE, KING_PAWN_SHIELD, KING_PAWN_TWO_SHI
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
-pub fn king_eval(board: &Board, info: &EvalInfo) -> i32 {
-    king_eval_danger_raw(board, Color::White, info)
-        - king_eval_danger_raw(board, Color::Black, info)
+pub fn king_eval(board: &Board, info: &EvalInfo) -> (i32, i32) {
+    let (white_mg, white_eg) = king_eval_danger_raw(board, Color::White, info);
+    let (black_mg, black_eg) = king_eval_danger_raw(board, Color::Black, info);
+    (white_mg - black_mg, white_eg - black_eg)
 }
 
-pub fn king_eval_danger_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
-    let mut danger = 0;
+pub fn king_eval_danger_raw(board: &Board, color: Color, info: &EvalInfo) -> (i32, i32) {
+    let mut mg = 0;
+    let mut eg = mg;
 
     let Some(king_sq) = pop_lsb(&mut board.pieces(color, PieceType::King)) else {
         panic!("No king in board.pieces in king_eval_danger_raw!");
     };
 
-    danger += info.king_attack_weight(color);
-    danger += pawn_shield_danger_score(board, color, king_sq, info);
-    danger += open_file_danger_bonus(board, color, king_sq, info);
-    danger += open_diagonal_danger_bonus(board, color, king_sq, info);
-    danger += escape_score_danger_bonus(board, color, info);
-    danger += defender_danger_bonus(board, color, info);
+    mg += info.king_attack_weight(color);
+    eg += info.king_attack_weight(color);
+    let (term_mg, term_eg) = pawn_shield_danger_score(board, color, king_sq, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = open_file_danger_bonus(board, color, king_sq, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = open_diagonal_danger_bonus(board, color, king_sq, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = escape_score_danger_bonus(board, color, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = defender_danger_bonus(board, color, info);
+    mg += term_mg;
+    eg += term_eg;
 
-    let mut penalty = -KING_DANGER_TABLE[danger.clamp(0, MAX_DANGER as i32) as usize];
-    penalty = scale_by_phase(penalty, info.phase(), 4, 12);
-    penalty
+    mg = -KING_DANGER_TABLE[mg.clamp(0, MAX_DANGER as i32) as usize];
+    eg = -KING_DANGER_TABLE[eg.clamp(0, MAX_DANGER as i32) as usize];
+    mg = scale_by_phase(mg, info.phase(), 4, 12);
+    eg = scale_by_phase(eg, info.phase(), 4, 12);
+    (mg, eg)
 }
 
 // range: -17 <-> 8
@@ -37,26 +52,27 @@ pub(super) fn pawn_shield_danger_score(
     color: Color,
     king_sq: Square,
     info: &EvalInfo,
-) -> i32 {
+) -> (i32, i32) {
     if info.phase() < 10 {
-        return 0; // no pawn shield evaluation in the endgame
+        return (0, 0); // no pawn shield evaluation in the endgame
     }
 
     if info.phase() > 20 && board.has_castling_rights() {
         match color {
             Color::White => {
                 if king_sq == 4 {
-                    return 0; // dont give a bonus if king hasn't castled in opening
+                    return (0, 0); // dont give a bonus if king hasn't castled in opening
                 }
             }
             Color::Black => {
                 if king_sq == 60 {
-                    return 0;
+                    return (0, 0);
                 }
             }
         }
     }
-    let mut danger = 0;
+    let mut mg = 0;
+    let mut eg = mg;
 
     let pawns = board.pieces(color, PieceType::Pawn);
 
@@ -89,7 +105,8 @@ pub(super) fn pawn_shield_danger_score(
 
     total_pawn_shield += pawn_count;
 
-    danger -= pawn_count * 2;
+    mg -= pawn_count * 2;
+    eg -= pawn_count * 2;
 
     let second_row_shield = KING_PAWN_TWO_SHIELD[color.idx()][king_sq as usize];
 
@@ -97,16 +114,20 @@ pub(super) fn pawn_shield_danger_score(
 
     total_pawn_shield += second_pawn_count;
 
-    danger -= second_pawn_count;
+    mg -= second_pawn_count;
+    eg -= second_pawn_count;
 
     if total_pawn_shield >= 3 {
-        danger -= 8;
+        mg -= 8;
+        eg -= 8;
     } else if total_pawn_shield == 0 {
-        danger += 8;
+        mg += 8;
+        eg += 8;
     } else {
-        danger += 1;
+        mg += 1;
+        eg += 1;
     }
-    danger
+    (mg, eg)
 }
 
 // range: 0 <-> 25
@@ -115,12 +136,13 @@ pub(super) fn open_file_danger_bonus(
     color: Color,
     king_sq: Square,
     info: &EvalInfo,
-) -> i32 {
+) -> (i32, i32) {
     if info.phase() < 10 {
-        return 0; // ignore in endgames
+        return (0, 0); // ignore in endgames
     }
 
-    let mut danger = 0;
+    let mut mg = 0;
+    let mut eg = mg;
 
     let king_file = file_of(king_sq);
 
@@ -129,7 +151,7 @@ pub(super) fn open_file_danger_bonus(
 
     let friendly_pawns = board.pieces(color, PieceType::Pawn);
 
-    for (offset, penalty) in [(-1, 1), (0, 2), (1, 1)] {
+    for (offset, mg_penalty, eg_penalty) in [(-1, 1, 1), (0, 2, 2), (1, 1, 1)] {
         let file = king_file as i8 + offset;
 
         if !(0..=7).contains(&file) {
@@ -139,14 +161,16 @@ pub(super) fn open_file_danger_bonus(
         let file_bb = file_mask(file as u8);
 
         if file_bb & friendly_pawns == 0 {
-            danger += penalty;
+            mg += mg_penalty;
+            eg += eg_penalty;
         }
         if file_bb & enemy_sliders != 0 {
-            danger += 7;
+            mg += 7;
+            eg += 7;
         }
     }
 
-    danger
+    (mg, eg)
 }
 
 // range: 0 <-> 24. Note in just the forward two it would likely be 0-12/14
@@ -155,12 +179,13 @@ pub(super) fn open_diagonal_danger_bonus(
     color: Color,
     king_sq: Square,
     info: &EvalInfo,
-) -> i32 {
+) -> (i32, i32) {
     if info.phase() < 10 {
-        return 0;
+        return (0, 0);
     }
 
-    let mut danger = 0;
+    let mut mg = 0;
+    let mut eg = mg;
 
     let enemy_sliders = board.pieces(color.opposite(), PieceType::Bishop)
         | board.pieces(color.opposite(), PieceType::Queen);
@@ -171,13 +196,15 @@ pub(super) fn open_diagonal_danger_bonus(
 
         if ray_length <= 1 {
             // lazily assume there is some danger but avoid computing logic on single square rays
-            danger += 1;
+            mg += 1;
+            eg += 1;
             continue;
         }
         let mut sliders_on_ray = ray & enemy_sliders;
 
         if ray & enemy_sliders != 0 {
-            danger += 6 * sliders_on_ray.count_ones() as i32 * sliders_on_ray.count_ones() as i32; // slider pointing at king
+            mg += 6 * sliders_on_ray.count_ones() as i32 * sliders_on_ray.count_ones() as i32; // slider pointing at king
+            eg += 6 * sliders_on_ray.count_ones() as i32 * sliders_on_ray.count_ones() as i32;
 
             let mut between = 0u64;
             while let Some(slider_sq) = pop_lsb(&mut sliders_on_ray) {
@@ -187,17 +214,21 @@ pub(super) fn open_diagonal_danger_bonus(
             if between & board.all_occupancy() != 0 {
                 let pawns = (between & board.pieces(color, PieceType::Pawn)).count_ones() as i32; // MAYBE INCLUDE ENEMY PAWNS HERE
                 if pawns == 0 {
-                    danger += 4;
+                    mg += 4;
+                    eg += 4;
                 } else {
-                    danger -= 4 * pawns * pawns;
+                    mg -= 4 * pawns * pawns;
+                    eg -= 4 * pawns * pawns;
                 }
 
                 let others =
                     between & board.occupancy_of(color) & !board.pieces(color, PieceType::Pawn);
 
-                danger -= others.count_ones() as i32;
+                mg -= others.count_ones() as i32;
+                eg -= others.count_ones() as i32;
             } else {
-                danger += 2; // direct check
+                mg += 2; // direct check
+                eg += 2;
             }
             continue;
         }
@@ -205,24 +236,31 @@ pub(super) fn open_diagonal_danger_bonus(
         let pawns_on_ray = ray & board.pieces(color, PieceType::Pawn);
 
         if pawns_on_ray == 0 {
-            danger += ray_length; // this should be relative to the length of the ray.
+            mg += ray_length; // this should be relative to the length of the ray.
+            eg += ray_length;
 
             let others = ray & board.occupancy_of(color);
 
-            danger -= others.count_ones() as i32;
+            mg -= others.count_ones() as i32;
+            eg -= others.count_ones() as i32;
         } else {
             let pawns = pawns_on_ray.count_ones() as i32;
-            danger -= pawns * pawns;
+            mg -= pawns * pawns;
+            eg -= pawns * pawns;
         }
     }
 
-    danger.max(-4)
+    (mg.max(-4), eg.max(-4))
 }
 
 // range: -6 <-> 12
-pub(super) fn escape_score_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+pub(super) fn escape_score_danger_bonus(
+    board: &Board,
+    color: Color,
+    info: &EvalInfo,
+) -> (i32, i32) {
     if info.phase() < 10 {
-        return 0;
+        return (0, 0);
     }
 
     let all_attacks = info.all_attacks(color.opposite());
@@ -233,7 +271,7 @@ pub(super) fn escape_score_danger_bonus(board: &Board, color: Color, info: &Eval
 
     let escape_squares = (king_ring & !all_attacks & !friends).count_ones() as i32;
 
-    if escape_squares == 0 {
+    let mg = if escape_squares == 0 {
         12
     } else if escape_squares <= 1 {
         4
@@ -241,21 +279,26 @@ pub(super) fn escape_score_danger_bonus(board: &Board, color: Color, info: &Eval
         1
     } else {
         -6
-    }
+    };
+    let eg = mg;
+    (mg, eg)
 }
 
 // range: 0 <-> 40.  // reasonably more likely to be at max ~20
-pub(super) fn defender_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> i32 {
+pub(super) fn defender_danger_bonus(board: &Board, color: Color, info: &EvalInfo) -> (i32, i32) {
     let defended_squares = info.king_ring(color) & info.attacked_by_two(color); // king is included in regular attacks
 
     let local_defenders =
         info.king_ring(color) & board.occupancy_of(color) & !board.pieces(color, PieceType::Pawn);
 
-    let mut danger = 0;
+    let mut mg = 0;
+    let mut eg = mg;
 
     // since this represents king danger the bonus is negative
-    danger -= defended_squares.count_ones() as i32 * 2;
-    danger -= local_defenders.count_ones() as i32 * 3;
+    mg -= defended_squares.count_ones() as i32 * 2;
+    eg -= defended_squares.count_ones() as i32 * 2;
+    mg -= local_defenders.count_ones() as i32 * 3;
+    eg -= local_defenders.count_ones() as i32 * 3;
 
-    danger
+    (mg, eg)
 }

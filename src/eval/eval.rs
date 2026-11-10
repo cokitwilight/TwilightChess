@@ -230,7 +230,15 @@ impl EvalInfo {
 }
 
 pub fn evaluation(board: &Board) -> i32 {
-    let mut total_eval = 0;
+    let (mg, _eg) = evaluation_scores(board);
+    mg
+}
+
+/// Accumulate middlegame and endgame scores without blending the new channels yet.
+/// The existing tapered PST, material, and tempo are applied equally to both.
+pub fn evaluation_scores(board: &Board) -> (i32, i32) {
+    let mut mg = 0;
+    let mut eg = mg;
 
     let eval_info = EvalInfo::calculate(board);
 
@@ -242,24 +250,35 @@ pub fn evaluation(board: &Board) -> i32 {
 
     let pst_eval = (mg_pst * phase + eg_pst * eg_phase) / MAX_PHASE;
 
-    total_eval += board.material();
-    total_eval += pst_eval;
+    mg += board.material();
+    eg += board.material();
+    mg += pst_eval;
+    eg += pst_eval;
 
-    total_eval += mobility_score(board, &eval_info);
-
-    total_eval += pawn_eval(board, &eval_info);
-    total_eval += knight_eval(board, &eval_info);
-    // bishop, rook, queen
-    total_eval += sliders_eval(board, &eval_info);
-    total_eval += king_eval(board, &eval_info);
+    for (term_mg, term_eg) in [
+        mobility_score(board, &eval_info),
+        pawn_eval(board, &eval_info),
+        knight_eval(board, &eval_info),
+        sliders_eval(board, &eval_info),
+        king_eval(board, &eval_info),
+    ] {
+        mg += term_mg;
+        eg += term_eg;
+    }
 
     match board.side_to_move() {
         // for tempo
-        Color::White => total_eval += 15,
-        Color::Black => total_eval -= 15,
+        Color::White => {
+            mg += 15;
+            eg += 15;
+        }
+        Color::Black => {
+            mg -= 15;
+            eg -= 15;
+        }
     };
 
-    total_eval
+    (mg, eg)
 }
 
 pub fn lazy_eval(board: &Board) -> i32 {

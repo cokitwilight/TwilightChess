@@ -11,25 +11,44 @@ use crate::types::{Color, PieceType};
 use crate::eval::EvalInfo;
 use crate::eval::eval::{CENTER_4, CENTER_SQUARES};
 
-pub fn pawn_eval(board: &Board, info: &EvalInfo) -> i32 {
-    pawn_eval_raw(board, Color::White, info) - pawn_eval_raw(board, Color::Black, info)
+pub fn pawn_eval(board: &Board, info: &EvalInfo) -> (i32, i32) {
+    let (white_mg, white_eg) = pawn_eval_raw(board, Color::White, info);
+    let (black_mg, black_eg) = pawn_eval_raw(board, Color::Black, info);
+    (white_mg - black_mg, white_eg - black_eg)
 }
 
-pub fn pawn_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
-    let mut score = 0;
+pub fn pawn_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> (i32, i32) {
+    let mut mg = 0;
+    let mut eg = mg;
 
     let pawns = board.pieces(color, PieceType::Pawn);
 
-    score += stacked_pawns_bonus(board, color, pawns, info);
-    score += center_pawns_bonus(board, color, pawns, info);
-    score += pawn_tempo_bonus(board, color, pawns, info);
-    score += passed_pawn_bonus(board, color, pawns, info);
-    score += pawn_storm_bonus(board, color, pawns, info);
-    score += pawn_chain(board, color, pawns, info);
-    score += isolated_pawns_bonus(board, color, pawns, info);
-    score += backwards_pawn_bonus(board, color, pawns, info);
+    let (term_mg, term_eg) = stacked_pawns_bonus(board, color, pawns, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = center_pawns_bonus(board, color, pawns, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = pawn_tempo_bonus(board, color, pawns, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = passed_pawn_bonus(board, color, pawns, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = pawn_storm_bonus(board, color, pawns, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = pawn_chain(board, color, pawns, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = isolated_pawns_bonus(board, color, pawns, info);
+    mg += term_mg;
+    eg += term_eg;
+    let (term_mg, term_eg) = backwards_pawn_bonus(board, color, pawns, info);
+    mg += term_mg;
+    eg += term_eg;
 
-    score
+    (mg, eg)
 }
 
 pub(super) fn center_pawns_bonus(
@@ -37,24 +56,26 @@ pub(super) fn center_pawns_bonus(
     _color: Color,
     pawns: Bitboard,
     info: &EvalInfo,
-) -> i32 {
+) -> (i32, i32) {
     if pawns == 0 {
-        return 0;
+        return (0, 0);
     }
 
     if info.phase() < 10 {
-        return 0;
+        return (0, 0);
     }
 
-    let mut score = 0;
+    let mut mg = 0;
+    let mut eg = mg;
 
     let friendly_pawns = (CENTER_SQUARES & pawns).count_ones() as i32;
 
     let center_four = (pawns & CENTER_4).count_ones() as i32;
 
-    score += (4 * friendly_pawns) + (8 * center_four);
+    mg += (4 * friendly_pawns) + (8 * center_four);
+    eg += (4 * friendly_pawns) + (8 * center_four);
 
-    score
+    (mg, eg)
 }
 
 pub(super) fn stacked_pawns_bonus(
@@ -62,11 +83,12 @@ pub(super) fn stacked_pawns_bonus(
     color: Color,
     pawns: Bitboard,
     info: &EvalInfo,
-) -> i32 {
+) -> (i32, i32) {
     if pawns == 0 {
-        return 0;
+        return (0, 0);
     }
-    let mut score = 0;
+    let mut mg = 0;
+    let mut eg = mg;
 
     let mut total = 0;
 
@@ -78,19 +100,23 @@ pub(super) fn stacked_pawns_bonus(
         }
         if mask & info.king_ring(color) != 0 {
             // doubled pawn in front of king
-            score -= 15;
+            mg -= 15;
+            eg -= 15;
         }
 
         if pawns & CENTER_SQUARES != 0 {
-            score -= 15;
+            mg -= 15;
+            eg -= 15;
         }
 
-        score -= pawn_count * 10;
+        mg -= pawn_count * 10;
+        eg -= pawn_count * 10;
         total += 1;
     }
-    score -= PAWN_WEAKNESS_TABLE[total];
+    mg -= PAWN_WEAKNESS_TABLE[total];
+    eg -= PAWN_WEAKNESS_TABLE[total];
 
-    score
+    (mg, eg)
 }
 
 pub(super) fn isolated_pawns_bonus(
@@ -98,7 +124,7 @@ pub(super) fn isolated_pawns_bonus(
     _color: Color,
     pawns: Bitboard,
     info: &EvalInfo,
-) -> i32 {
+) -> (i32, i32) {
     let mut isolated_pawns = pawns;
 
     let mut pawn_copy = pawns;
@@ -116,20 +142,23 @@ pub(super) fn isolated_pawns_bonus(
         }
         isolated_pawns &= !adjacent_files;
     }
-    let penalty = if info.phase() > 20 {
+    let mg_penalty = if info.phase() > 20 {
         -6
     } else if info.phase() > 14 {
         -8
     } else {
         -10
     };
+    let eg_penalty = mg_penalty;
     let total = isolated_pawns.count_ones() as i32;
     let center_iso = (isolated_pawns & CENTER_SQUARES).count_ones() as i32;
-    let mut score = penalty * (total + 2 * center_iso);
+    let mut mg = mg_penalty * (total + 2 * center_iso);
+    let mut eg = eg_penalty * (total + 2 * center_iso);
 
-    score -= PAWN_WEAKNESS_TABLE[total as usize];
+    mg -= PAWN_WEAKNESS_TABLE[total as usize];
+    eg -= PAWN_WEAKNESS_TABLE[total as usize];
 
-    score
+    (mg, eg)
 }
 
 pub(super) fn backwards_pawn_bonus(
@@ -137,8 +166,9 @@ pub(super) fn backwards_pawn_bonus(
     color: Color,
     pawns: Bitboard,
     info: &EvalInfo,
-) -> i32 {
-    let mut score = 0;
+) -> (i32, i32) {
+    let mut mg = 0;
+    let mut eg = mg;
     let mut backwards_pawns = pawns & !info.attacks(color, PieceType::Pawn);
 
     let mut total = 0;
@@ -157,17 +187,21 @@ pub(super) fn backwards_pawn_bonus(
             if forward_bb & info.all_attacks(color.opposite()) != 0
                 && forward_bb & info.all_attacks(color) == 0
             {
-                score -= 25; // backwards pawn
+                mg -= 25; // backwards pawn
+                eg -= 25;
                 if RANK_MASKS[rank_of(sq) as usize] & info.king_ring(color) != 0 {
                     // backwards pawn in front of king
-                    score -= 10;
+                    mg -= 10;
+                    eg -= 10;
                 }
 
                 total += 1;
             }
         }
     }
-    score - PAWN_WEAKNESS_TABLE[total]
+    mg -= PAWN_WEAKNESS_TABLE[total];
+    eg -= PAWN_WEAKNESS_TABLE[total];
+    (mg, eg)
 }
 
 pub(super) fn passed_pawn_bonus(
@@ -175,12 +209,13 @@ pub(super) fn passed_pawn_bonus(
     color: Color,
     pawns: Bitboard,
     info: &EvalInfo,
-) -> i32 {
+) -> (i32, i32) {
     if pawns == 0 {
-        return 0;
+        return (0, 0);
     }
 
-    let mut score = 0;
+    let mut mg = 0;
+    let mut eg = mg;
 
     let enemy_pawns = board.pieces(color.opposite(), PieceType::Pawn);
 
@@ -193,7 +228,8 @@ pub(super) fn passed_pawn_bonus(
         if enemy_pawns & pawn_mask != 0 {
             continue;
         }
-        let mut bonus = 0;
+        let mut mg_bonus = 0;
+        let mut eg_bonus = mg_bonus;
         total += 1;
 
         let current_mask = bit(sq);
@@ -220,13 +256,16 @@ pub(super) fn passed_pawn_bonus(
         let is_blocked = forward_mask & board.occupancy_of(color.opposite()) != 0;
 
         if is_protected && !is_blocked {
-            bonus += 30;
+            mg_bonus += 30;
+            eg_bonus += 30;
         }
 
         if is_attacked {
-            bonus -= 10;
+            mg_bonus -= 10;
+            eg_bonus -= 10;
             if !is_protected {
-                bonus -= 20;
+                mg_bonus -= 20;
+                eg_bonus -= 20;
             }
         }
 
@@ -234,7 +273,8 @@ pub(super) fn passed_pawn_bonus(
             (forward_mask & info.all_attacks(color) & !info.all_attacks(color.opposite()))
                 .count_ones() as i32;
 
-        bonus += 5 * available_squares;
+        mg_bonus += 5 * available_squares;
+        eg_bonus += 5 * available_squares;
 
         let rank = rank_of(sq);
 
@@ -245,31 +285,38 @@ pub(super) fn passed_pawn_bonus(
 
         if relative_rank <= 3 {
             // passed pawn but not advanced
-            score += 10;
+            mg += 10;
+            eg += 10;
             continue;
         }
 
         if is_blocked {
-            bonus /= 2;
+            mg_bonus /= 2;
+            eg_bonus /= 2;
         }
 
         if relative_rank == 4 {
-            score += 10 + bonus;
+            mg += 10 + mg_bonus;
+            eg += 10 + eg_bonus;
         } else if relative_rank == 5 {
-            score += 25 + bonus;
+            mg += 25 + mg_bonus;
+            eg += 25 + eg_bonus;
         } else {
-            score += 50 + bonus;
+            mg += 50 + mg_bonus;
+            eg += 50 + eg_bonus;
         }
     }
 
     if info.phase() < 12 {
-        score *= 2;
+        mg *= 2;
+        eg *= 2;
     }
 
     // for now use the reverse
-    score += PAWN_WEAKNESS_TABLE[total];
+    mg += PAWN_WEAKNESS_TABLE[total];
+    eg += PAWN_WEAKNESS_TABLE[total];
 
-    score
+    (mg, eg)
 }
 
 pub(super) fn pawn_storm_bonus(
@@ -277,12 +324,13 @@ pub(super) fn pawn_storm_bonus(
     color: Color,
     pawns: Bitboard,
     info: &EvalInfo,
-) -> i32 {
+) -> (i32, i32) {
     if pawns == 0 {
-        return 0;
+        return (0, 0);
     }
 
-    let mut score = 0;
+    let mut mg = 0;
+    let mut eg = mg;
 
     let starting_mask = match color {
         Color::White => RANK_2,
@@ -312,8 +360,10 @@ pub(super) fn pawn_storm_bonus(
     let forward_pawns = (pawns & forward_mask & !king_file_mask).count_ones() as i32;
     let starting_pawns = (pawns & starting_mask & !king_file_mask).count_ones() as i32;
 
-    score -= starting_pawns * 4;
-    score += forward_pawns * 4;
+    mg -= starting_pawns * 4;
+    eg -= starting_pawns * 4;
+    mg += forward_pawns * 4;
+    eg += forward_pawns * 4;
 
     // includes two rows ahead
     let enemy_half = match color {
@@ -323,7 +373,8 @@ pub(super) fn pawn_storm_bonus(
 
     let attacking_pawns = pawns & enemy_half & (RANK_MASKS[3] | RANK_MASKS[4]);
 
-    let mut attacking_bonus = attacking_pawns.count_ones() as i32 * 4;
+    let mut mg_attacking_bonus = attacking_pawns.count_ones() as i32 * 4;
+    let mut eg_attacking_bonus = mg_attacking_bonus;
 
     let mut current_chain = 0;
 
@@ -331,13 +382,16 @@ pub(super) fn pawn_storm_bonus(
         if attacking_pawns & file != 0 {
             current_chain += 1;
             if current_chain >= 8 {
-                attacking_bonus += 80;
+                mg_attacking_bonus += 80;
+                eg_attacking_bonus += 80;
             }
         } else {
             if current_chain > 1 {
-                attacking_bonus += 20 * current_chain;
+                mg_attacking_bonus += 20 * current_chain;
+                eg_attacking_bonus += 20 * current_chain;
             } else {
-                attacking_bonus -= 5;
+                mg_attacking_bonus -= 5;
+                eg_attacking_bonus -= 5;
             }
             current_chain = 0;
         }
@@ -354,7 +408,7 @@ pub(super) fn pawn_storm_bonus(
         & !info.attacks(color.opposite(), PieceType::Pawn)
         & !(info.all_attacks(color.opposite()) & !info.all_attacks(color));
 
-    let aggressive_bonus = match aggressive_pawns.count_ones() {
+    let mg_aggressive_bonus = match aggressive_pawns.count_ones() {
         0 => -10,
         1 => 20,
         2 => 35,
@@ -366,11 +420,14 @@ pub(super) fn pawn_storm_bonus(
         8 => 320,
         _ => unreachable!("Somehow more than 8 pawns in pawn_storm_bonus"),
     };
+    let eg_aggressive_bonus = mg_aggressive_bonus;
 
-    score += attacking_bonus + aggressive_bonus;
+    mg += mg_attacking_bonus + mg_aggressive_bonus;
+    eg += eg_attacking_bonus + eg_aggressive_bonus;
 
-    score = scale_by_phase(score, info.phase(), 12, 18);
-    score
+    mg = scale_by_phase(mg, info.phase(), 12, 18);
+    eg = scale_by_phase(eg, info.phase(), 12, 18);
+    (mg, eg)
 }
 
 pub(super) fn pawn_tempo_bonus(
@@ -378,7 +435,7 @@ pub(super) fn pawn_tempo_bonus(
     color: Color,
     _pawns: Bitboard,
     info: &EvalInfo,
-) -> i32 {
+) -> (i32, i32) {
     let pawn_attacks = (board.occupancy_of(color.opposite())
         & !board.pieces(color.opposite(), PieceType::Pawn))
         & info.attacks(color, PieceType::Pawn)
@@ -386,12 +443,19 @@ pub(super) fn pawn_tempo_bonus(
 
     // finds all pawn attacks(left or right of a pawn) that attack a piece of higher value(not a pawn) and are not attacked by other pawns
 
-    if pawn_attacks == 0 { 0 } else { 10 }
+    let mg = if pawn_attacks == 0 { 0 } else { 10 };
+    let eg = mg;
+    (mg, eg)
 }
 
-pub(super) fn pawn_chain(_board: &Board, color: Color, pawns: Bitboard, info: &EvalInfo) -> i32 {
+pub(super) fn pawn_chain(
+    _board: &Board,
+    color: Color,
+    pawns: Bitboard,
+    info: &EvalInfo,
+) -> (i32, i32) {
     if pawns == 0 {
-        return 0;
+        return (0, 0);
     }
     let defended_pawns = pawns & info.attacks(color, PieceType::Pawn);
 
@@ -401,11 +465,14 @@ pub(super) fn pawn_chain(_board: &Board, color: Color, pawns: Bitboard, info: &E
         Color::Black => pawns & !info.attacks(color, PieceType::Pawn) & !RANK_7,
     };
 
-    let mut score = 0;
+    let mut mg = 0;
+    let mut eg = mg;
 
-    score += defended_pawns.count_ones() as i32 * 4;
+    mg += defended_pawns.count_ones() as i32 * 4;
+    eg += defended_pawns.count_ones() as i32 * 4;
 
-    score -= non_defended_pawns.count_ones() as i32 * 2;
+    mg -= non_defended_pawns.count_ones() as i32 * 2;
+    eg -= non_defended_pawns.count_ones() as i32 * 2;
 
-    score
+    (mg, eg)
 }
