@@ -1,6 +1,7 @@
 use crate::engine::search_stats::formatting::{submetric_count, submetric_pct, subsection};
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct LmpStats {
     pub attempts: u64,
     pub history_rejections: u64,

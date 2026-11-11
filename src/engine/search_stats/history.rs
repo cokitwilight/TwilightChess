@@ -1,6 +1,7 @@
 use crate::engine::search_stats::formatting::{metric_count, section};
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct HistoryStats {
     pub killer_cutoffs: u64,
     pub history_cutoffs: u64,

@@ -5,6 +5,7 @@ use crate::engine::search_stats::formatting::{
 use crate::engine::search_stats::{DepthHistogram, REDUCTION_BUCKETS, ReductionHistogram};
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct LmrStats {
     pub attempts: u64,
     pub eligible_moves: u64,

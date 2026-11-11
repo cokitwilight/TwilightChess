@@ -222,9 +222,9 @@ impl UciSession {
     }
 }
 
-struct UciPosition {
-    board: Board,
-    repetition_history: Vec<u64>,
+pub(crate) struct UciPosition {
+    pub(crate) board: Board,
+    pub(crate) repetition_history: Vec<u64>,
 }
 
 impl UciPosition {
@@ -242,7 +242,7 @@ impl UciPosition {
         })
     }
 
-    fn parse(arguments: &str) -> Result<Self, String> {
+    pub(crate) fn parse(arguments: &str) -> Result<Self, String> {
         let mut tokens = arguments.split_whitespace();
 
         let mut position = match tokens.next() {
@@ -280,7 +280,7 @@ impl UciPosition {
 }
 
 #[derive(Default)]
-struct GoParameters {
+pub(crate) struct GoParameters {
     wtime: Option<u64>,
     btime: Option<u64>,
     winc: Option<u64>,
@@ -292,7 +292,7 @@ struct GoParameters {
 }
 
 impl GoParameters {
-    fn parse(arguments: &str) -> Result<Self, String> {
+    pub(crate) fn parse(arguments: &str) -> Result<Self, String> {
         let mut parameters = Self::default();
         let mut tokens = arguments.split_whitespace();
 
@@ -321,7 +321,7 @@ impl GoParameters {
         Ok(parameters)
     }
 
-    fn to_limits(
+    pub(crate) fn to_limits(
         &self,
         side_to_move: Color,
         defaults: SearchLimits,
@@ -394,7 +394,7 @@ fn allocate_time(remaining_ms: u64, increment_ms: u64, moves_to_go: u64) -> u64 
         .max(1)
 }
 
-fn write_search_info<W: Write>(output: &mut W, result: &SearchResult) -> io::Result<()> {
+pub(crate) fn write_search_info<W: Write>(output: &mut W, result: &SearchResult) -> io::Result<()> {
     let nodes = result.stats.total_nodes();
     let time_ms = result.elapsed.as_millis().min(u64::MAX as u128) as u64;
     let nps = nodes.saturating_mul(1000).checked_div(time_ms).unwrap_or(0);

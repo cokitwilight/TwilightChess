@@ -26,6 +26,8 @@ pub(super) fn negamax(
     picker_frame: PickerFrame,
     options: SearchOptions,
 ) -> i32 {
+    #[cfg(feature = "debug-uci")]
+    context.clear_pv(picker_frame);
     if context.stopped || (context.stats.total_nodes() & 2047 == 0 && context.should_stop()) {
         return 0;
     }
@@ -520,6 +522,8 @@ pub(super) fn negamax(
         if eval > max_eval {
             max_eval = eval;
             best_move = Some(*mv);
+            #[cfg(feature = "debug-uci")]
+            context.update_pv(picker_frame, *mv);
         }
 
         if alpha < eval {

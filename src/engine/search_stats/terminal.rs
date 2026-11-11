@@ -1,4 +1,5 @@
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct TerminalStats {
     pub checkmates: u64,
     pub stalemates: u64,

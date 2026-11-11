@@ -3,6 +3,7 @@ use std::ops::{AddAssign, Sub};
 use crate::engine::tt::TTInsertResult;
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct TableStats {
     pub probes: u64,
     pub hits: u64,

@@ -6,6 +6,7 @@ use crate::engine::search_stats::{DepthHistogram, MAX_TRACKED_DEPTH};
 /// Depth one is stored in bucket zero. The final bucket combines depth 64 and
 /// above. `samples_by_depth` keeps aggregation across searches meaningful.
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct IterativeDeepeningStats {
     pub nodes_by_depth: DepthHistogram,
     pub samples_by_depth: DepthHistogram,

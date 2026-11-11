@@ -4,10 +4,20 @@ version = "0.1.0"
 edition = "2024"
 default-run = "chess_final"
 
+[features]
+debug-uci = ["dep:serde", "dep:serde_json"]
+
+[[bin]]
+name = "twilight-debug"
+path = "src/bin/twilight-debug.rs"
+required-features = ["debug-uci"]
+
 [dependencies]
 eframe = "0.34.3"
 num-format = "0.4"
 rand = "0.10.2"
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 thousands = "0.2.0"
 
 [profile.release]

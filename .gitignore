@@ -1,3 +1,7 @@
 /target
 **/*.rs.bk
 .vscode/
+
+# Local EPD test suites; keep these out of the engine repository.
+/suites/
+/.codex/

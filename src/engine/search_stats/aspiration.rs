@@ -1,6 +1,7 @@
 use crate::engine::search_stats::formatting::{metric_count, metric_pct, section};
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct AspirationStats {
     pub searches: u64,
     pub successful_first_windows: u64,

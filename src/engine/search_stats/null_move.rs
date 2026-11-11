@@ -4,6 +4,7 @@ use crate::engine::search_stats::formatting::{
 };
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct NullMoveStats {
     pub attempts: u64,
     pub cutoffs: u64,

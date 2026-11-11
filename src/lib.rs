@@ -2,6 +2,8 @@ pub mod bitboard;
 pub mod board;
 pub mod bot;
 pub mod debug;
+#[cfg(feature = "debug-uci")]
+pub mod debug_uci;
 pub mod engine;
 pub mod eval;
 pub mod game;

@@ -78,6 +78,7 @@ use formatting::{count, report_footer, report_header, section};
 /// New counters belong in the relevant feature module. New feature groups only
 /// need a field here and entries in the two arithmetic implementations below.
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct SearchStats {
     pub node_stats: NodeStats,
     pub iterative_deepening_stats: IterativeDeepeningStats,

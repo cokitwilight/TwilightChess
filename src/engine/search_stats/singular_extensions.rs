@@ -1,6 +1,7 @@
 use crate::engine::search_stats::formatting::{metric, metric_count, metric_pct, section};
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct SingularExtensionStats {
     pub attempts: u64,
     pub extensions: u64,
