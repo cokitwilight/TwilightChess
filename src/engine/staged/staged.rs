@@ -196,12 +196,13 @@ impl MovePicker {
                     // verify legality of pv move and tt move and return them if legal, otherwise go to next stage
                     // if there is both pv move and tt move use the good_len as the order with 0 = pv move and 1 = tt move
 
-                    if self.current_len == 0 {
-                        if let Some(pv) = self.pv_move {
-                            let valid_move = verify_move(board, pv, info); // IMPLEMENT LATER
+                    match self.current_len {
+                        0 => {
+                            self.current_len += 1;
 
-                            if valid_move {
-                                self.current_len += 1;
+                            if let Some(pv) =
+                                self.pv_move.filter(|&mv| verify_move(board, mv, info))
+                            {
                                 return Some(ScoredMove {
                                     mv: pv,
                                     score: 1_500_000,
@@ -209,18 +210,15 @@ impl MovePicker {
                                     see: None,
                                     captured: None,
                                 });
-                            } else {
-                                self.current_len += 1;
                             }
-                        } else {
-                            self.current_len += 1;
                         }
-                    } else if self.current_len == 1 {
-                        if let Some(tt) = self.tt_move {
-                            let valid_move = verify_move(board, tt, info); // IMPLEMENT LATER
 
-                            if valid_move && Some(tt) != self.pv_move {
-                                self.current_len += 1;
+                        1 => {
+                            self.current_len += 1;
+
+                            if let Some(tt) = self.tt_move.filter(|&mv| {
+                                Some(mv) != self.pv_move && verify_move(board, mv, info)
+                            }) {
                                 return Some(ScoredMove {
                                     mv: tt,
                                     score: 1_000_000,
@@ -228,30 +226,31 @@ impl MovePicker {
                                     see: None,
                                     captured: None,
                                 });
-                            } else {
-                                self.next_stage(board, info, context, history);
-                                continue;
                             }
-                        } else {
+
                             self.next_stage(board, info, context, history);
                             continue;
                         }
-                    } else {
-                        // for now panic to catch bugs
-                        self.next_stage(board, info, context, history);
-                        continue;
+
+                        _ => {
+                            self.next_stage(board, info, context, history);
+                            continue;
+                        }
                     }
                 }
                 Stage::Killers => {
                     // verify legality of killer 1 and killer 2 and return them if legal, otherwise go to next stage
                     // if there is both pv move and tt move use the good_len as the order with 0 = killer 1 and 1 = killer 2
 
-                    if self.current_len == 0 {
-                        if let Some(k1) = self.killer_1 {
-                            let valid_move = verify_move(board, k1, info); // IMPLEMENT LATER
+                    match self.current_len {
+                        0 => {
+                            self.current_len += 1;
 
-                            if valid_move && Some(k1) != self.pv_move && Some(k1) != self.tt_move {
-                                self.current_len += 1;
+                            if let Some(k1) = self.killer_1.filter(|&mv| {
+                                Some(mv) != self.pv_move
+                                    && Some(mv) != self.tt_move
+                                    && verify_move(board, mv, info)
+                            }) {
                                 return Some(ScoredMove {
                                     mv: k1,
                                     score: 1_500_000,
@@ -259,18 +258,17 @@ impl MovePicker {
                                     see: None,
                                     captured: None,
                                 });
-                            } else {
-                                self.current_len += 1;
                             }
-                        } else {
-                            self.current_len += 1;
                         }
-                    } else if self.current_len == 1 {
-                        if let Some(k2) = self.killer_2 {
-                            let valid_move = verify_move(board, k2, info); // IMPLEMENT LATER
 
-                            if valid_move && Some(k2) != self.pv_move && Some(k2) != self.tt_move {
-                                self.current_len += 1;
+                        1 => {
+                            self.current_len += 1;
+
+                            if let Some(k2) = self.killer_2.filter(|&mv| {
+                                Some(mv) != self.pv_move
+                                    && Some(mv) != self.tt_move
+                                    && verify_move(board, mv, info)
+                            }) {
                                 return Some(ScoredMove {
                                     mv: k2,
                                     score: 1_000_000,
@@ -278,18 +276,16 @@ impl MovePicker {
                                     see: None,
                                     captured: None,
                                 });
-                            } else {
-                                self.next_stage(board, info, context, history);
-                                continue;
                             }
-                        } else {
+
                             self.next_stage(board, info, context, history);
                             continue;
                         }
-                    } else {
-                        // for now panic to catch bugs
-                        self.next_stage(board, info, context, history);
-                        continue;
+
+                        _ => {
+                            self.next_stage(board, info, context, history);
+                            continue;
+                        }
                     }
                 }
                 Stage::BadCaptures => {
