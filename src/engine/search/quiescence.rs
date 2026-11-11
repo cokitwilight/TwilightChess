@@ -2,6 +2,7 @@ use crate::board::{Board, Move, MoveType};
 use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
+use crate::engine::pruning::calculate_see_threshold;
 use crate::engine::search::is_insufficient_material;
 use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MAX_PLY, PickerFrame};
@@ -317,7 +318,7 @@ impl Engine {
                     } else {
                         see(board, *mv, scored_mv.captured)
                     };
-                    if see_value < -self.config.search.see.margin {
+                    if see_value < calculate_see_threshold(&self.config.search.see) {
                         context.stats.q_pruning_stats.see_prunes += 1;
                         continue;
                     }

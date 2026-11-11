@@ -1,9 +1,11 @@
-use crate::board::{Board, Move, MoveType, null_move_reduction};
+use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::debug::quiescence::quiescence;
 use crate::engine::history::{HistoryKey, HistoryTables};
-use crate::engine::pruning::lmr::LMR_CAPTURE_VALUE;
-use crate::engine::pruning::{LMR_SCALE_I32, lmp_history_limit, lmp_threshold};
+use crate::engine::pruning::{
+    calculate_fut_margin, calculate_nmp_margin, lmp_history_limit, lmp_threshold,
+    null_move_reduction,
+};
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
 use crate::engine::staged::ScoredMove;
@@ -134,20 +136,15 @@ pub(super) fn negamax(
         }
     }
 
-    let mut can_null_prune = engine.config.search.null_move.enabled
+    let can_null_prune = engine.config.search.null_move.enabled
         && options.allow_null_move
         && options.excluded_move.is_none()
         && !in_check
         && depth >= engine.config.search.null_move.minimum_depth
         && board.phase >= engine.config.search.null_move.minimum_phase
         && beta.abs() < MATE_THRESHOLD
-        && !is_pv;
-
-    if can_null_prune {
-        if corrected_static_eval < beta {
-            can_null_prune = false;
-        }
-    }
+        && !is_pv
+        && corrected_static_eval >= calculate_nmp_margin(beta);
 
     if can_null_prune {
         let reduction = null_move_reduction(depth);
@@ -345,15 +342,7 @@ pub(super) fn negamax(
         }
 
         if can_fut && can_prune && searched_moves > 0 {
-            let mut margin = depth * engine.config.search.fut.margin;
-
-            if engine.config.search.fut.history_enabled {
-                if history_score > engine.config.search.fut.good_history {
-                    margin += depth * engine.config.search.fut.history_margin;
-                } else if history_score < engine.config.search.fut.bad_history {
-                    margin -= depth * engine.config.search.fut.history_margin;
-                }
-            }
+            let margin = calculate_fut_margin(depth, history_score, &engine.config.search.fut);
 
             if corrected_static_eval + margin as i32 <= alpha {
                 continue;
@@ -370,46 +359,18 @@ pub(super) fn negamax(
             && searched_moves >= engine.config.search.lmr.min_move_number;
 
         let reduction = if can_lmr {
-            let base_reduction = engine
-                .lmr_table
-                .get(depth as usize, searched_moves as usize + 1);
-            let mut current_reduction = base_reduction;
-
-            if engine.config.search.lmr.history_enabled {
-                let history_adjustement = if is_quiet {
-                    history_score / engine.config.search.lmr.history_scale
-                } else if is_capture {
-                    // Capture history is less than max quiet history.
-                    history_score * 2 / engine.config.search.lmr.history_scale
-                } else {
-                    0
-                };
-                current_reduction += -history_adjustement;
-            }
-
-            if !is_improving {
-                current_reduction += base_reduction / 3;
-            }
-
-            if is_pv {
-                current_reduction += -(base_reduction / 3);
-            }
-
-            if is_capture {
-                current_reduction +=
-                    -(LMR_CAPTURE_VALUE[captured_piece.unwrap().idx()] + LMR_SCALE_I32 / 2);
-            }
-
-            if gives_check {
-                current_reduction += -(LMR_SCALE_I32 / 2);
-            }
-
-            let reduction_in_plies = |scaled_reduction: i32| {
-                (scaled_reduction / LMR_SCALE_I32).clamp(0, depth as i32 - 2)
-            };
-            let red = reduction_in_plies(current_reduction);
-
-            red
+            engine.lmr_table.calculate_reduction(
+                depth as usize,
+                searched_moves as usize,
+                is_quiet,
+                is_capture,
+                is_improving,
+                is_pv,
+                history_score,
+                captured_piece,
+                gives_check,
+                &engine.config.search.lmr,
+            )
         } else {
             0
         };

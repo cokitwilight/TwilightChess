@@ -1,9 +1,11 @@
-use crate::board::{Board, Move, MoveType, null_move_reduction};
+use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::history::HistoryKey;
 use crate::engine::ordering::see;
-use crate::engine::pruning::lmr::LMR_CAPTURE_VALUE;
-use crate::engine::pruning::{LMR_SCALE_I32, lmp_history_limit, lmp_threshold};
+use crate::engine::pruning::{
+    calculate_fut_margin, calculate_nmp_margin, lmp_history_limit, lmp_threshold,
+    null_move_reduction, rfp_margin,
+};
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
 use crate::engine::search_stats::{
@@ -201,7 +203,7 @@ impl Engine {
             let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
             context.stats.rfp_stats.attempts_by_depth.bins[depth_bucket] += 1;
 
-            let margin = self.config.search.rfp.margin_factor * depth as i32;
+            let margin = rfp_margin(depth as usize, &self.config.search.rfp);
             // dynamic RFP margin
 
             if corrected_static_eval - margin >= beta {
@@ -215,18 +217,15 @@ impl Engine {
         // 4 is a placeholder for now
         // use phase for now. Might not be viable though
 
-        let mut can_null_prune = self.config.search.null_move.enabled
+        let can_null_prune = self.config.search.null_move.enabled
             && options.allow_null_move
             && options.excluded_move.is_none()
             && !in_check
             && depth >= self.config.search.null_move.minimum_depth
             && board.phase >= self.config.search.null_move.minimum_phase
             && beta.abs() < MATE_THRESHOLD
-            && !is_pv;
-
-        if can_null_prune && corrected_static_eval < beta {
-            can_null_prune = false;
-        }
+            && !is_pv
+            && corrected_static_eval >= calculate_nmp_margin(beta);
 
         if can_null_prune {
             context.stats.null_move_stats.attempts += 1;
@@ -464,15 +463,8 @@ impl Engine {
                 context.stats.fut_stats.attempts += 1;
                 let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
                 context.stats.fut_stats.attempts_by_depth.bins[depth_bucket] += 1;
-                let mut margin = depth * self.config.search.fut.margin;
 
-                if self.config.search.fut.history_enabled {
-                    if history_score > self.config.search.fut.good_history {
-                        margin += depth * self.config.search.fut.history_margin;
-                    } else if history_score < self.config.search.fut.bad_history {
-                        margin -= depth * self.config.search.fut.history_margin;
-                    }
-                }
+                let margin = calculate_fut_margin(depth, history_score, &self.config.search.fut);
 
                 if corrected_static_eval + margin as i32 <= alpha {
                     context.stats.fut_stats.pruned_moves += 1;
@@ -492,101 +484,19 @@ impl Engine {
                 && searched_moves >= self.config.search.lmr.min_move_number;
 
             let reduction = if can_lmr {
-                let base_reduction = self
-                    .lmr_table
-                    .get(depth as usize, searched_moves as usize + 1);
-                let mut current_reduction = base_reduction;
-                let mut history_delta = 0;
-                let mut non_improving_delta = 0;
-                let mut pv_delta = 0;
-                let mut capture_delta = 0;
-                let mut check_delta = 0;
-
-                if self.config.search.lmr.history_enabled {
-                    let baseline_red = current_reduction / LMR_SCALE_I32;
-
-                    let history_adjustement = if is_quiet {
-                        history_score / self.config.search.lmr.history_scale
-                    } else if is_capture {
-                        // Capture history is less than max quiet history.
-                        history_score * 2 / self.config.search.lmr.history_scale
-                    } else {
-                        0
-                    };
-
-                    history_delta = -history_adjustement;
-                    current_reduction += history_delta;
-
-                    if history_delta != 0 {
-                        context.stats.lmr_stats.history_adjustments += 1;
-                    }
-
-                    let history_red = current_reduction / LMR_SCALE_I32;
-
-                    if history_red < baseline_red {
-                        context.stats.lmr_stats.history_improvements += 1;
-                    } else if history_red > baseline_red {
-                        context.stats.lmr_stats.history_reductions += 1;
-                    }
-                }
-
-                if !is_improving_2_plies {
-                    non_improving_delta = base_reduction / 3;
-                    current_reduction += non_improving_delta;
-                    if non_improving_delta != 0 {
-                        context.stats.lmr_stats.non_improving_adjustments += 1;
-                    }
-                }
-
-                if is_pv {
-                    pv_delta = -(base_reduction / 3);
-                    current_reduction += pv_delta;
-                    if pv_delta != 0 {
-                        context.stats.lmr_stats.pv_adjustments += 1;
-                    }
-                }
-
-                if is_capture {
-                    capture_delta =
-                        -(LMR_CAPTURE_VALUE[captured_piece.unwrap().idx()] + LMR_SCALE_I32 / 2);
-                    current_reduction += capture_delta;
-                    context.stats.lmr_stats.capture_adjustments += 1;
-                }
-
-                if gives_check {
-                    check_delta = -(LMR_SCALE_I32 / 2);
-                    current_reduction += check_delta;
-                    context.stats.lmr_stats.check_adjustments += 1;
-                }
-
-                let reduction_in_plies = |scaled_reduction: i32| {
-                    (scaled_reduction / LMR_SCALE_I32).clamp(0, depth as i32 - 2)
-                };
-                let red = reduction_in_plies(current_reduction);
-
-                if history_delta != 0
-                    && reduction_in_plies(current_reduction - history_delta) != red
-                {
-                    context.stats.lmr_stats.history_effects += 1;
-                }
-                if non_improving_delta != 0
-                    && reduction_in_plies(current_reduction - non_improving_delta) != red
-                {
-                    context.stats.lmr_stats.non_improving_effects += 1;
-                }
-                if pv_delta != 0 && reduction_in_plies(current_reduction - pv_delta) != red {
-                    context.stats.lmr_stats.pv_effects += 1;
-                }
-                if capture_delta != 0
-                    && reduction_in_plies(current_reduction - capture_delta) != red
-                {
-                    context.stats.lmr_stats.capture_effects += 1;
-                }
-                if check_delta != 0 && reduction_in_plies(current_reduction - check_delta) != red {
-                    context.stats.lmr_stats.check_effects += 1;
-                }
-
-                red
+                self.lmr_table.calculate_reduction_with_stats(
+                    context,
+                    depth as usize,
+                    searched_moves as usize,
+                    is_quiet,
+                    is_capture,
+                    is_improving_2_plies,
+                    is_pv,
+                    history_score,
+                    captured_piece,
+                    gives_check,
+                    &self.config.search.lmr,
+                )
             } else {
                 0
             };
