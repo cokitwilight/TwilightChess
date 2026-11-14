@@ -1,6 +1,5 @@
 use crate::engine::configs::FutilityConfig;
 
-
 #[inline]
 pub fn calculate_fut_margin(depth: u16, history_score: i32, config: &FutilityConfig) -> i32 {
     let mut margin = depth * config.margin;

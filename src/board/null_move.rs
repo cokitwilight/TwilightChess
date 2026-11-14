@@ -36,4 +36,3 @@ impl Board {
         self.pawn_hash = undo.pawn_hash;
     }
 }
-

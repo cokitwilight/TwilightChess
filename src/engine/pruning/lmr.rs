@@ -87,7 +87,6 @@ impl LmrTable {
         reduction_in_plies(current_reduction)
     }
 
-
     #[inline(always)]
     pub fn calculate_reduction_with_stats(
         &self,
