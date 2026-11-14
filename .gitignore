@@ -1,7 +1,7 @@
 /target
 **/*.rs.bk
 .vscode/
+profile.json.gz
 
-# Local EPD test suites; keep these out of the engine repository.
-/suites/
 /.codex/
+suites/

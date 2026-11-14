@@ -36,7 +36,3 @@ impl Board {
         self.pawn_hash = undo.pawn_hash;
     }
 }
-
-pub fn null_move_reduction(depth: u16) -> u16 {
-    if depth >= 6 { 3 } else { 2 }
-}
