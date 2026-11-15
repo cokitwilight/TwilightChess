@@ -9,11 +9,11 @@ The goal of this project is to build a solid chess engine with clean architectur
 The current engine is playable but under active development. Currently has basic UCI support, a player vs player or player vs bot gui, and a tournament self play testing framework. 
 Next steps are further improving optimizations, improving/tuning heuristics and hand made eval, continuing to implement pruning techniques, and validating an actual engine elo.
 
-## Estimated Elo: 2486
+## Estimated Elo: 2316-2486
 
-Twilight v0.1.0 is estimated to perform at approximately 2,486 Elo, based on a 2,000-game match against Stockfish 19 configured with UCI_LimitStrength=true and UCI_Elo=2500. At a time control of 10 seconds + 0.1-second increment, Twilight achieved 872 wins, 953 losses, and 175 draws (47.98% score), corresponding to an Elo difference of −14.1 ± 14.5 relative to the configured opponent.
+Twilight is estimated to perform at an elo range of 2,316 to 2,486. The lower bound was determined by a 400 game match against Blunder 7.1.0, rated 2388 CCRL, using blitz time controls(normalized to my machine to 60s + 0.5s increment). The upper bound was determined based on a 2,000-game match against Stockfish 19 configured with UCI_LimitStrength=true and UCI_Elo=2500, at a time control of 10 seconds + 0.1-second increment.
 
-Testing used randomly selected openings from 8move_v3.pgn, with 16 plies of predetermined moves and each opening played once per color to reduce opening and color bias. This rating is an approximation based on Stockfish's UCI Elo scale, not an independently established competitive rating. Playing strength may vary across time controls, hardware, and opponents; additional testing at longer time controls and against different opponents is needed to establish a more representative rating.
+Testing used randomly selected openings from 8move_v3.pgn, with 16 plies of predetermined moves and each opening played once per color to reduce opening and color bias. Playing strength may vary across time controls, hardware, and opponents; additional testing at longer time controls and against different opponents is needed to establish a more representative rating.
 
 ## Current Features
 
@@ -114,11 +114,13 @@ tournament.
 - Futility Pruning
 - Delta Pruning
 - SEE pruning
+- Late Move Pruning(LMP)
 
 **Planned Pruning Additions**
 
-- [ ] Late Move Pruning(LMP)
+- [ ] Main SEE pruning
 - [ ] ProbCut
+- [ ] Add dynamic decisions to pruning(NMP, LMR, SEE, etc)
 
 **Other Search Infrastructure**
 
@@ -128,10 +130,13 @@ tournament.
 - Iterative Deepening + Aspiration Windows
 - Detailed Statistics Tracking
 - Singular Extensions 
+- Pawn Hash based Correction History
 
 **Planned Search Additions**
 
-- [ ] Correction History
+- [ ] Advanced Correction History(Minor, major, continuation, etc)
+- [ ] Allow larger and/or chained singular extensions
+- [ ] Implement NNUE
 - [ ] Lazy SMP Search
 
 **Current Optimizations**
@@ -141,72 +146,11 @@ tournament.
 - Iterative PST, Phase, and Material
 - Reused Eval Info
 - Staged Move Generation
+- Packed TT Entries into 32 byte clusters
 
 **Planned Optimizations**
 
 - [ ] Magic Pin and Check Masks
 - [ ] Heavily Optimize Current Eval Function
-- [ ] Implement Pawn Hashing
-- [ ] Optimize CPU Cache Alignment and overall Memory Usage
-- [ ] Pack Move into 16 bits
-
-
-## Perft Performance Notes
-
-NOTE: The following observations are merely observations on my machine(AMD Ryzen 7 9700x) and do not reflect actual tested results.
-These numbers come from a rough 3 test average rather than full testing.
-
-Many optimizations have caused perft NPS to grow steadily.
-Before the bitboard rewrite, perft performance stood at only 14 million NPS.
-After the basic bitboard rewrite perft performance jumped to 42 million NPS.
-Eventually when Pin and Check masks were implemented perft performance grew to roughly 100 million NPS. 
-When Magic Bitboards replaced my old ray scanning logic perft gained another 40 million NPS to reach approximately 142 million NPS.
-The largest jump in perft performance was when I switched my old naive en passant and king move handling. 
-Originally move generation would treat king and pawns moves separately by making the move before undoing it.
-The goal was to handle en passant but I naively included all pawn moves as well further increasing to the cost of perft.
-However after adding a special is_legal_move tuned for en passant and king moves using ray scanning instead, the resulting perft performance
-jumped by more than 2x from 142 million NPS to ~305 million NPS.
-
-## Self Play Tournament Notes
-
-The following observations came from multiple tournaments where one engine would have the standard config(SEE, Delta, FUT, RFP, NMP, SING, LMR disabled by default)
-and the other would contain the tested feature enabled(or similarly have the same features enabled but a different value or margin). Over roughly 800-1200 games per tournament(some features had multiple tournaments rather than 1). Each test limited time per move to 250 ms to average ~30 second games. 
-
-**RFP ON vs RFP OFF: 880 Total Games:**
-RFP On:  560.5/880 (63.69%) | 495 W - 254 L - 131 D
-RFP Off: 319.5/880 (36.31%) | 254 W - 495 L - 131 D 
-
-Estimated +97.6 Elo Difference
-95% Elo Confidence: (+76.1, +119.9) 
-
-
-**Notes:**
-RFP Demonstrated the strongest superiority over the standard engine. Due to this superiority another tournament should be done to confirm the elo difference.
-
-
-**Futility On vs Futility Off: 880 Total Games:**
-FUT On:  455.5 (51.76%) | 380 W - 349 L - 151 D 
-FUT Off: 424.5 (48.14%) | 349 W - 380 L - 151 D
-
-Estimated +12.2 Elo Difference
-95% Elo Confidence: (-8.7, +33.2)
-
-**Notes:**
-Due to the fact that the confidence interval falls in both negative and positive elo estimates another tournament should be conducted. Additionally during the tournament there was actually a small bug in the history table. Although this doesn't directly interact with Futility pruning it would still affect engine performance and therefore the tournament result should not be fully trusted.
-
-## Search Performance Notes
-
-NOTE: The following observations are merely observations on my machine(AMD Ryzen 7 9700x) and do not reflect actual tested results.
-These numbers come from playing with the engine and pairing the engine through hand made matches(I played the moves myself) against Chess.com bots.
-These do not reflect thoroughly tested results over 1000s of games since the test environment changed drastically and less overall games were played.
-Additionally due to the varying nature of chess positions, observed NPS varied greatly. Specifically tactical positions could potentially lose NPS(by hundreds of thousands at some times) while
-endgame and checkmate scenarios yielded huge jumps in NPS(sometimes millions of NPS higher). Additionally true NPS is likely higher as search statistics and other debug info can likely affect the performance.
-
-Switching to bitboards yielded a rough 2x increase in NPS as the 2D Array board had roughly 500,000 NPS while the bitboard version has 1.1 million NPS
-Since there was no previous PST/phase/material the iterative version does not have a NPS comparison.
-Multiple Changes occured during the introduction of Pin and Check masks and NPS roughly stayed the same. This is likely due to changing the eval to be most sophisticated which took up more resources.
-After Pin and Check masks, Magic Bitboards contributed a rough 200,000 NPS increase to roughly 1.3 million NPS.
-Staged Move Ordering resulted in roughly 150,000 NPS increase before being rewritten to Staged Move Generation.
-Full Staged Move Generation yielded roughly 300,000 NPS to land roughly at 1.6-1.7 million NPS.
-
+- [ ] Implement Pawn Hashing to store eval
 
