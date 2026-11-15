@@ -33,8 +33,8 @@ pub fn run_game(
     };
 
     // NOTE: This might be expensive as it allocates an entire new engine(with tt for example)
-    let mut white = Engine::new(w_config.clone());
-    let mut black = Engine::new(b_config.clone());
+    let mut white = Engine::new(w_config);
+    let mut black = Engine::new(b_config);
 
     let mut w_count = 0;
     let mut b_count = 0;
@@ -181,7 +181,7 @@ mod tests {
         game_record
             .white_stats
             .print_all(1, game_record.white_time_elapsed.as_secs_f64());
-        println!("");
+        println!();
         println!(
             "Total Time as White: {:.3} seconds",
             game_record.white_time_elapsed.as_secs_f64()
@@ -191,14 +191,14 @@ mod tests {
             game_record.white_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!("Black Bot -- {}", players.black.name);
         game_record
             .black_stats
             .print_all(1, game_record.black_time_elapsed.as_secs_f64());
 
-        println!("");
+        println!();
 
         println!(
             "Total Time as Black: {:.3} seconds",
@@ -209,14 +209,14 @@ mod tests {
             game_record.black_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!(
             "Total engine search time: {:.3} seconds",
             game_record.total_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         let metadata = PgnMetadata {
             event: "Engine Test".to_string(),
@@ -272,7 +272,7 @@ mod tests {
         game_record
             .white_stats
             .print_all(1, game_record.white_time_elapsed.as_secs_f64());
-        println!("");
+        println!();
         println!(
             "Total Time as White: {:.3} seconds",
             game_record.white_time_elapsed.as_secs_f64()
@@ -282,14 +282,14 @@ mod tests {
             game_record.white_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!("Black Bot -- {}", players.black.name);
         game_record
             .black_stats
             .print_all(1, game_record.black_time_elapsed.as_secs_f64());
 
-        println!("");
+        println!();
 
         println!(
             "Total Time as Black: {:.3} seconds",
@@ -300,14 +300,14 @@ mod tests {
             game_record.black_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!(
             "Total engine search time: {:.3} seconds",
             game_record.total_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         let metadata = PgnMetadata {
             event: "Engine Test".to_string(),
@@ -322,7 +322,7 @@ mod tests {
 
         println!("{pgn_text}");
 
-        println!("");
+        println!();
 
         println!(
             "Result: {:?}\n",
@@ -363,7 +363,7 @@ mod tests {
         game_record
             .white_stats
             .print_all(1, game_record.white_time_elapsed.as_secs_f64());
-        println!("");
+        println!();
         println!(
             "Total Time as White: {:.3} seconds",
             game_record.white_time_elapsed.as_secs_f64()
@@ -373,14 +373,14 @@ mod tests {
             game_record.white_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!("Black Bot -- {}", players.black.name);
         game_record
             .black_stats
             .print_all(1, game_record.black_time_elapsed.as_secs_f64());
 
-        println!("");
+        println!();
 
         println!(
             "Total Time as Black: {:.3} seconds",
@@ -391,14 +391,14 @@ mod tests {
             game_record.black_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!(
             "Total engine search time: {:.3} seconds",
             game_record.total_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         let metadata = PgnMetadata {
             event: "Engine Test".to_string(),

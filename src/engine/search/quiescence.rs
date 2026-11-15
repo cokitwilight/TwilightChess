@@ -20,7 +20,7 @@ impl Engine {
         &mut self,
         board: &mut Board,
         context: &mut SearchContext,
-        depth: u16,
+        _depth: u16,
         mut alpha: i32,
         mut beta: i32,
         ply: usize,
@@ -50,12 +50,12 @@ impl Engine {
             return 0;
         }
 
-        if board.phase() < 8 && is_insufficient_material(&board) {
+        if board.phase() < 8 && is_insufficient_material(board) {
             track_stat!(context.stats.draw_stats.insufficient_material_returns += 1);
             return 0;
         }
 
-        if ply >= MAX_PLY as usize - 1 {
+        if ply >= MAX_PLY - 1 {
             track_stat! {
                 context.stats.quiescence_stats.max_ply_returns += 1;
                 context.stats.terminal_stats.max_ply_returns += 1;
@@ -353,7 +353,7 @@ impl Engine {
             let eval = -self.quiescence(
                 board,
                 context,
-                depth,
+                _depth,
                 -beta,
                 -alpha,
                 ply + 1,

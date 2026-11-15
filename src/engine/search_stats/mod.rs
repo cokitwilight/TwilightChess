@@ -472,8 +472,10 @@ mod tests {
     #[cfg(feature = "search-stats")]
     fn instrumented_search_keeps_histogram_totals_consistent() {
         let game = Game::new();
-        let mut config = EngineConfig::default();
-        config.tt_size = 1;
+        let mut config = EngineConfig {
+            tt_size: 1,
+            ..EngineConfig::default()
+        };
         config.search.all_enabled();
         let mut engine = Engine::new(config);
 

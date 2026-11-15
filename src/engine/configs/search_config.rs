@@ -3,7 +3,7 @@ use crate::engine::configs::{
     LMPConfig, LMRConfig, NullMoveConfig, RFPConfig, SEEConfig, SingularConfig,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 #[cfg_attr(feature = "debug-uci", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "debug-uci", serde(deny_unknown_fields))]
 pub struct SearchConfig {
@@ -18,24 +18,6 @@ pub struct SearchConfig {
     pub singular: SingularConfig,
     pub correction: CorrectionConfig,
     pub experimental: ExperimentalConfig,
-}
-
-impl Default for SearchConfig {
-    fn default() -> Self {
-        Self {
-            aspiration: AspirationConfig::default(),
-            null_move: NullMoveConfig::default(),
-            delta: DeltaPruneConfig::default(),
-            lmr: LMRConfig::default(),
-            lmp: LMPConfig::default(),
-            see: SEEConfig::default(),
-            rfp: RFPConfig::default(),
-            fut: FutilityConfig::default(),
-            singular: SingularConfig::default(),
-            correction: CorrectionConfig::default(),
-            experimental: ExperimentalConfig::default(),
-        }
-    }
 }
 
 impl SearchConfig {

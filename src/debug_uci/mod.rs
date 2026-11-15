@@ -75,10 +75,10 @@ pub fn run_stdio() -> io::Result<()> {
             } else {
                 None
             };
-            if matches!(command.as_str(), "stop" | "quit") {
-                if let Some(flag) = &active {
-                    flag.store(true, Ordering::Relaxed);
-                }
+            if matches!(command.as_str(), "stop" | "quit")
+                && let Some(flag) = &active
+            {
+                flag.store(true, Ordering::Relaxed);
             }
             if sender.send(Input { line, cancellation }).is_err() {
                 return;
@@ -104,12 +104,11 @@ pub fn run_stdio() -> io::Result<()> {
     let mut active_cancel: Option<Arc<AtomicBool>> = None;
     let mut finishing = Arc::new(AtomicBool::new(false));
     while let Ok(input) = receiver.recv() {
-        if worker.as_ref().is_some_and(|w| w.is_finished())
-            || worker.is_some() && finishing.load(Ordering::Acquire)
+        if (worker.as_ref().is_some_and(|w| w.is_finished())
+            || worker.is_some() && finishing.load(Ordering::Acquire))
+            && worker.take().unwrap().join().is_err()
         {
-            if worker.take().unwrap().join().is_err() {
-                diagnostic(&output, "error", &"search worker panicked")?;
-            }
+            diagnostic(&output, "error", &"search worker panicked")?;
         }
         let line = input.line.trim();
         let (command, args) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
@@ -271,7 +270,7 @@ fn run_search_request(
     mut config: EngineConfig,
     limits: crate::engine::SearchLimits,
     board: &Board,
-    history: &Vec<u64>,
+    history: &[u64],
     flag: Arc<AtomicBool>,
     find: Option<FindRequest>,
     finishing: &AtomicBool,
@@ -297,7 +296,7 @@ fn run_search_request(
     crate::eval::evaluation_for_turn(&warmup);
     config.limits = limits;
     let mut engine = Engine::new(config);
-    let mut context = SearchContext::new(limits, history.clone());
+    let mut context = SearchContext::new(limits, history.to_vec());
     context.cancellation = Some(flag);
     context.finder = find.map(|request| FindSolutionState::new(request.position, request.options));
     let result = engine.search(board, &mut context, false, false);

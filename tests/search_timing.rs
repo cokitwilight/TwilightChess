@@ -6,9 +6,11 @@ use chess_final::engine::{Engine, SearchContext, SearchLimits, SearchTermination
 
 fn timed_search(limit_ms: u64) -> (Duration, chess_final::engine::SearchResult) {
     let board = Board::from_fen(STARTPOS_FEN).expect("valid start position");
-    let mut config = EngineConfig::default();
-    config.tt_size = 1;
-    config.limits = SearchLimits::depth_and_time(64, 6, limit_ms);
+    let config = EngineConfig {
+        tt_size: 1,
+        limits: SearchLimits::depth_and_time(64, 6, limit_ms),
+        ..EngineConfig::default()
+    };
     let mut engine = Engine::new(config);
 
     let start = Instant::now();
@@ -54,9 +56,11 @@ fn expired_limit_still_returns_a_fallback_move_and_full_elapsed_time() {
 #[test]
 fn depth_limit_can_finish_before_a_larger_time_limit() {
     let board = Board::from_fen(STARTPOS_FEN).expect("valid start position");
-    let mut config = EngineConfig::default();
-    config.tt_size = 1;
-    config.limits = SearchLimits::depth_and_time(1, 6, 1_000);
+    let config = EngineConfig {
+        tt_size: 1,
+        limits: SearchLimits::depth_and_time(1, 6, 1_000),
+        ..EngineConfig::default()
+    };
     let mut engine = Engine::new(config);
 
     let result = engine.search(
