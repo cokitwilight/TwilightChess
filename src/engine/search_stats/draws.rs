@@ -1,6 +1,7 @@
 use crate::engine::search_stats::formatting::{metric_count, section};
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct DrawStats {
     pub repetition_returns: u64,
     pub fifty_move_returns: u64,

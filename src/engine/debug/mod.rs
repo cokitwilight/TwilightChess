@@ -3,6 +3,8 @@
 //! Keep algorithmic changes synchronized with `engine::search`; this module
 //! intentionally duplicates the search so release builds can omit detailed
 //! counter updates from the hot path.
+//! The optional debug UCI adapter can capture searched PV prefixes; ordinary
+//! searches do not allocate its table.
 
 mod negamax;
 mod quiescence;

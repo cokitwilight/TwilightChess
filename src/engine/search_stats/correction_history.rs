@@ -8,6 +8,7 @@ use crate::engine::search_stats::{CORRECTION_MAGNITUDE_BUCKETS, CorrectionMagnit
 pub const CORRECTION_BUCKET_WIDTH_CP: usize = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub enum CorrectionUpdateKind {
     Exact,
     FailHigh,
@@ -15,6 +16,7 @@ pub enum CorrectionUpdateKind {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct CorrectionHistoryStats {
     pub lookups: u64,
     pub main_lookups: u64,

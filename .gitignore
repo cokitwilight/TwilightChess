@@ -3,5 +3,5 @@
 .vscode/
 profile.json.gz
 
-.codex/
+/.codex/
 suites/

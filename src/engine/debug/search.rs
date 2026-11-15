@@ -1,3 +1,4 @@
+use std::ops::ControlFlow;
 use std::time::{Duration, Instant};
 
 use crate::board::{Board, Move, MoveType};
@@ -17,6 +18,30 @@ use crate::types::PieceType;
 use thousands::Separable;
 
 impl Engine {
+    /// Debugging UCI entry point. Both search paths share cancellation and
+    /// completed-iteration callbacks.
+    #[cfg(feature = "debug-uci")]
+    pub(crate) fn search_with_debug_control(
+        &mut self,
+        board: &Board,
+        limits: SearchLimits,
+        history: &Vec<u64>,
+        detailed_stats: bool,
+        cancellation: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        on_iteration: &mut dyn FnMut(&SearchResult) -> ControlFlow<()>,
+    ) -> SearchResult {
+        let mut context = SearchContext::new(limits, history.clone());
+        context.cancellation = Some(cancellation);
+        let mut board = board.clone();
+        self.tt.new_search();
+        if detailed_stats {
+            self.iterative_deepening_with_progress(&mut board, &mut context, false, on_iteration)
+        } else {
+            context.enable_pv();
+            iterative_deepening(self, &mut board, &mut context, false, on_iteration)
+        }
+    }
+
     /// Drop-in search entry point for benchmarking without detailed search
     /// instrumentation. Only main and quiescence node counts are populated.
     pub fn search_without_stats(
@@ -109,7 +134,10 @@ fn search_with_progress(
     }
 
     engine.tt.new_search();
-    iterative_deepening(engine, &mut board, &mut context, can_print, on_iteration)
+    iterative_deepening(engine, &mut board, &mut context, can_print, &mut |result| {
+        on_iteration(result);
+        ControlFlow::Continue(())
+    })
 }
 
 fn iterative_deepening(
@@ -117,7 +145,7 @@ fn iterative_deepening(
     board: &mut Board,
     ctx: &mut SearchContext,
     can_print: bool,
-    on_iteration: &mut dyn FnMut(&SearchResult),
+    on_iteration: &mut dyn FnMut(&SearchResult) -> ControlFlow<()>,
 ) -> SearchResult {
     let side_to_move = board.side_to_move();
     let info = MoveGenInfo::calculate(board, side_to_move);
@@ -296,7 +324,10 @@ fn iterative_deepening(
         best_result.depth_reached = depth;
         best_result.stats = ctx.stats;
         best_result.elapsed = ctx.elapsed();
-        on_iteration(&best_result);
+        if on_iteration(&best_result).is_break() {
+            ctx.stop_reason = Some(SearchTermination::IterationStop);
+            break;
+        }
     }
 
     total_time = ctx.elapsed().as_secs_f64();
@@ -332,6 +363,8 @@ fn search_root(
     mut alpha: i32,
     beta: i32,
 ) -> SearchResult {
+    #[cfg(feature = "debug-uci")]
+    ctx.clear_pv(PickerFrame::ROOT);
     ctx.stats.node_stats.main += 1;
 
     let original_alpha = alpha;
@@ -427,6 +460,13 @@ fn search_root(
             best_eval = eval;
             best_move = Some(*mv);
             best_pv[0] = Some(*mv);
+            #[cfg(feature = "debug-uci")]
+            {
+                ctx.update_pv(PickerFrame::ROOT, *mv);
+                if let Some(line) = ctx.pv_line(PickerFrame::ROOT) {
+                    best_pv = line;
+                }
+            }
         }
 
         if eval > alpha {

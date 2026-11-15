@@ -1,4 +1,5 @@
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct PvsStats {
     pub null_window_searches: u64,
     pub alpha_improvements: u64,

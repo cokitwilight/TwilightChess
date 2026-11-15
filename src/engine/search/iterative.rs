@@ -25,6 +25,18 @@ impl Engine {
         ctx: &mut SearchContext,
         can_print: bool,
     ) -> SearchResult {
+        self.iterative_deepening_with_progress(board, ctx, can_print, &mut |_| {
+            std::ops::ControlFlow::Continue(())
+        })
+    }
+
+    pub(crate) fn iterative_deepening_with_progress(
+        &mut self,
+        board: &mut Board,
+        ctx: &mut SearchContext,
+        can_print: bool,
+        on_iteration: &mut dyn FnMut(&SearchResult) -> std::ops::ControlFlow<()>,
+    ) -> SearchResult {
         let side_to_move = board.side_to_move();
         let info = MoveGenInfo::calculate(board, side_to_move);
         let fallback_move = {
@@ -268,6 +280,12 @@ impl Engine {
 
             best_result = result;
             best_result.depth_reached = depth;
+            best_result.stats = ctx.stats;
+            best_result.elapsed = ctx.elapsed();
+            if on_iteration(&best_result).is_break() {
+                ctx.stop_reason = Some(SearchTermination::IterationStop);
+                break;
+            }
         }
 
         total_time = ctx.elapsed().as_secs_f64();

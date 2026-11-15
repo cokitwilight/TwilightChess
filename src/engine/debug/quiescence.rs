@@ -22,6 +22,8 @@ pub(super) fn quiescence(
     picker_frame: PickerFrame,
     check_plies: usize,
 ) -> i32 {
+    #[cfg(feature = "debug-uci")]
+    context.clear_pv(picker_frame);
     if context.stopped || (context.stats.total_nodes() & 2047 == 0 && context.should_stop()) {
         return 0;
     }
@@ -247,6 +249,8 @@ pub(super) fn quiescence(
         if eval > best_eval {
             best_eval = eval;
             best_move = Some(*mv);
+            #[cfg(feature = "debug-uci")]
+            context.update_pv(picker_frame, *mv);
         }
 
         alpha = alpha.max(eval);

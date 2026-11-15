@@ -4,6 +4,7 @@ use crate::engine::search_stats::formatting::{
 use crate::engine::search_stats::{MoveStats, NodeStats};
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct CutoffStats {
     pub beta: u64,
     pub quiescence_beta: u64,
