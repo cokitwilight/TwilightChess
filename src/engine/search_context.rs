@@ -31,7 +31,7 @@ pub struct SearchContext {
     pub stats: SearchStats,
     /// Deepest root-relative ply visited in the current iteration, including quiescence.
     pub seldepth: usize,
-    pub stack: [SearchStackEntry; MAX_PLY as usize],
+    pub stack: [SearchStackEntry; MAX_PLY],
 
     pub move_buffers: Box<[MoveBuffer]>,
 
@@ -55,7 +55,7 @@ impl SearchContext {
             limits,
             stats: SearchStats::default(),
             seldepth: 0,
-            stack: [SearchStackEntry::default(); MAX_PLY as usize],
+            stack: [SearchStackEntry::default(); MAX_PLY],
             move_buffers: vec![MoveBuffer::new(); PICKER_FRAME_COUNT].into_boxed_slice(),
             killer_moves: KillerTable::new(),
             repetition_history,

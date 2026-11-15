@@ -19,14 +19,14 @@ impl LmrTable {
     pub fn new(config: &LMRConfig) -> Self {
         let mut reductions = [[0i16; MAX_MOVES]; MAX_PLY];
 
-        for depth in 1..MAX_PLY {
-            for mv in 1..MAX_MOVES {
+        for (depth, row) in reductions.iter_mut().enumerate().skip(1) {
+            for (mv, entry) in row.iter_mut().enumerate().skip(1) {
                 let d = depth as f64;
                 let m = mv as f64;
 
                 let reduction = config.base + (d.ln() * m.ln() / config.divisor);
 
-                reductions[depth][mv] = (reduction.max(0.0) * LMR_SCALE) as i16;
+                *entry = (reduction.max(0.0) * LMR_SCALE) as i16;
             }
         }
         Self { reductions }
@@ -102,7 +102,7 @@ impl LmrTable {
         gives_check: bool,
         config: &LMRConfig,
     ) -> i32 {
-        let base_reduction = self.get(depth as usize, searched_moves as usize + 1);
+        let base_reduction = self.get(depth, searched_moves + 1);
         let mut current_reduction = base_reduction;
         let mut history_delta = 0;
         let mut non_improving_delta = 0;

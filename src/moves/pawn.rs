@@ -665,11 +665,9 @@ pub fn legal_en_passant(board: &Board, mv: Move, info: &MoveGenInfo, king_sq: Sq
 
     // first check if already in check
 
-    if info.checkers != 0 {
-        if info.checkers & &bit(captured_sq) == 0 {
-            // if the checking piece is the captued square then this can be valid. However still prove that it doesn't expose any checks later
-            return false;
-        }
+    if info.checkers != 0 && info.checkers & bit(captured_sq) == 0 {
+        // if the checking piece is the captued square then this can be valid. However still prove that it doesn't expose any checks later
+        return false;
     }
 
     let mut occ = board.all_occupancy();

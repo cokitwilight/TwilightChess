@@ -670,7 +670,7 @@ impl TournamentViewer {
             if let Some(next) = game.move_history.first() {
                 println!(
                     "Next: {} | stored eval {:+} cp",
-                    format_move_label(0, &next.mv),
+                    format_move_label(0, next.mv),
                     next.eval
                 );
             }
@@ -687,7 +687,7 @@ impl TournamentViewer {
             "Ply {:>3}/{:<3} | {:<18} | stored eval {:+} cp ({:+.2})",
             self.ply_cursor,
             move_count,
-            format_move_label(move_index, &record.mv),
+            format_move_label(move_index, record.mv),
             record.eval,
             record.eval as f64 / 100.0,
         );
@@ -748,7 +748,7 @@ impl TournamentViewer {
             println!(
                 "{cursor} {:>3}. {:<18} eval {:+} cp",
                 absolute_index + 1,
-                format_move_label(absolute_index, &record.mv),
+                format_move_label(absolute_index, record.mv),
                 record.eval,
             );
         }
@@ -760,8 +760,7 @@ impl TournamentViewer {
             return;
         }
 
-        let page_count =
-            (self.tournament.games.len() + GAME_LIST_PAGE_SIZE - 1) / GAME_LIST_PAGE_SIZE;
+        let page_count = self.tournament.games.len().div_ceil(GAME_LIST_PAGE_SIZE);
 
         let Some(page_index) = one_based_page.checked_sub(1) else {
             println!("Pages begin at 1.");
@@ -876,7 +875,7 @@ impl TournamentViewer {
         println!(
             "Moves: {} plies ({} full moves) | Result stored: {}",
             game.move_history.len(),
-            (game.move_history.len() + 1) / 2,
+            game.move_history.len().div_ceil(2),
             if game.result.is_some() { "Yes" } else { "No" },
         );
         println!(
@@ -1087,7 +1086,7 @@ impl TournamentResult {
 
 fn format_move_label(movement_index: usize, mv: impl std::fmt::Display) -> String {
     let move_number = movement_index / 2 + 1;
-    if movement_index % 2 == 0 {
+    if movement_index.is_multiple_of(2) {
         format!("{move_number}. {mv}")
     } else {
         format!("{move_number}... {mv}")

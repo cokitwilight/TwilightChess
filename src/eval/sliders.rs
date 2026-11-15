@@ -39,11 +39,7 @@ pub fn sliders_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
 
 pub(super) fn bishop_pair_bonus(board: &Board, color: Color) -> i32 {
     let bishops = board.pieces(color, PieceType::Bishop).count_ones();
-    if bishops >= 2 {
-        return 30;
-    } else {
-        return 0;
-    }
+    if bishops >= 2 { 30 } else { 0 }
 }
 
 pub(super) fn bishop_blocked_by_pawns_bonus(board: &Board, color: Color, _info: &EvalInfo) -> i32 {

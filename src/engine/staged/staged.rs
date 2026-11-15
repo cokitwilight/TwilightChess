@@ -66,6 +66,12 @@ pub struct ScoredMove {
     pub captured: Option<PieceType>,
 }
 
+impl Default for ScoredMove {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScoredMove {
     pub fn new() -> Self {
         Self {
@@ -81,6 +87,12 @@ impl ScoredMove {
 #[derive(Clone, Debug)]
 pub struct MoveBuffer {
     pub entries: [ScoredMove; MAX_MOVES],
+}
+
+impl Default for MoveBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MoveBuffer {
@@ -136,7 +148,7 @@ impl Engine {
         let killer_1 = context.killer_moves.get(ply, 0);
         let killer_2 = context.killer_moves.get(ply, 1);
 
-        let move_picker = MovePicker {
+        MovePicker {
             stage,
             mode,
             current_len: 0,
@@ -151,9 +163,7 @@ impl Engine {
             tt_move,
             killer_1,
             killer_2,
-        };
-
-        move_picker
+        }
     }
 }
 

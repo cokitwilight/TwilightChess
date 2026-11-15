@@ -30,13 +30,10 @@ pub struct NotableGame {
 
 impl NotableGame {
     pub fn print_summary(&self, index: usize) {
-        if self.game_record.opening_name.is_some() {
+        if let Some(opening_name) = &self.game_record.opening_name {
             println!(
                 "Game: {}. Opening: {}. Importance: {} | Result: {:?} | Reasons:",
-                index,
-                self.game_record.opening_name.as_ref().unwrap(),
-                self.importance,
-                self.game_record.result
+                index, opening_name, self.importance, self.game_record.result
             );
         } else {
             println!(

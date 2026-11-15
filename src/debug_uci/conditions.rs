@@ -56,10 +56,10 @@ impl ExpectedAnswer {
             if entry.points < 0 {
                 return None;
             }
-            if let Some(previous) = weights.insert(entry.mv.to_ascii_lowercase(), entry.points) {
-                if previous != entry.points {
-                    return None;
-                }
+            if let Some(previous) = weights.insert(entry.mv.to_ascii_lowercase(), entry.points)
+                && previous != entry.points
+            {
+                return None;
             }
         }
         if !weights.is_empty() && weights.values().all(|&p| p <= 0) {

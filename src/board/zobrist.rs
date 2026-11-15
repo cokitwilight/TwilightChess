@@ -49,10 +49,10 @@ impl Zobrist {
 
         let mut pieces = [[[0u64; 64]; 6]; 2];
 
-        for color in 0..2 {
-            for piece in 0..6 {
-                for sq in 0..64 {
-                    pieces[color][piece][sq] = rng.next_u64();
+        for color in &mut pieces {
+            for piece in color {
+                for key in piece {
+                    *key = rng.next_u64();
                 }
             }
         }

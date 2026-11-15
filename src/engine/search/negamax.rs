@@ -87,7 +87,7 @@ impl Engine {
             return 0;
         }
 
-        if board.phase() < 8 && is_insufficient_material(&board) {
+        if board.phase() < 8 && is_insufficient_material(board) {
             track_stat!(context.stats.draw_stats.insufficient_material_returns += 1);
             return 0;
         }
@@ -163,10 +163,8 @@ impl Engine {
                 && matches!(entry.flag.bound_type(), TTFlag::Exact | TTFlag::LowerBound)
                 && tt_score.abs() < MATE_THRESHOLD;
 
-            if suitable_for_singular {
-                if let Some(mv) = entry.best_move {
-                    candidate_move = Some((mv, tt_score));
-                }
+            if suitable_for_singular && let Some(mv) = entry.best_move {
+                candidate_move = Some((mv, tt_score));
             }
         } else if let Some(entry) = self.tt.get_any(board.board_hash) {
             // A quiescence score cannot supply a main-search cutoff, but its
@@ -398,52 +396,51 @@ impl Engine {
 
             let mut extension: u16 = 0;
 
-            if let Some(candidate) = candidate_move {
-                if candidate.0 == *mv {
-                    track_stat!(context.stats.singular_stats.attempts += 1);
+            if let Some(candidate) = candidate_move
+                && candidate.0 == *mv
+            {
+                track_stat!(context.stats.singular_stats.attempts += 1);
 
-                    let margin = self.config.search.singular.base_margin
-                        + self.config.search.singular.depth_margin * depth as i32;
+                let margin = self.config.search.singular.base_margin
+                    + self.config.search.singular.depth_margin * depth as i32;
 
-                    let singular_beta = candidate.1 - margin;
-                    let verification_depth = depth.saturating_sub(1) / 2;
+                let singular_beta = candidate.1 - margin;
+                let verification_depth = depth.saturating_sub(1) / 2;
 
-                    #[cfg(feature = "search-stats")]
-                    let nodes_before = context.stats.total_nodes();
+                #[cfg(feature = "search-stats")]
+                let nodes_before = context.stats.total_nodes();
 
-                    let verification_score = self.negamax(
-                        board,
-                        context,
-                        verification_depth,
-                        singular_beta - 1,
-                        singular_beta,
-                        ply, // Same position: do not increase ply
-                        picker_frame.child(),
-                        SearchOptions {
-                            allow_null_move: false,
-                            allow_singular: false,
-                            excluded_move: Some(candidate.0),
-                        },
-                    );
+                let verification_score = self.negamax(
+                    board,
+                    context,
+                    verification_depth,
+                    singular_beta - 1,
+                    singular_beta,
+                    ply, // Same position: do not increase ply
+                    picker_frame.child(),
+                    SearchOptions {
+                        allow_null_move: false,
+                        allow_singular: false,
+                        excluded_move: Some(candidate.0),
+                    },
+                );
 
-                    #[cfg(feature = "search-stats")]
-                    let nodes_after = context.stats.total_nodes();
+                #[cfg(feature = "search-stats")]
+                let nodes_after = context.stats.total_nodes();
 
-                    track_stat!(
-                        context.stats.singular_stats.verification_nodes +=
-                            nodes_after - nodes_before
-                    );
+                track_stat!(
+                    context.stats.singular_stats.verification_nodes += nodes_after - nodes_before
+                );
 
-                    if context.stopped {
-                        return 0;
-                    }
+                if context.stopped {
+                    return 0;
+                }
 
-                    if verification_score < singular_beta {
-                        extension = 1;
-                        track_stat!(context.stats.singular_stats.extensions += 1);
-                    } else {
-                        track_stat!(context.stats.singular_stats.fail_highs += 1);
-                    }
+                if verification_score < singular_beta {
+                    extension = 1;
+                    track_stat!(context.stats.singular_stats.extensions += 1);
+                } else {
+                    track_stat!(context.stats.singular_stats.fail_highs += 1);
                 }
             }
 
@@ -491,7 +488,7 @@ impl Engine {
 
                 let margin = calculate_fut_margin(depth, history_score, &self.config.search.fut);
 
-                if corrected_static_eval + margin as i32 <= alpha {
+                if corrected_static_eval + margin <= alpha {
                     track_stat!(context.stats.fut_stats.pruned_moves += 1);
                     track_stat!(
                         context.stats.fut_stats.pruned_moves_by_depth.bins[depth_bucket] += 1

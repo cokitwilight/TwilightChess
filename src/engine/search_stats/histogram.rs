@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn reduction_histogram_keeps_large_reductions_separate() {
-        assert!(REDUCTION_BUCKETS > 16);
+        const { assert!(REDUCTION_BUCKETS > 16) };
 
         let mut histogram = ReductionHistogram::default();
         histogram.bins[8] = 2;

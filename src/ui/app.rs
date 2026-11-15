@@ -437,7 +437,7 @@ impl ChessApp {
         let side_to_move = game.board().side_to_move();
 
         let selected_square = self.selected_square;
-        let selected_moves = self.selected_moves.clone();
+        let selected_moves = self.selected_moves;
         let selected_move_count = selected_moves.len();
 
         let mut board_action = None;
@@ -700,7 +700,7 @@ impl ChessApp {
         let side_to_move = game.board().side_to_move();
 
         let selected_square = self.selected_square;
-        let selected_moves = self.selected_moves.clone();
+        let selected_moves = self.selected_moves;
         let selected_move_count = selected_moves.len();
 
         let bot_thinking = self.is_bot_thinking();
@@ -1049,12 +1049,12 @@ impl ChessApp {
         };
 
         // Ignore stale results if the position is no longer on the bot's turn.
-        if let Some(bot_color) = bot_color {
-            if game.state() == GameState::Ongoing && game.board().side_to_move() == bot_color {
-                if let Err(err) = game.play_move(best_move) {
-                    eprintln!("Bot failed to play move {:?}: {:?}", best_move, err);
-                }
-            }
+        if let Some(bot_color) = bot_color
+            && game.state() == GameState::Ongoing
+            && game.board().side_to_move() == bot_color
+            && let Err(err) = game.play_move(best_move)
+        {
+            eprintln!("Bot failed to play move {:?}: {:?}", best_move, err);
         }
 
         self.clear_selection();

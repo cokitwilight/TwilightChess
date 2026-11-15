@@ -73,7 +73,7 @@ impl Move {
     }
 
     pub fn is_capture(self) -> bool {
-        return self.mv.get() & CAPTURE == CAPTURE || self.mv.get() & CODE_MASK == EN_PASSANT;
+        self.mv.get() & CAPTURE == CAPTURE || self.mv.get() & CODE_MASK == EN_PASSANT
     }
 
     pub fn is_promotion(self) -> bool {
@@ -106,15 +106,13 @@ impl Move {
         }
     }
     pub fn promotion(self) -> Option<PieceType> {
-        let promo = Option::from(match self.mv.get() & CODE_MASK {
+        Option::from(match self.mv.get() & CODE_MASK {
             PROMOTION_KNIGHT => PieceType::Knight,
             PROMOTION_BISHOP => PieceType::Bishop,
             PROMOTION_ROOK => PieceType::Rook,
             PROMOTION_QUEEN => PieceType::Queen,
             _ => return None,
-        });
-
-        return promo;
+        })
     }
 }
 
