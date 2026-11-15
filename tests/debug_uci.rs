@@ -1,6 +1,6 @@
 #![cfg(feature = "debug-uci")]
 use chess_final::board::{Board, STARTPOS_FEN};
-use chess_final::engine::{Engine, SearchLimits, configs::EngineConfig};
+use chess_final::engine::{Engine, SearchContext, SearchLimits, configs::EngineConfig};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -71,12 +71,11 @@ impl Client {
             "{lines:?}"
         );
     }
-    fn setup(&mut self, stats: bool) {
+    fn setup(&mut self) {
         self.send("uci");
         self.until("uciok");
         self.send("setoption name Hash value 1");
         self.send("setoption name limits.max_q_depth value 3");
-        self.send(&format!("setoption name Debug.Statistics value {stats}"));
         self.ready();
     }
     fn search(&mut self, go: &str) -> Vec<String> {
@@ -98,6 +97,7 @@ fn advertises_actual_defaults_and_runs_the_normal_instrumented_search() {
     let mut client = Client::new();
     client.send("uci");
     let lines = client.until("uciok");
+    assert!(!lines.iter().any(|line| line.contains("Debug.Statistics")));
     assert!(
         lines
             .iter()
@@ -113,20 +113,35 @@ fn advertises_actual_defaults_and_runs_the_normal_instrumented_search() {
     assert_eq!(schema["defaults"]["search"]["lmr"]["history_scale"], 94);
     client.send("setoption name Hash value 1");
     client.send("setoption name limits.max_q_depth value 3");
-    client.send("setoption name Debug.Statistics value true");
     client.ready();
     let lines = client.search("go depth 2");
     let result = report(&lines);
     assert_eq!(result["completed"], true);
     assert_eq!(result["completed_depth"], 2);
+    assert_eq!(result["detailed_statistics"], true);
+    let iterations: Vec<Value> = lines
+        .iter()
+        .filter_map(|line| line.strip_prefix("info string twilight.iteration "))
+        .map(|payload| serde_json::from_str(payload).unwrap())
+        .collect();
+    assert_eq!(iterations.len(), 2);
+    assert_eq!(iterations[0]["completed_depth"], 1);
+    assert_eq!(iterations[1]["completed_depth"], 2);
+    for field in ["best_move", "raw_eval", "nodes", "seldepth", "pv"] {
+        assert_eq!(iterations[1][field], result[field], "{field}");
+    }
     let board = Board::from_fen(STARTPOS_FEN).unwrap();
     let cfg = EngineConfig {
         tt_size: 1,
         limits: SearchLimits::depth(2, 3),
         ..EngineConfig::default()
     };
-    let normal =
-        Engine::new(cfg).search(&board, cfg.limits, &vec![board.board_hash()], false, false);
+    let normal = Engine::new(cfg).search(
+        &board,
+        &mut SearchContext::new(cfg.limits, vec![board.board_hash()]),
+        false,
+        false,
+    );
     assert_eq!(result["nodes"], normal.stats.total_nodes());
     assert_eq!(result["raw_eval"], normal.eval);
     assert_eq!(result["best_move"], normal.best_move.unwrap().to_uci());
@@ -143,7 +158,7 @@ fn advertises_actual_defaults_and_runs_the_normal_instrumented_search() {
 #[test]
 fn repeated_positions_are_fresh_and_config_changes_apply_between_searches() {
     let mut client = Client::new();
-    client.setup(false);
+    client.setup();
     let first = report(&client.search("go depth 2"));
     client.send("ucinewgame");
     client.ready();
@@ -174,13 +189,19 @@ fn repeated_positions_are_fresh_and_config_changes_apply_between_searches() {
 #[test]
 fn cancellation_is_prompt_and_budget_modes_have_valid_completion() {
     let mut client = Client::new();
-    client.setup(false);
+    client.setup();
     let nodes = report(&client.search("go nodes 10000"));
     assert_eq!(nodes["termination"], "node_limit");
     assert_eq!(nodes["completed"], true);
-    let zero = report(&client.search("go movetime 0"));
+    let zero_lines = client.search("go movetime 0");
+    let zero = report(&zero_lines);
     assert_eq!(zero["completed"], false);
     assert_eq!(zero["completed_depth"], 0);
+    assert!(
+        !zero_lines
+            .iter()
+            .any(|line| line.starts_with("info string twilight.iteration "))
+    );
     client.send(&format!("position fen {STARTPOS_FEN}"));
     client.send("go depth 255");
     client.send("isready");
@@ -196,7 +217,7 @@ fn cancellation_is_prompt_and_budget_modes_have_valid_completion() {
 #[test]
 fn discovery_confirms_a_solution_inside_the_engine() {
     let mut client = Client::new();
-    client.setup(false);
+    client.setup();
     let first = report(&client.search("go depth 1"));
     let best = first["best_move"].as_str().unwrap();
     let request = json!({"options":{"start_depth":1,"max_depth":1,"confirm_depths":2},"position":{"id":"test","fen":STARTPOS_FEN,"acceptable_moves":[best]}});
@@ -209,4 +230,45 @@ fn discovery_confirms_a_solution_inside_the_engine() {
     assert_eq!(result["termination"], "solution_found");
     assert_eq!(result["discovery"]["status"], "solved");
     assert_eq!(result["discovery"]["confirmation_capped"], true);
+}
+
+#[test]
+fn finder_waits_for_start_depth_and_confirmation_then_stops_early() {
+    let mut client = Client::new();
+    client.setup();
+    let mut board = Board::from_fen(STARTPOS_FEN).unwrap();
+    // Every legal move passes, so the confirmation depths are deterministic.
+    let acceptable: Vec<_> = board
+        .all_legal_moves()
+        .iter()
+        .map(|mv| mv.to_uci())
+        .collect();
+    let request = json!({
+        "options": {"start_depth": 2, "max_depth": 6, "confirm_depths": 1},
+        "position": {"fen": STARTPOS_FEN, "acceptable_moves": acceptable}
+    });
+    client.send(&format!(
+        "setoption name Debug.FindSolution value {request}"
+    ));
+    let lines = client.search("go depth 6");
+    let result = report(&lines);
+    assert_eq!(result["termination"], "solution_found");
+    assert_eq!(result["completed_depth"], 3);
+    assert_eq!(result["completed"], true);
+    assert_eq!(result["discovery"]["first_pass"]["depth"], 2);
+    assert_eq!(result["discovery"]["solution"]["depth"], 2);
+    assert_eq!(result["discovery"]["confirmation_depth"], 3);
+    assert_eq!(result["discovery"]["confirmations_checked"], 1);
+    assert_eq!(result["discovery"]["confirmation_capped"], false);
+    let depths: Vec<Value> = lines
+        .iter()
+        .filter_map(|line| line.strip_prefix("info string twilight.iteration "))
+        .map(|payload| serde_json::from_str::<Value>(payload).unwrap()["completed_depth"].clone())
+        .collect();
+    assert_eq!(depths, vec![json!(1), json!(2), json!(3)]);
+
+    client.send("setoption name Debug.FindSolution value <none>");
+    let next = report(&client.search("go depth 2"));
+    assert_eq!(next["termination"], "depth_limit");
+    assert!(next.get("discovery").is_none());
 }

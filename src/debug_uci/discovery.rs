@@ -2,8 +2,9 @@
 
 use serde::Serialize;
 
+use super::conditions::ExpectedAnswer;
 use super::metrics::SearchMetrics;
-use crate::engine::MAX_PLY;
+use crate::engine::{MAX_PLY, SearchIteration};
 
 #[derive(Clone, Copy, Debug, Serialize)]
 #[cfg_attr(feature = "debug-uci", derive(serde::Deserialize))]
@@ -74,12 +75,42 @@ pub struct DiscoveryResult {
     pub confirmation_capped: bool,
 }
 
+#[derive(Clone, Debug)]
 pub(crate) struct DiscoveryTracker {
     options: FindSolutionOptions,
     first_pass: Option<SolutionHit>,
     streak: Option<SolutionHit>,
     last_depth: Option<u16>,
     solved: bool,
+}
+
+/// The position's expected answer and its running confirmation state.
+/// Iterative deepening calls `observe` once after each completed depth.
+#[derive(Clone, Debug)]
+pub(crate) struct FindSolutionState {
+    position: ExpectedAnswer,
+    tracker: DiscoveryTracker,
+}
+
+impl FindSolutionState {
+    pub(super) fn new(position: ExpectedAnswer, options: FindSolutionOptions) -> Self {
+        Self {
+            position,
+            tracker: DiscoveryTracker::new(options),
+        }
+    }
+
+    pub(crate) fn observe(&mut self, iteration: &SearchIteration) -> bool {
+        let metrics = SearchMetrics::from_iteration(iteration);
+        let passing = self
+            .position
+            .is_passing(metrics.best_move.as_deref(), metrics.completed_depth);
+        self.tracker.observe(&metrics, passing)
+    }
+
+    pub(super) fn finish(self, stopped_depth: u16, cap_reached: bool) -> DiscoveryResult {
+        self.tracker.finish(stopped_depth, cap_reached, true)
+    }
 }
 
 impl DiscoveryTracker {
