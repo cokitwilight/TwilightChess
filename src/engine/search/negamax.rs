@@ -1,6 +1,7 @@
 use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF};
 use crate::engine::history::HistoryKey;
+#[cfg(feature = "search-stats")]
 use crate::engine::ordering::see;
 use crate::engine::pruning::{
     calculate_fut_margin, calculate_nmp_margin, lmp_history_limit, lmp_threshold,
@@ -8,6 +9,8 @@ use crate::engine::pruning::{
 };
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
+use crate::engine::search_stats::track_stat;
+#[cfg(feature = "search-stats")]
 use crate::engine::search_stats::{
     CorrectionUpdateKind, MAX_TRACKED_DEPTH, MOVE_INDEX_BUCKETS, REDUCTION_BUCKETS,
 };
@@ -33,8 +36,8 @@ impl Engine {
         options: SearchOptions,
     ) -> i32 {
         // every 2048 nodes check if it should stop rather than expensively checking each time.
-        if context.stopped || (context.stats.total_nodes() & 2047 == 0 && context.should_stop()) {
-            context.stats.terminal_stats.stopped_returns += 1;
+        if context.stopped || context.stats.total_nodes() & 2047 == 0 && context.should_stop() {
+            track_stat!(context.stats.terminal_stats.stopped_returns += 1);
             return 0;
         }
 
@@ -44,20 +47,20 @@ impl Engine {
         // Classify the original window before the TT potentially narrows it.
         let is_pv = beta != alpha + 1;
 
-        if is_pv {
-            context.stats.node_stats.pv += 1;
-        } else {
-            context.stats.node_stats.non_pv += 1;
+        track_stat! {
+            if is_pv {
+                context.stats.node_stats.pv += 1;
+            } else {
+                context.stats.node_stats.non_pv += 1;
+            }
         }
 
         if ply >= MAX_PLY - 1 {
-            context.stats.terminal_stats.max_ply_returns += 1;
+            track_stat!(context.stats.terminal_stats.max_ply_returns += 1);
             return evaluation_for_turn(board);
         }
 
         if depth == 0 {
-            // FOR BENCHMARKING
-            // return evaluation_for_turn(board);
             return self.quiescence(
                 board,
                 context,
@@ -70,57 +73,59 @@ impl Engine {
             );
         }
 
-        // ADD DRAWING LOGIC HERE
-
         if Engine::repetition_in_search(
             context,
             board.board_hash(),
             board.halfmove_clock() as usize,
         ) {
-            context.stats.draw_stats.repetition_returns += 1;
+            track_stat!(context.stats.draw_stats.repetition_returns += 1);
             return 0;
         }
 
         if board.halfmove_clock() >= 100 {
-            // 50 move rule
-            context.stats.draw_stats.fifty_move_returns += 1;
+            track_stat!(context.stats.draw_stats.fifty_move_returns += 1);
             return 0;
         }
 
         if board.phase() < 8 && is_insufficient_material(&board) {
-            context.stats.draw_stats.insufficient_material_returns += 1;
+            track_stat!(context.stats.draw_stats.insufficient_material_returns += 1);
             return 0;
         }
 
         let original_alpha = alpha;
-        // let original_beta = beta;
 
         let in_check = board.in_check(board.side_to_move());
-        if in_check {
-            context.stats.node_stats.in_check += 1;
+        track_stat! {
+            if in_check {
+                context.stats.node_stats.in_check += 1;
+            }
         }
 
         let mut tt_best_move: Option<Move> = None;
 
         let mut candidate_move: Option<(Move, i32)> = None;
 
-        context.stats.tt_stats.main.probes += 1;
+        track_stat!(context.stats.tt_stats.main.probes += 1);
 
         let mut tt_eval = i16::MIN;
 
         if let Some(entry) = self.tt.get(board.board_hash, TTNodeType::Main) {
-            context.stats.tt_stats.main.hits += 1;
+            track_stat!(context.stats.tt_stats.main.hits += 1);
 
-            match entry.flag.bound_type() {
+            track_stat!(match entry.flag.bound_type() {
                 TTFlag::Exact => context.stats.tt_stats.main.exact_hits += 1,
-                TTFlag::LowerBound => context.stats.tt_stats.main.lower_bound_hits += 1,
-                TTFlag::UpperBound => context.stats.tt_stats.main.upper_bound_hits += 1,
-            }
+                TTFlag::LowerBound => {
+                    context.stats.tt_stats.main.lower_bound_hits += 1;
+                }
+                TTFlag::UpperBound => {
+                    context.stats.tt_stats.main.upper_bound_hits += 1;
+                }
+            });
             if entry.best_move.is_some() {
-                context.stats.tt_stats.main.move_hits += 1;
+                track_stat!(context.stats.tt_stats.main.move_hits += 1);
             }
             if u16::from(entry.depth) < depth && options.excluded_move.is_none() {
-                context.stats.tt_stats.main.depth_rejected_hits += 1;
+                track_stat!(context.stats.tt_stats.main.depth_rejected_hits += 1);
             }
 
             let tt_score = score_from_tt(entry.eval as i32, ply);
@@ -130,11 +135,11 @@ impl Engine {
             tt_eval = entry.static_eval;
 
             if u16::from(entry.depth) >= depth && options.excluded_move.is_none() {
-                context.stats.tt_stats.main.usable += 1;
+                track_stat!(context.stats.tt_stats.main.usable += 1);
 
                 match entry.flag.bound_type() {
                     TTFlag::Exact => {
-                        context.stats.tt_stats.main.exact_returns += 1;
+                        track_stat!(context.stats.tt_stats.main.exact_returns += 1);
                         return tt_score;
                     }
                     TTFlag::LowerBound => {
@@ -145,7 +150,7 @@ impl Engine {
                     }
                 }
                 if alpha >= beta {
-                    context.stats.tt_stats.main.bound_cutoffs += 1;
+                    track_stat!(context.stats.tt_stats.main.bound_cutoffs += 1);
                     return tt_score;
                 }
             }
@@ -178,10 +183,12 @@ impl Engine {
 
         let corrected_static_eval = if self.config.search.correction.enabled {
             let correction = self.history.correction.get(board);
-            context
-                .stats
-                .correction_stats
-                .record_main_lookup(correction);
+            track_stat!(
+                context
+                    .stats
+                    .correction_stats
+                    .record_main_lookup(correction)
+            );
             raw_static_eval + correction
         } else {
             raw_static_eval
@@ -199,16 +206,23 @@ impl Engine {
 
         // reverse futility pruning
         if can_rfp {
-            context.stats.rfp_stats.attempts += 1;
+            #[cfg(feature = "search-stats")]
             let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
-            context.stats.rfp_stats.attempts_by_depth.bins[depth_bucket] += 1;
+
+            track_stat! {
+                context.stats.rfp_stats.attempts += 1;
+                context.stats.rfp_stats.attempts_by_depth.bins[depth_bucket] += 1;
+            }
 
             let margin = rfp_margin(depth as usize, &self.config.search.rfp);
             // dynamic RFP margin
 
             if corrected_static_eval - margin >= beta {
-                context.stats.rfp_stats.cutoffs += 1;
-                context.stats.rfp_stats.cutoffs_by_depth.bins[depth_bucket] += 1;
+                track_stat! {
+                    context.stats.rfp_stats.cutoffs += 1;
+                    context.stats.rfp_stats.cutoffs_by_depth.bins[depth_bucket] += 1;
+                }
+
                 return beta;
             }
         }
@@ -228,9 +242,11 @@ impl Engine {
             && corrected_static_eval >= calculate_nmp_margin(beta);
 
         if can_null_prune {
-            context.stats.null_move_stats.attempts += 1;
+            #[cfg(feature = "search-stats")]
             let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
-            context.stats.null_move_stats.attempts_by_depth.bins[depth_bucket] += 1;
+
+            track_stat!(context.stats.null_move_stats.attempts += 1);
+            track_stat!(context.stats.null_move_stats.attempts_by_depth.bins[depth_bucket] += 1);
 
             let reduction = null_move_reduction(depth);
 
@@ -258,8 +274,8 @@ impl Engine {
             }
 
             if score >= beta {
-                context.stats.null_move_stats.cutoffs += 1;
-                context.stats.null_move_stats.cutoffs_by_depth.bins[depth_bucket] += 1;
+                track_stat!(context.stats.null_move_stats.cutoffs += 1);
+                track_stat!(context.stats.null_move_stats.cutoffs_by_depth.bins[depth_bucket] += 1);
                 return beta;
             }
         }
@@ -365,7 +381,9 @@ impl Engine {
                 None
             };
 
+            #[cfg(feature = "search-stats")]
             let was_killer = context.killer_moves.contains(ply, *mv);
+
             let history_score = if is_quiet {
                 self.history.get_quiet_score(&context.stack, ply, curr_key)
             } else if is_capture && Some(*mv) != tt_best_move {
@@ -382,7 +400,7 @@ impl Engine {
 
             if let Some(candidate) = candidate_move {
                 if candidate.0 == *mv {
-                    context.stats.singular_stats.attempts += 1;
+                    track_stat!(context.stats.singular_stats.attempts += 1);
 
                     let margin = self.config.search.singular.base_margin
                         + self.config.search.singular.depth_margin * depth as i32;
@@ -390,6 +408,7 @@ impl Engine {
                     let singular_beta = candidate.1 - margin;
                     let verification_depth = depth.saturating_sub(1) / 2;
 
+                    #[cfg(feature = "search-stats")]
                     let nodes_before = context.stats.total_nodes();
 
                     let verification_score = self.negamax(
@@ -407,9 +426,13 @@ impl Engine {
                         },
                     );
 
+                    #[cfg(feature = "search-stats")]
                     let nodes_after = context.stats.total_nodes();
 
-                    context.stats.singular_stats.verification_nodes += nodes_after - nodes_before;
+                    track_stat!(
+                        context.stats.singular_stats.verification_nodes +=
+                            nodes_after - nodes_before
+                    );
 
                     if context.stopped {
                         return 0;
@@ -417,9 +440,9 @@ impl Engine {
 
                     if verification_score < singular_beta {
                         extension = 1;
-                        context.stats.singular_stats.extensions += 1;
+                        track_stat!(context.stats.singular_stats.extensions += 1);
                     } else {
-                        context.stats.singular_stats.fail_highs += 1;
+                        track_stat!(context.stats.singular_stats.fail_highs += 1);
                     }
                 }
             }
@@ -449,26 +472,30 @@ impl Engine {
                 && depth <= self.config.search.lmp.max_depth;
 
             if can_lmp && quiet_moves_seen > lmp_threshold(depth as usize) {
-                context.stats.lmp_stats.attempts += 1;
+                track_stat!(context.stats.lmp_stats.attempts += 1);
 
                 if history_score >= lmp_history_limit(depth as usize) {
-                    context.stats.lmp_stats.history_rejections += 1;
+                    track_stat!(context.stats.lmp_stats.history_rejections += 1);
                 } else {
-                    context.stats.lmp_stats.pruned_moves += 1;
+                    track_stat!(context.stats.lmp_stats.pruned_moves += 1);
                     continue;
                 }
             }
 
             if can_fut && can_prune && searched_moves > 0 {
-                context.stats.fut_stats.attempts += 1;
+                #[cfg(feature = "search-stats")]
                 let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
-                context.stats.fut_stats.attempts_by_depth.bins[depth_bucket] += 1;
+
+                track_stat!(context.stats.fut_stats.attempts += 1);
+                track_stat!(context.stats.fut_stats.attempts_by_depth.bins[depth_bucket] += 1);
 
                 let margin = calculate_fut_margin(depth, history_score, &self.config.search.fut);
 
                 if corrected_static_eval + margin as i32 <= alpha {
-                    context.stats.fut_stats.pruned_moves += 1;
-                    context.stats.fut_stats.pruned_moves_by_depth.bins[depth_bucket] += 1;
+                    track_stat!(context.stats.fut_stats.pruned_moves += 1);
+                    track_stat!(
+                        context.stats.fut_stats.pruned_moves_by_depth.bins[depth_bucket] += 1
+                    );
                     continue;
                 }
             }
@@ -484,19 +511,38 @@ impl Engine {
                 && searched_moves >= self.config.search.lmr.min_move_number;
 
             let reduction = if can_lmr {
-                self.lmr_table.calculate_reduction_with_stats(
-                    context,
-                    depth as usize,
-                    searched_moves as usize,
-                    is_quiet,
-                    is_capture,
-                    is_improving_2_plies,
-                    is_pv,
-                    history_score,
-                    captured_piece,
-                    gives_check,
-                    &self.config.search.lmr,
-                )
+                #[cfg(feature = "search-stats")]
+                {
+                    self.lmr_table.calculate_reduction_with_stats(
+                        context,
+                        depth as usize,
+                        searched_moves as usize,
+                        is_quiet,
+                        is_capture,
+                        is_improving_2_plies,
+                        is_pv,
+                        history_score,
+                        captured_piece,
+                        gives_check,
+                        &self.config.search.lmr,
+                    )
+                }
+
+                #[cfg(not(feature = "search-stats"))]
+                {
+                    self.lmr_table.calculate_reduction(
+                        depth as usize,
+                        searched_moves as usize,
+                        is_quiet,
+                        is_capture,
+                        is_improving_2_plies,
+                        is_pv,
+                        history_score,
+                        captured_piece,
+                        gives_check,
+                        &self.config.search.lmr,
+                    )
+                }
             } else {
                 0
             };
@@ -524,25 +570,33 @@ impl Engine {
                 }
             } else {
                 if can_lmr {
-                    context.stats.lmr_stats.attempts += 1;
-                    context.stats.lmr_stats.eligible_moves += 1;
-                    context.stats.lmr_stats.reduction_plies += reduction as u64;
+                    track_stat!(context.stats.lmr_stats.attempts += 1);
+                    track_stat!(context.stats.lmr_stats.eligible_moves += 1);
+                    track_stat!(context.stats.lmr_stats.reduction_plies += reduction as u64);
 
+                    #[cfg(feature = "search-stats")]
                     let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
-                    context.stats.lmr_stats.attempts_by_depth.bins[depth_bucket] += 1;
 
+                    track_stat!(context.stats.lmr_stats.attempts_by_depth.bins[depth_bucket] += 1);
+
+                    #[cfg(feature = "search-stats")]
                     let reduction_bucket = (reduction as usize).min(REDUCTION_BUCKETS - 1);
-                    context.stats.lmr_stats.reduction_histogram.bins[reduction_bucket] += 1;
 
-                    if reduction > 0 {
-                        context.stats.lmr_stats.reduced_moves += 1;
-                    } else {
-                        context.stats.lmr_stats.zero_reduction_moves += 1;
+                    track_stat!(
+                        context.stats.lmr_stats.reduction_histogram.bins[reduction_bucket] += 1
+                    );
+
+                    track_stat! {
+                        if reduction > 0 {
+                            context.stats.lmr_stats.reduced_moves += 1;
+                        } else {
+                            context.stats.lmr_stats.zero_reduction_moves += 1;
+                        }
                     }
                 }
 
                 // null window search reduced depth
-                context.stats.pvs_stats.null_window_searches += 1;
+                track_stat!(context.stats.pvs_stats.null_window_searches += 1);
                 eval = -self.negamax(
                     board,
                     context,
@@ -563,12 +617,16 @@ impl Engine {
                 if eval > alpha {
                     let mut research_depth = full_child_depth;
 
-                    context.stats.pvs_stats.alpha_improvements += 1;
+                    track_stat!(context.stats.pvs_stats.alpha_improvements += 1);
 
                     if reduction > 0 {
-                        context.stats.lmr_stats.researches += 1;
+                        #[cfg(feature = "search-stats")]
                         let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
-                        context.stats.lmr_stats.researches_by_depth.bins[depth_bucket] += 1;
+
+                        track_stat!(context.stats.lmr_stats.researches += 1);
+                        track_stat!(
+                            context.stats.lmr_stats.researches_by_depth.bins[depth_bucket] += 1
+                        );
 
                         let deeper_search = reduced_child_depth < depth && eval > max_eval + 50;
                         let shallow_search = eval < max_eval + 10;
@@ -581,7 +639,7 @@ impl Engine {
                             research_depth
                         };
 
-                        match research_depth.cmp(&full_child_depth) {
+                        track_stat! { match research_depth.cmp(&full_child_depth) {
                             std::cmp::Ordering::Greater => {
                                 context.stats.lmr_stats.dynamic_depth_increases += 1;
                             }
@@ -592,12 +650,15 @@ impl Engine {
                                 context.stats.lmr_stats.dynamic_depth_unchanged += 1;
                             }
                         }
+                        }
 
                         // null window search full depth
                         if research_depth > reduced_child_depth {
-                            context.stats.lmr_stats.dynamic_searches += 1;
-                            if research_depth != full_child_depth {
-                                context.stats.lmr_stats.dynamic_searches_at_modified_depth += 1;
+                            track_stat! {
+                                context.stats.lmr_stats.dynamic_searches += 1;
+                                if research_depth != full_child_depth {
+                                        context.stats.lmr_stats.dynamic_searches_at_modified_depth += 1;
+                                }
                             }
                             eval = -self.negamax(
                                 board,
@@ -617,22 +678,26 @@ impl Engine {
                             return 0;
                         }
 
-                        if eval > alpha {
-                            context.stats.lmr_stats.research_alpha_improvements += 1;
-                        }
-                        if eval >= beta {
-                            context.stats.lmr_stats.research_cutoffs += 1;
+                        track_stat! {
+                            if eval > alpha {
+                                context.stats.lmr_stats.research_alpha_improvements += 1;
+                            }
+                            if eval >= beta {
+                                context.stats.lmr_stats.research_cutoffs += 1;
+                            }
                         }
                     }
 
                     if eval > alpha && eval < beta {
                         // this move might improve alpha, research it at full depth
                         // full window search, full depth
-                        context.stats.pvs_stats.full_window_researches += 1;
-                        if reduction > 0 {
-                            context.stats.lmr_stats.dynamic_searches += 1;
-                            if research_depth != full_child_depth {
-                                context.stats.lmr_stats.dynamic_searches_at_modified_depth += 1;
+                        track_stat! {
+                            context.stats.pvs_stats.full_window_researches += 1;
+                            if reduction > 0 {
+                                context.stats.lmr_stats.dynamic_searches += 1;
+                                if research_depth != full_child_depth {
+                                    context.stats.lmr_stats.dynamic_searches_at_modified_depth += 1;
+                                }
                             }
                         }
                         eval = -self.negamax(
@@ -652,8 +717,10 @@ impl Engine {
                             return 0;
                         }
 
-                        if eval >= beta {
-                            context.stats.pvs_stats.research_cutoffs += 1;
+                        track_stat! {
+                            if eval >= beta {
+                                context.stats.pvs_stats.research_cutoffs += 1;
+                            }
                         }
                     }
                 }
@@ -661,7 +728,7 @@ impl Engine {
 
             searched_moves += 1;
 
-            context.stats.move_stats.main_searched += 1;
+            track_stat!(context.stats.move_stats.main_searched += 1);
 
             context.repetition_history.pop();
             board.undo_move(undo);
@@ -681,43 +748,50 @@ impl Engine {
             // alpha = alpha.max(eval);
 
             if alpha >= beta {
-                context.stats.cutoff_stats.beta += 1;
+                track_stat! {
+                    context.stats.cutoff_stats.beta += 1;
 
-                let cutoff_index = searched_moves as usize;
-                let cutoff_bucket = cutoff_index.saturating_sub(1).min(MOVE_INDEX_BUCKETS - 1);
-                context
-                    .stats
-                    .move_ordering_stats
-                    .cutoff_move_index_histogram
-                    .bins[cutoff_bucket] += 1;
-                context.stats.move_ordering_stats.cutoff_move_index_sum += cutoff_index as u64;
-                context.stats.move_ordering_stats.cutoff_move_index_max = context
-                    .stats
-                    .move_ordering_stats
-                    .cutoff_move_index_max
-                    .max(cutoff_index as u64);
+                    let cutoff_index = searched_moves as usize;
+                    let cutoff_bucket = cutoff_index.saturating_sub(1).min(MOVE_INDEX_BUCKETS - 1);
+                    context
+                        .stats
+                        .move_ordering_stats
+                        .cutoff_move_index_histogram
+                        .bins[cutoff_bucket] += 1;
 
-                if Some(*mv) == tt_best_move {
-                    context.stats.move_ordering_stats.tt_move_cutoffs += 1;
-                } else if matches!(mv.kind(), MoveType::Capture | MoveType::EnPassant) {
-                    let see_value = if let Some(value) = scored_mv.see {
-                        value
-                    } else {
-                        see(board, *mv, captured_piece)
-                    };
-                    if see_value >= 0 {
-                        context.stats.move_ordering_stats.winning_capture_cutoffs += 1;
-                    } else {
-                        context.stats.move_ordering_stats.losing_capture_cutoffs += 1;
+                        context.stats.move_ordering_stats.cutoff_move_index_sum += cutoff_index as u64
+                    ;
+
+                        context.stats.move_ordering_stats.cutoff_move_index_max = context
+                            .stats
+                            .move_ordering_stats
+                            .cutoff_move_index_max
+                            .max(cutoff_index as u64)
+                    ;
+
+
+                    if Some(*mv) == tt_best_move {
+                        context.stats.move_ordering_stats.tt_move_cutoffs += 1;
+                    } else if matches!(mv.kind(), MoveType::Capture | MoveType::EnPassant) {
+                        let see_value = if let Some(value) = scored_mv.see {
+                            value
+                        } else {
+                            see(board, *mv, captured_piece)
+                        };
+                        if see_value >= 0 {
+                            context.stats.move_ordering_stats.winning_capture_cutoffs += 1;
+                        } else {
+                            context.stats.move_ordering_stats.losing_capture_cutoffs += 1;
+                        }
+                    } else if was_killer {
+                        context.stats.move_ordering_stats.killer_move_cutoffs += 1;
+                    } else if history_score > 0 {
+                        context.stats.move_ordering_stats.history_move_cutoffs += 1;
                     }
-                } else if was_killer {
-                    context.stats.move_ordering_stats.killer_move_cutoffs += 1;
-                } else if history_score > 0 {
-                    context.stats.move_ordering_stats.history_move_cutoffs += 1;
-                }
 
-                if searched_moves == 1 {
-                    context.stats.cutoff_stats.first_move_beta += 1;
+                    if searched_moves == 1 {
+                        context.stats.cutoff_stats.first_move_beta += 1;
+                    }
                 }
 
                 did_cutoff = true;
@@ -725,6 +799,10 @@ impl Engine {
                 if options.excluded_move.is_none() {
                     if is_quiet {
                         context.killer_moves.add(ply, *mv);
+                        #[cfg(feature = "search-stats")]
+                        self.history
+                            .add_quiet_bonus_with_stats(curr_key, context, ply, depth);
+                        #[cfg(not(feature = "search-stats"))]
                         self.history.add_quiet_bonus(curr_key, context, ply, depth);
 
                         for scored_mv in &searched_quiets[..q] {
@@ -738,6 +816,14 @@ impl Engine {
                                 HistoryKey::new(side_to_move, piece, mv.to())
                             };
 
+                            #[cfg(feature = "search-stats")]
+                            self.history.add_quiet_malus_with_stats(
+                                history_key,
+                                context,
+                                ply,
+                                depth,
+                            );
+                            #[cfg(not(feature = "search-stats"))]
                             self.history
                                 .add_quiet_malus(history_key, context, ply, depth);
                         }
@@ -804,7 +890,7 @@ impl Engine {
 
         if searched_moves == 0 {
             if options.excluded_move.is_some() {
-                context.stats.singular_stats.no_alternatives += 1;
+                track_stat!(context.stats.singular_stats.no_alternatives += 1);
 
                 // This is the lower edge of the null window:
                 // singular_beta - 1.
@@ -812,11 +898,11 @@ impl Engine {
             }
 
             if in_check {
-                context.stats.terminal_stats.checkmates += 1;
+                track_stat!(context.stats.terminal_stats.checkmates += 1);
                 return -CHECKMATE_SCORE + ply as i32;
             }
 
-            context.stats.terminal_stats.stalemates += 1;
+            track_stat!(context.stats.terminal_stats.stalemates += 1);
             return 0;
         }
 
@@ -830,32 +916,38 @@ impl Engine {
             && depth < 3;
 
         if can_update_correction {
-            context.stats.correction_stats.record_update_opportunity();
+            track_stat!(context.stats.correction_stats.record_update_opportunity());
 
             if max_eval > original_alpha && max_eval < beta {
                 // Exact
                 let delta = max_eval - corrected_static_eval;
                 self.history.correction.update(board, delta, depth);
-                context
-                    .stats
-                    .correction_stats
-                    .record_update(CorrectionUpdateKind::Exact, delta);
+                track_stat!(
+                    context
+                        .stats
+                        .correction_stats
+                        .record_update(CorrectionUpdateKind::Exact, delta)
+                );
             } else if max_eval >= beta && beta > corrected_static_eval {
                 // Fail High
                 let delta = beta - corrected_static_eval;
                 self.history.correction.update(board, delta, depth);
-                context
-                    .stats
-                    .correction_stats
-                    .record_update(CorrectionUpdateKind::FailHigh, delta);
+                track_stat!(
+                    context
+                        .stats
+                        .correction_stats
+                        .record_update(CorrectionUpdateKind::FailHigh, delta)
+                );
             } else if max_eval <= original_alpha && original_alpha < corrected_static_eval {
                 // Fail Low
                 let delta = original_alpha - corrected_static_eval;
                 self.history.correction.update(board, delta, depth);
-                context
-                    .stats
-                    .correction_stats
-                    .record_update(CorrectionUpdateKind::FailLow, delta);
+                track_stat!(
+                    context
+                        .stats
+                        .correction_stats
+                        .record_update(CorrectionUpdateKind::FailLow, delta)
+                );
             }
         }
 
@@ -870,9 +962,9 @@ impl Engine {
         };
 
         if options.excluded_move.is_none() {
-            context.stats.tt_stats.main.stores += 1;
+            track_stat!(context.stats.tt_stats.main.stores += 1);
             let adjusted_depth = u8::try_from(depth).unwrap_or(u8::MAX);
-            let insert_result = self.tt.insert(
+            let _insert_result = self.tt.insert(
                 board.board_hash,
                 is_pv,
                 flag,
@@ -881,7 +973,7 @@ impl Engine {
                 raw_static_eval as i16,
                 best_move,
             );
-            context.stats.tt_stats.main.record_insert(insert_result);
+            track_stat!(context.stats.tt_stats.main.record_insert(_insert_result));
         }
 
         max_eval
@@ -950,9 +1042,14 @@ mod tests {
         );
 
         assert_eq!(score, alpha);
-        assert_eq!(context.stats.singular_stats.no_alternatives, 1);
-        assert_eq!(context.stats.move_stats.main_searched, 0);
-        assert_eq!(context.stats.terminal_stats.checkmates, 0);
+        #[cfg(feature = "search-stats")]
+        {
+            assert_eq!(context.stats.singular_stats.no_alternatives, 1);
+            assert_eq!(context.stats.move_stats.main_searched, 0);
+            assert_eq!(context.stats.terminal_stats.checkmates, 0);
+        }
+        #[cfg(not(feature = "search-stats"))]
+        assert_eq!(context.stats.singular_stats.no_alternatives, 0);
     }
 
     fn assert_static_eval_is_available(cached: Option<(u8, i16)>) {
@@ -1127,7 +1224,10 @@ mod tests {
         // coverage. Widen the stored depth for comparison instead.
         assert_eq!(score, -CHECKMATE_SCORE);
         assert_eq!(context.stats.tt_stats.main.exact_returns, 0);
+        #[cfg(feature = "search-stats")]
         assert_eq!(context.stats.tt_stats.main.depth_rejected_hits, 1);
+        #[cfg(not(feature = "search-stats"))]
+        assert_eq!(context.stats.tt_stats.main.depth_rejected_hits, 0);
     }
 
     #[test]

@@ -73,6 +73,20 @@ pub use transposition_table::TranspositionTableStats;
 
 use formatting::{count, report_footer, report_header, section};
 
+#[cfg(feature = "search-stats")]
+macro_rules! track_stat {
+    ($($code:tt)*) => {{
+        $($code)*
+    }};
+}
+
+#[cfg(not(feature = "search-stats"))]
+macro_rules! track_stat {
+    ($($code:tt)*) => {{}};
+}
+
+pub(crate) use track_stat;
+
 /// Statistics collected during a search, grouped by the feature that owns them.
 ///
 /// New counters belong in the relevant feature module. New feature groups only
@@ -310,8 +324,11 @@ pub fn fmt_nps(value: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::SearchStats;
+    #[cfg(feature = "search-stats")]
     use crate::engine::configs::EngineConfig;
+    #[cfg(feature = "search-stats")]
     use crate::engine::{Engine, SearchLimits};
+    #[cfg(feature = "search-stats")]
     use crate::game::Game;
 
     #[test]
@@ -452,6 +469,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "search-stats")]
     fn instrumented_search_keeps_histogram_totals_consistent() {
         let game = Game::new();
         let mut config = EngineConfig::default();
@@ -461,8 +479,10 @@ mod tests {
 
         let result = engine.search(
             &game.board,
-            SearchLimits::depth(4, 4),
-            &game.repetition_history,
+            &mut crate::engine::SearchContext::new(
+                SearchLimits::depth(4, 4),
+                game.repetition_history.clone(),
+            ),
             false,
             false,
         );

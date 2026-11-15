@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::engine::Engine;
+use crate::engine::{Engine, SearchContext};
 use crate::game::{Game, GameState};
 use crate::opening::OpeningLine;
 use crate::tournament::results::GameResult::{Black, Draw, White};
@@ -57,22 +57,12 @@ pub fn run_game(
             return Err("Likely Infinite Loop in Run Game".to_string());
         }
 
-        let search_result = match game.board.side_to_move() {
-            Color::White => white.search(
-                &game.board,
-                w_config.limits,
-                &game.repetition_history,
-                false,
-                false,
-            ),
-            Color::Black => black.search(
-                &game.board,
-                b_config.limits,
-                &game.repetition_history,
-                false,
-                false,
-            ),
+        let (engine, limits) = match game.board.side_to_move() {
+            Color::White => (&mut white, w_config.limits),
+            Color::Black => (&mut black, b_config.limits),
         };
+        let mut context = SearchContext::new(limits, game.repetition_history.clone());
+        let search_result = engine.search(&game.board, &mut context, false, false);
 
         let best_move = search_result
             .best_move

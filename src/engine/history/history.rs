@@ -70,6 +70,58 @@ impl HistoryTables {
     pub fn add_quiet_bonus(
         &mut self,
         curr_key: HistoryKey,
+        context: &SearchContext,
+        ply: usize,
+        depth: u16,
+    ) {
+        self.main.add_bonus(curr_key, depth);
+
+        if let Some(prev_key) = context.stack[ply].history_index {
+            self.continuation.add_bonus(1, prev_key, curr_key, depth);
+        }
+
+        if ply > 0 {
+            if let Some(prev_key) = context.stack[ply - 1].history_index {
+                self.continuation.add_bonus(2, prev_key, curr_key, depth);
+            }
+
+            if ply > 2
+                && let Some(prev_key) = context.stack[ply - 3].history_index
+            {
+                self.continuation.add_bonus(4, prev_key, curr_key, depth);
+            }
+        }
+    }
+
+    pub fn add_quiet_malus(
+        &mut self,
+        curr_key: HistoryKey,
+        context: &SearchContext,
+        ply: usize,
+        depth: u16,
+    ) {
+        self.main.add_malus(curr_key, depth);
+
+        if let Some(prev_key) = context.stack[ply].history_index {
+            self.continuation.add_malus(1, prev_key, curr_key, depth);
+        }
+
+        if ply > 0 {
+            if let Some(prev_key) = context.stack[ply - 1].history_index {
+                self.continuation.add_malus(2, prev_key, curr_key, depth);
+            }
+
+            if ply > 2
+                && let Some(prev_key) = context.stack[ply - 3].history_index
+            {
+                self.continuation.add_malus(4, prev_key, curr_key, depth);
+            }
+        }
+    }
+
+    pub fn add_quiet_bonus_with_stats(
+        &mut self,
+        curr_key: HistoryKey,
         context: &mut SearchContext,
         ply: usize,
         depth: u16,
@@ -104,7 +156,7 @@ impl HistoryTables {
         self.capture.add_bonus(curr_key, captured, depth);
     }
 
-    pub fn add_quiet_malus(
+    pub fn add_quiet_malus_with_stats(
         &mut self,
         curr_key: HistoryKey,
         context: &mut SearchContext,

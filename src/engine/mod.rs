@@ -1,6 +1,5 @@
 pub mod config; // CHANGE NAME LATER TO BE LESS CONFUSING
 pub mod configs;
-pub mod debug;
 pub mod engine;
 pub mod history;
 pub mod ordering;
@@ -22,6 +21,8 @@ pub(crate) use search_context::PickerFrame;
 pub use search_context::SearchContext;
 pub use search_limits::SearchLimits;
 pub use search_options::SearchOptions;
+#[cfg(feature = "debug-uci")]
+pub use search_result::SearchIteration;
 pub use search_result::{MAX_PV, SearchResult, SearchTermination};
 pub use search_stack::SearchStackEntry;
 pub use search_stats::SearchStats;

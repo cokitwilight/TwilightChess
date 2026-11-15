@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use chess_final::board::{Board, STARTPOS_FEN};
 use chess_final::engine::configs::EngineConfig;
-use chess_final::engine::{Engine, SearchLimits, SearchTermination};
+use chess_final::engine::{Engine, SearchContext, SearchLimits, SearchTermination};
 
 fn timed_search(limit_ms: u64) -> (Duration, chess_final::engine::SearchResult) {
     let board = Board::from_fen(STARTPOS_FEN).expect("valid start position");
@@ -14,8 +14,7 @@ fn timed_search(limit_ms: u64) -> (Duration, chess_final::engine::SearchResult) 
     let start = Instant::now();
     let result = engine.search(
         &board,
-        config.limits,
-        &vec![board.board_hash()],
+        &mut SearchContext::new(config.limits, vec![board.board_hash()]),
         false,
         false,
     );
@@ -62,8 +61,7 @@ fn depth_limit_can_finish_before_a_larger_time_limit() {
 
     let result = engine.search(
         &board,
-        config.limits,
-        &vec![board.board_hash()],
+        &mut SearchContext::new(config.limits, vec![board.board_hash()]),
         false,
         false,
     );

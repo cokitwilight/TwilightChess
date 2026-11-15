@@ -5,7 +5,8 @@ edition = "2024"
 default-run = "chess_final"
 
 [features]
-debug-uci = ["dep:serde", "dep:serde_json"]
+search-stats = []
+debug-uci = ["search-stats", "dep:serde", "dep:serde_json"]
 
 [[bin]]
 name = "twilight-debug"

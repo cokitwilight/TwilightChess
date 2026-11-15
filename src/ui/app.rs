@@ -6,7 +6,9 @@ use crate::bitboard::{Square, square_to_algebraic};
 use crate::board::{Move, MoveList};
 use crate::bot::Bot;
 use crate::engine::configs::EngineConfig;
-use crate::engine::{Engine, SearchLimits, SearchResult, SearchStats, SearchTermination};
+use crate::engine::{
+    Engine, SearchContext, SearchLimits, SearchResult, SearchStats, SearchTermination,
+};
 use crate::eval::debug::evaluation_breakdown;
 use crate::game::{Game, GameState};
 use crate::types::{Color, PieceType};
@@ -981,7 +983,8 @@ impl ChessApp {
                 mut engine,
             } = request;
             println!("----------- Start -----------");
-            let result = engine.search(&board, limits, &repetition_history, true, true);
+            let mut context = SearchContext::new(limits, repetition_history);
+            let result = engine.search(&board, &mut context, true, true);
             println!("------------ End ------------");
 
             let _ = tx.send(BotSearchResponse { engine, result });
@@ -1371,6 +1374,8 @@ mod tests {
             pv: [None; MAX_PV],
             elapsed: Duration::from_millis(elapsed_ms),
             termination,
+            #[cfg(feature = "debug-uci")]
+            iterations: Vec::new(),
         }
     }
 

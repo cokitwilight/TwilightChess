@@ -13,6 +13,7 @@ pub struct IterativeDeepeningStats {
 }
 
 impl IterativeDeepeningStats {
+    #[cfg(any(feature = "search-stats", test))]
     pub(crate) fn record_iteration(&mut self, depth: u16, nodes: u64) {
         if depth == 0 {
             return;
@@ -125,6 +126,7 @@ impl std::ops::AddAssign for IterativeDeepeningStats {
     }
 }
 
+#[cfg(any(feature = "search-stats", test))]
 fn depth_bucket(depth: u16) -> usize {
     usize::from(depth.saturating_sub(1)).min(MAX_TRACKED_DEPTH - 1)
 }

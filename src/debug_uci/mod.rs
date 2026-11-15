@@ -2,19 +2,18 @@
 //! adapter owns configuration, cancellation and versioned diagnostic messages.
 mod conditions;
 pub mod config;
-mod discovery;
+pub(crate) mod discovery;
 mod metrics;
 
 use crate::board::{Board, STARTPOS_FEN};
-use crate::engine::{Engine, SearchResult, SearchTermination, configs::EngineConfig};
+use crate::engine::{Engine, SearchContext, SearchTermination, configs::EngineConfig};
 use crate::uci::protocol::{GoParameters, UciPosition, write_search_info};
 use conditions::ExpectedAnswer;
-use discovery::{DiscoveryTracker, FindSolutionOptions};
+use discovery::{DiscoveryTracker, FindSolutionOptions, FindSolutionState};
 use metrics::SearchMetrics;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::io::{self, BufRead, BufWriter, Write};
-use std::ops::ControlFlow;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -100,7 +99,6 @@ pub fn run_stdio() -> io::Result<()> {
     let output = Arc::new(Mutex::new(BufWriter::new(io::stdout())));
     let mut config = EngineConfig::default();
     let mut position = UciPosition::parse("startpos").map_err(io::Error::other)?;
-    let mut detailed_stats = false;
     let mut find: Option<FindRequest> = None;
     let mut worker: Option<JoinHandle<()>> = None;
     let mut active_cancel: Option<Arc<AtomicBool>> = None;
@@ -154,10 +152,6 @@ pub fn run_stdio() -> io::Result<()> {
             emit(&output, "option name Clear Hash type button")?;
             emit(
                 &output,
-                "option name Debug.Statistics type check default false",
-            )?;
-            emit(
-                &output,
                 "option name Debug.FindSolution type string default <none>",
             )?;
             diagnostic(
@@ -187,13 +181,6 @@ pub fn run_stdio() -> io::Result<()> {
                         .ok_or("expected setoption name <name> value <value>")?;
                     let (name, value) = option.split_once(" value ").unwrap_or((option, ""));
                     match name.trim().to_ascii_lowercase().as_str() {
-                        "debug.statistics" => {
-                            detailed_stats = match value.trim().to_ascii_lowercase().as_str() {
-                                "true" => true,
-                                "false" => false,
-                                _ => return Err("Debug.Statistics expects true or false".into()),
-                            }
-                        }
                         "debug.findsolution" => {
                             find = if matches!(value.trim(), "<none>" | "none" | "<empty>" | "") {
                                 None
@@ -245,15 +232,8 @@ pub fn run_stdio() -> io::Result<()> {
                             .spawn(move || {
                                 let result =
                                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                        search(
-                                            &output,
-                                            config,
-                                            limits,
-                                            &board,
-                                            &history,
-                                            detailed_stats,
-                                            flag,
-                                            find,
+                                        run_search_request(
+                                            &output, config, limits, &board, &history, flag, find,
                                             &ready,
                                         )
                                     }));
@@ -286,13 +266,12 @@ pub fn run_stdio() -> io::Result<()> {
     Ok(())
 }
 
-fn search(
+fn run_search_request(
     output: &Output,
     mut config: EngineConfig,
     limits: crate::engine::SearchLimits,
     board: &Board,
     history: &Vec<u64>,
-    detailed_stats: bool,
     flag: Arc<AtomicBool>,
     find: Option<FindRequest>,
     finishing: &AtomicBool,
@@ -318,37 +297,14 @@ fn search(
     crate::eval::evaluation_for_turn(&warmup);
     config.limits = limits;
     let mut engine = Engine::new(config);
-    let mut tracker = find.as_ref().map(|r| DiscoveryTracker::new(r.options));
-    let mut iterations = Vec::new();
-    let result: SearchResult = engine.search_with_debug_control(
-        board,
-        limits,
-        history,
-        detailed_stats,
-        flag,
-        &mut |iteration| {
-            let metrics = SearchMetrics::from_result(iteration);
-            let stop = tracker.as_mut().is_some_and(|tracker| {
-                let request = find.as_ref().unwrap();
-                tracker.observe(
-                    &metrics,
-                    request
-                        .position
-                        .is_passing(metrics.best_move.as_deref(), metrics.completed_depth),
-                )
-            });
-            iterations.push(metrics);
-            if stop {
-                ControlFlow::Break(())
-            } else {
-                ControlFlow::Continue(())
-            }
-        },
-    );
+    let mut context = SearchContext::new(limits, history.clone());
+    context.cancellation = Some(flag);
+    context.finder = find.map(|request| FindSolutionState::new(request.position, request.options));
+    let result = engine.search(board, &mut context, false, false);
     let cap = result.depth_reached == limits.max_depth
         && result.termination == SearchTermination::DepthLimit;
     let solved = result.termination == SearchTermination::IterationStop;
-    let completed = if find.is_some() {
+    let completed = if context.finder.is_some() {
         cap || solved
     } else {
         cap || result.depth_reached > 0
@@ -365,28 +321,29 @@ fn search(
         SearchTermination::IterationStop => "solution_found",
         SearchTermination::BookMove => "book_move",
     };
-    for metrics in iterations {
-        diagnostic(output, "iteration", &metrics)?;
+    for iteration in &result.iterations {
+        diagnostic(
+            output,
+            "iteration",
+            &SearchMetrics::from_iteration(iteration),
+        )?;
     }
-    if detailed_stats {
-        if let Value::Object(groups) = serde_json::to_value(result.stats)? {
-            for (group, data) in groups {
-                diagnostic(
-                    output,
-                    "stats",
-                    &json!({"version": PROTOCOL_VERSION,"group":group,"data":data}),
-                )?;
-            }
+    if let Value::Object(groups) = serde_json::to_value(result.stats)? {
+        for (group, data) in groups {
+            diagnostic(
+                output,
+                "stats",
+                &json!({"version": PROTOCOL_VERSION,"group":group,"data":data}),
+            )?;
         }
     }
     let mut report = serde_json::to_value(SearchMetrics::from_result(&result))?;
     report["version"] = json!(PROTOCOL_VERSION);
     report["completed"] = json!(completed);
     report["termination"] = json!(termination);
-    report["detailed_statistics"] = json!(detailed_stats);
-    if let Some(tracker) = tracker {
-        report["discovery"] =
-            serde_json::to_value(tracker.finish(result.depth_reached, cap, true))?;
+    report["detailed_statistics"] = json!(true);
+    if let Some(finder) = context.finder {
+        report["discovery"] = serde_json::to_value(finder.finish(result.depth_reached, cap))?;
     }
     diagnostic(output, "result", &report)?;
     {

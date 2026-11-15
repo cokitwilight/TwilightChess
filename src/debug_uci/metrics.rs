@@ -1,5 +1,5 @@
 //! Search metrics exposed by debug UCI.
-use crate::engine::{CHECKMATE_SCORE, MATE_THRESHOLD, SearchResult};
+use crate::engine::{CHECKMATE_SCORE, MATE_THRESHOLD, SearchIteration, SearchResult};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -59,13 +59,17 @@ impl SearchMetrics {
         }
     }
     pub(crate) fn from_result(result: &SearchResult) -> Self {
-        let nodes = result.stats.total_nodes();
+        Self::from_iteration(&SearchIteration::from_result(result))
+    }
+
+    pub(crate) fn from_iteration(result: &SearchIteration) -> Self {
+        let nodes = result.main_nodes + result.quiescence_nodes;
         let raw_eval = (result.depth_reached > 0).then_some(result.eval);
         Self {
             completed_depth: result.depth_reached,
             seldepth: result.seldepth,
-            main_nodes: result.stats.node_stats.main,
-            quiescence_nodes: result.stats.node_stats.quiescence,
+            main_nodes: result.main_nodes,
+            quiescence_nodes: result.quiescence_nodes,
             nodes,
             elapsed_ns: result.elapsed.as_nanos().min(u64::MAX as u128) as u64,
             elapsed_ms: result.elapsed.as_secs_f64() * 1000.0,

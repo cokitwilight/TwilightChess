@@ -6,14 +6,14 @@ use crate::uci::parse_uci_move;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(super) struct MoveWeight {
     #[serde(rename = "move")]
     mv: String,
     points: i32,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(super) struct ExpectedAnswer {
     pub fen: String,
     #[serde(default)]

@@ -1,9 +1,13 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(feature = "search-stats")]
+use std::time::Instant;
 
 use crate::board::{Board, Move, MoveType};
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 use crate::engine::history::HistoryKey;
-use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64};
+use crate::engine::search_stats::{SearchStats, track_stat};
+#[cfg(feature = "search-stats")]
+use crate::engine::search_stats::{fmt_nps, median_f64};
 use crate::engine::staged::ScoredMove;
 use crate::engine::tt::{TTFlag, TTNodeType, score_to_tt};
 use crate::engine::{
@@ -19,23 +23,11 @@ pub const MAX_QUIETS: usize = 45;
 pub const MAX_CAPTURES: usize = 45;
 
 impl Engine {
-    pub fn iterative_deepening(
+    pub(super) fn iterative_deepening(
         &mut self,
         board: &mut Board,
         ctx: &mut SearchContext,
         can_print: bool,
-    ) -> SearchResult {
-        self.iterative_deepening_with_progress(board, ctx, can_print, &mut |_| {
-            std::ops::ControlFlow::Continue(())
-        })
-    }
-
-    pub(crate) fn iterative_deepening_with_progress(
-        &mut self,
-        board: &mut Board,
-        ctx: &mut SearchContext,
-        can_print: bool,
-        on_iteration: &mut dyn FnMut(&SearchResult) -> std::ops::ControlFlow<()>,
     ) -> SearchResult {
         let side_to_move = board.side_to_move();
         let info = MoveGenInfo::calculate(board, side_to_move);
@@ -59,13 +51,20 @@ impl Engine {
             pv: [None; MAX_PV],
             elapsed: Duration::ZERO,
             termination: SearchTermination::DepthLimit,
+            #[cfg(feature = "debug-uci")]
+            iterations: Vec::new(),
         };
 
+        #[cfg(feature = "search-stats")]
         let mut cumulative_stats = ctx.stats;
 
+        #[cfg(feature = "search-stats")]
         let mut total_time: f64 = 0.0;
+        #[cfg(feature = "search-stats")]
         let mut total_nodes: u64 = 0;
+        #[cfg(feature = "search-stats")]
         let mut nps_samples = [0.0f64; 128];
+        #[cfg(feature = "search-stats")]
         let mut nps_index = 0usize;
 
         let aspiration_start = self.config.search.aspiration.initial_window;
@@ -81,8 +80,10 @@ impl Engine {
             }
 
             ctx.seldepth = 0;
+            #[cfg(feature = "search-stats")]
             let stats_before = ctx.stats;
 
+            #[cfg(feature = "search-stats")]
             let start = Instant::now();
 
             let full_alpha = NEG_INF + 1;
@@ -100,8 +101,10 @@ impl Engine {
             let use_aspiration =
                 depth > 1 && !previous_is_mate_score && self.config.search.aspiration.enabled;
 
-            if use_aspiration {
-                ctx.stats.aspiration_stats.searches += 1;
+            track_stat! {
+                if use_aspiration {
+                    ctx.stats.aspiration_stats.searches += 1;
+                }
             }
 
             let mut window = aspiration_start;
@@ -118,18 +121,21 @@ impl Engine {
                 full_beta
             };
 
+            #[cfg(feature = "search-stats")]
             let mut aspiration_attempt = 0;
 
             let result = loop {
+                #[cfg(feature = "search-stats")]
                 let nodes_before_attempt = ctx.stats.total_nodes();
                 let result =
                     self.search_root(board, ctx, best_result.best_move, depth, alpha, beta);
-                let attempt_nodes = ctx.stats.total_nodes() - nodes_before_attempt;
-
-                if use_aspiration && aspiration_attempt > 0 {
-                    ctx.stats.aspiration_stats.research_nodes += attempt_nodes;
+                track_stat! {
+                    let attempt_nodes = ctx.stats.total_nodes() - nodes_before_attempt;
+                    if use_aspiration && aspiration_attempt > 0 {
+                        ctx.stats.aspiration_stats.research_nodes += attempt_nodes;
+                    }
+                    aspiration_attempt += 1;
                 }
-                aspiration_attempt += 1;
 
                 if ctx.should_stop() {
                     break 'depth_loop;
@@ -139,8 +145,10 @@ impl Engine {
 
                 // Exact score.
                 if result.eval > alpha && result.eval < beta {
-                    if use_aspiration && aspiration_attempt == 1 {
-                        ctx.stats.aspiration_stats.successful_first_windows += 1;
+                    track_stat! {
+                        if use_aspiration && aspiration_attempt == 1 {
+                            ctx.stats.aspiration_stats.successful_first_windows += 1;
+                        }
                     }
                     break result;
                 }
@@ -151,16 +159,18 @@ impl Engine {
                     break result;
                 }
 
-                if result.eval <= alpha {
-                    ctx.stats.aspiration_stats.fail_low += 1;
-                } else if result.eval >= beta {
-                    ctx.stats.aspiration_stats.fail_high += 1;
+                track_stat! {
+                    if result.eval <= alpha {
+                        ctx.stats.aspiration_stats.fail_low += 1;
+                    } else if result.eval >= beta {
+                        ctx.stats.aspiration_stats.fail_high += 1;
+                    }
                 }
 
                 // Mate scores can jump far outside the aspiration window.
                 // Immediately fall back to full window instead of slowly widening.
                 if result_is_mate_score {
-                    ctx.stats.aspiration_stats.full_window_fallbacks += 1;
+                    track_stat!(ctx.stats.aspiration_stats.full_window_fallbacks += 1);
                     alpha = full_alpha;
                     beta = full_beta;
                     continue;
@@ -168,7 +178,7 @@ impl Engine {
 
                 // Avoid infinite widening if something behaves unexpectedly.
                 if window >= aspiration_max {
-                    ctx.stats.aspiration_stats.full_window_fallbacks += 1;
+                    track_stat!(ctx.stats.aspiration_stats.full_window_fallbacks += 1);
                     alpha = full_alpha;
                     beta = full_beta;
                     continue;
@@ -202,75 +212,78 @@ impl Engine {
                 unreachable!("aspiration result was neither exact nor fail-high/low");
             };
 
-            let elapsed = start.elapsed();
+            #[cfg(feature = "search-stats")]
+            {
+                let elapsed = start.elapsed();
 
-            let elapsed_secs = elapsed.as_secs_f64();
-            let depth_stats = ctx.stats - stats_before;
+                let elapsed_secs = elapsed.as_secs_f64();
+                let depth_stats = ctx.stats - stats_before;
 
-            cumulative_stats += depth_stats;
+                cumulative_stats += depth_stats;
 
-            let depth_nodes = depth_stats.total_nodes();
+                let depth_nodes = depth_stats.total_nodes();
 
-            cumulative_stats
-                .iterative_deepening_stats
-                .record_iteration(depth, depth_nodes);
-
-            ctx.stats
-                .iterative_deepening_stats
-                .record_iteration(depth, depth_nodes);
-
-            let depth_nps = if elapsed_secs > 0.0 {
-                depth_nodes as f64 / elapsed_secs
-            } else {
-                0.0
-            };
-
-            total_time += elapsed_secs;
-            total_nodes += depth_nodes;
-
-            if depth_nps.is_finite() && depth_nps > 0.0 && nps_index < 128 {
-                nps_samples[nps_index] = depth_nps;
-                nps_index += 1;
-            }
-
-            let avg_nps = if nps_index == 0 {
-                0.0
-            } else {
-                nps_samples.iter().sum::<f64>() / (nps_index + 1) as f64
-            };
-
-            let median_nps = median_f64(&nps_samples);
-
-            let weighted_avg_nps = if total_time > 0.0 {
-                total_nodes as f64 / total_time
-            } else {
-                0.0
-            };
-            if can_print {
-                let estimated_node_growth = ctx
-                    .stats
+                cumulative_stats
                     .iterative_deepening_stats
-                    .estimated_growth_factor(depth)
-                    .map_or_else(|| "n/a".to_string(), |factor| format!("{factor:.2}x"));
+                    .record_iteration(depth, depth_nodes);
 
-                depth_stats.print_all(depth, elapsed_secs);
+                ctx.stats
+                    .iterative_deepening_stats
+                    .record_iteration(depth, depth_nodes);
 
-                println!(
-                    "Iteration Nodes: {}. Estimated Increase: {}",
-                    depth_nodes.separate_with_commas(),
-                    estimated_node_growth,
-                );
+                let depth_nps = if elapsed_secs > 0.0 {
+                    depth_nodes as f64 / elapsed_secs
+                } else {
+                    0.0
+                };
 
-                println!(
-                    "Depth: {}. Eval: {}. Time: {:.3}s. NPS: {} | Avg: {} | Median: {} | Weighted: {}",
-                    depth,
-                    result.eval,
-                    elapsed_secs,
-                    fmt_nps(depth_nps),
-                    fmt_nps(avg_nps),
-                    fmt_nps(median_nps),
-                    fmt_nps(weighted_avg_nps),
-                );
+                total_time += elapsed_secs;
+                total_nodes += depth_nodes;
+
+                if depth_nps.is_finite() && depth_nps > 0.0 && nps_index < 128 {
+                    nps_samples[nps_index] = depth_nps;
+                    nps_index += 1;
+                }
+
+                let avg_nps = if nps_index == 0 {
+                    0.0
+                } else {
+                    nps_samples.iter().sum::<f64>() / (nps_index + 1) as f64
+                };
+
+                let median_nps = median_f64(&nps_samples);
+
+                let weighted_avg_nps = if total_time > 0.0 {
+                    total_nodes as f64 / total_time
+                } else {
+                    0.0
+                };
+                if can_print {
+                    let estimated_node_growth = ctx
+                        .stats
+                        .iterative_deepening_stats
+                        .estimated_growth_factor(depth)
+                        .map_or_else(|| "n/a".to_string(), |factor| format!("{factor:.2}x"));
+
+                    depth_stats.print_all(depth, elapsed_secs);
+
+                    println!(
+                        "Iteration Nodes: {}. Estimated Increase: {}",
+                        depth_nodes.separate_with_commas(),
+                        estimated_node_growth,
+                    );
+
+                    println!(
+                        "Depth: {}. Eval: {}. Time: {:.3}s. NPS: {} | Avg: {} | Median: {} | Weighted: {}",
+                        depth,
+                        result.eval,
+                        elapsed_secs,
+                        fmt_nps(depth_nps),
+                        fmt_nps(avg_nps),
+                        fmt_nps(median_nps),
+                        fmt_nps(weighted_avg_nps),
+                    );
+                }
             }
 
             if ctx.should_stop() {
@@ -282,13 +295,14 @@ impl Engine {
             best_result.depth_reached = depth;
             best_result.stats = ctx.stats;
             best_result.elapsed = ctx.elapsed();
-            if on_iteration(&best_result).is_break() {
+            #[cfg(feature = "debug-uci")]
+            if ctx.record_iteration(&best_result) {
                 ctx.stop_reason = Some(SearchTermination::IterationStop);
                 break;
             }
         }
 
-        total_time = ctx.elapsed().as_secs_f64();
+        let total_time = ctx.elapsed().as_secs_f64();
 
         let total_nps = if total_time > 0.0 {
             ctx.stats.total_nodes() as f64 / total_time
@@ -303,14 +317,20 @@ impl Engine {
                 total_time,
                 format!("{:.2}", total_nps).separate_with_commas()
             );
-            println!();
-            println!("Cummulative Stats:");
-            cumulative_stats.print_all(best_result.depth_reached, total_time);
+            track_stat! {
+                println!();
+                println!("Cumulative Stats:");
+                cumulative_stats.print_all(best_result.depth_reached, total_time);
+            }
         }
 
         best_result.stats = ctx.stats;
         best_result.elapsed = ctx.elapsed();
         best_result.termination = ctx.stop_reason.unwrap_or(SearchTermination::DepthLimit);
+        #[cfg(feature = "debug-uci")]
+        {
+            best_result.iterations = std::mem::take(&mut ctx.iterations);
+        }
         best_result
     }
 
@@ -324,14 +344,18 @@ impl Engine {
         beta: i32,
     ) -> SearchResult {
         ctx.stats.node_stats.main += 1;
-        ctx.stats.node_stats.pv += 1;
-        ctx.stats.node_stats.root += 1;
+        track_stat! {
+            ctx.stats.node_stats.pv += 1;
+            ctx.stats.node_stats.root += 1;
+        }
 
         let original_alpha = alpha;
         let root_hash = board.board_hash();
         let side_to_move = board.side_to_move();
-        if board.in_check(side_to_move) {
-            ctx.stats.node_stats.in_check += 1;
+        track_stat! {
+            if board.in_check(side_to_move) {
+                ctx.stats.node_stats.in_check += 1;
+            }
         }
 
         let mut best_eval = NEG_INF;
@@ -522,7 +546,7 @@ impl Engine {
             }
         }
         if stopped {
-            ctx.stats.terminal_stats.stopped_returns += 1;
+            track_stat!(ctx.stats.terminal_stats.stopped_returns += 1);
             // return early before affecting logic with incomplete results
             return SearchResult {
                 best_move,
@@ -533,15 +557,17 @@ impl Engine {
                 pv: best_pv,
                 elapsed: Duration::ZERO,
                 termination: SearchTermination::DepthLimit,
+                #[cfg(feature = "debug-uci")]
+                iterations: Vec::new(),
             };
         }
 
         if legal_moves == 0 {
             let eval = if board.in_check(side_to_move) {
-                ctx.stats.terminal_stats.checkmates += 1;
+                track_stat!(ctx.stats.terminal_stats.checkmates += 1);
                 -CHECKMATE_SCORE
             } else {
-                ctx.stats.terminal_stats.stalemates += 1;
+                track_stat!(ctx.stats.terminal_stats.stalemates += 1);
                 0
             };
             return SearchResult {
@@ -553,6 +579,8 @@ impl Engine {
                 pv: best_pv,
                 elapsed: Duration::ZERO,
                 termination: SearchTermination::DepthLimit,
+                #[cfg(feature = "debug-uci")]
+                iterations: Vec::new(),
             };
         }
 
@@ -563,8 +591,8 @@ impl Engine {
         } else {
             TTFlag::Exact
         };
-        ctx.stats.tt_stats.main.stores += 1;
-        let insert_result = self.tt.insert(
+        track_stat!(ctx.stats.tt_stats.main.stores += 1);
+        let _insert_result = self.tt.insert(
             root_hash,
             true,
             flag,
@@ -573,7 +601,7 @@ impl Engine {
             i16::MIN,
             best_move,
         );
-        ctx.stats.tt_stats.main.record_insert(insert_result);
+        track_stat!(ctx.stats.tt_stats.main.record_insert(_insert_result));
 
         SearchResult {
             best_move,
@@ -584,6 +612,8 @@ impl Engine {
             pv: best_pv, // TODO: Implement principal variation
             elapsed: Duration::ZERO,
             termination: SearchTermination::DepthLimit,
+            #[cfg(feature = "debug-uci")]
+            iterations: Vec::new(),
         }
     }
 }
@@ -593,6 +623,125 @@ mod tests {
     use super::*;
     use crate::engine::SearchLimits;
     use crate::engine::configs::EngineConfig;
+
+    #[cfg(not(feature = "search-stats"))]
+    #[test]
+    fn search_only_collects_required_node_counts_without_statistics() {
+        let config = EngineConfig {
+            tt_size: 1,
+            ..EngineConfig::standard()
+        };
+        let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
+        let mut context = SearchContext::new(SearchLimits::depth(3, 2), vec![board.board_hash()]);
+        let result = Engine::new(config).search(&board, &mut context, false, false);
+
+        assert!(result.stats.node_stats.main > 0);
+        assert!(result.stats.node_stats.quiescence > 0);
+        let mut expected = SearchStats::default();
+        expected.node_stats.main = result.stats.node_stats.main;
+        expected.node_stats.quiescence = result.stats.node_stats.quiescence;
+        assert_eq!(format!("{:?}", result.stats), format!("{expected:?}"));
+        assert_eq!(result.depth_reached, 3);
+        assert!(result.best_move.is_some());
+    }
+
+    #[test]
+    fn node_limits_work_with_or_without_statistics() {
+        let config = EngineConfig {
+            tt_size: 1,
+            ..EngineConfig::default()
+        };
+        let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
+        for max_nodes in [0, 2048] {
+            let mut limits = SearchLimits::depth(20, 3);
+            limits.max_nodes = Some(max_nodes);
+            let mut context = SearchContext::new(limits, vec![board.board_hash()]);
+            let result = Engine::new(config).search(&board, &mut context, false, false);
+
+            assert_eq!(result.termination, SearchTermination::NodeLimit);
+            assert!(result.best_move.is_some());
+            assert!(result.stats.total_nodes() >= max_nodes);
+            assert!(result.stats.total_nodes() < max_nodes + 2048);
+            if max_nodes == 0 {
+                assert_eq!(result.stats.total_nodes(), 0);
+                assert_eq!(result.depth_reached, 0);
+            }
+        }
+    }
+
+    #[cfg(feature = "debug-uci")]
+    #[test]
+    fn completed_iteration_history_preserves_each_depth() {
+        let config = EngineConfig {
+            tt_size: 1,
+            ..EngineConfig::default()
+        };
+        let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
+        let result = Engine::new(config).search(
+            &board,
+            &mut SearchContext::new(SearchLimits::depth(3, 2), vec![board.board_hash()]),
+            false,
+            false,
+        );
+
+        assert_eq!(result.iterations.len(), 3);
+        for (index, iteration) in result.iterations.iter().enumerate() {
+            assert_eq!(iteration.depth_reached as usize, index + 1);
+            assert!(iteration.best_move.is_some());
+            assert!(iteration.main_nodes > 0);
+            assert!(iteration.quiescence_nodes > 0);
+            assert!(iteration.elapsed <= result.elapsed);
+        }
+        for pair in result.iterations.windows(2) {
+            assert!(pair[0].main_nodes < pair[1].main_nodes);
+            assert!(pair[0].quiescence_nodes <= pair[1].quiescence_nodes);
+            assert!(pair[0].elapsed <= pair[1].elapsed);
+        }
+        let last = result.iterations.last().unwrap();
+        assert_eq!(last.best_move, result.best_move);
+        assert_eq!(last.eval, result.eval);
+        assert_eq!(last.seldepth, result.seldepth);
+        assert_eq!(last.pv, result.pv);
+        assert_eq!(last.main_nodes, result.stats.node_stats.main);
+        assert_eq!(last.quiescence_nodes, result.stats.node_stats.quiescence);
+    }
+
+    #[cfg(feature = "debug-uci")]
+    #[test]
+    fn interrupted_depth_is_excluded_from_iteration_history() {
+        let config = EngineConfig {
+            tt_size: 1,
+            ..EngineConfig::default()
+        };
+        let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
+        let history = vec![board.board_hash()];
+        let completed = Engine::new(config).search(
+            &board,
+            &mut SearchContext::new(SearchLimits::depth(1, 2), history.clone()),
+            false,
+            false,
+        );
+        let mut limits = SearchLimits::depth(3, 2);
+        limits.max_nodes = Some(completed.stats.total_nodes() + 1);
+        let result = Engine::new(config).search(
+            &board,
+            &mut SearchContext::new(limits, history),
+            false,
+            false,
+        );
+
+        assert_eq!(result.termination, SearchTermination::NodeLimit);
+        assert_eq!(result.iterations.len(), 1);
+        let last = &result.iterations[0];
+        assert_eq!(last.depth_reached, 1);
+        assert_eq!(last.best_move, completed.best_move);
+        assert_eq!(last.eval, completed.eval);
+        assert_eq!(
+            last.main_nodes + last.quiescence_nodes,
+            completed.stats.total_nodes()
+        );
+        assert!(result.stats.total_nodes() > last.main_nodes + last.quiescence_nodes);
+    }
 
     #[test]
     fn root_stores_large_depths_without_wrapping() {
@@ -646,6 +795,15 @@ mod tests {
 
             assert_eq!(result.eval, expected, "wrong terminal score for {fen}");
             assert_eq!(result.best_move, None);
+            assert_eq!(result.stats.node_stats.main, 1);
+            assert_eq!(
+                result.stats.node_stats.root,
+                u64::from(cfg!(feature = "search-stats"))
+            );
+            assert_eq!(
+                result.stats.terminal_stats.checkmates + result.stats.terminal_stats.stalemates,
+                u64::from(cfg!(feature = "search-stats"))
+            );
         }
     }
 }
