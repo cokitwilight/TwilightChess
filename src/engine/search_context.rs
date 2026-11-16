@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use crate::board::Move;
 #[cfg(feature = "debug-uci")]
 use crate::debug_uci::discovery::FindSolutionState;
 use crate::engine::history::KillerTable;
@@ -34,6 +35,8 @@ pub struct SearchContext {
     pub stack: [SearchStackEntry; MAX_PLY],
 
     pub move_buffers: Box<[MoveBuffer]>,
+    pub previous_best_move: Option<Move>,
+    pub root_best_move: Option<Move>,
 
     pub killer_moves: KillerTable,
     pub repetition_history: Vec<u64>,
@@ -57,6 +60,8 @@ impl SearchContext {
             seldepth: 0,
             stack: [SearchStackEntry::default(); MAX_PLY],
             move_buffers: vec![MoveBuffer::new(); PICKER_FRAME_COUNT].into_boxed_slice(),
+            previous_best_move: None,
+            root_best_move: None,
             killer_moves: KillerTable::new(),
             repetition_history,
             start_time: Instant::now(),

@@ -1,17 +1,14 @@
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::board::{Board, Move, MoveType};
+use crate::board::Board;
 use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
-use crate::engine::history::HistoryKey;
+use crate::engine::search::nodetype::Root;
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64, track_stat};
-use crate::engine::staged::ScoredMove;
-use crate::engine::tt::{TTFlag, TTNodeType, score_to_tt};
 use crate::engine::{
     Engine, MAX_PV, PickerFrame, SearchContext, SearchOptions, SearchResult, SearchTermination,
 };
 use crate::moves::MoveGenInfo;
-use crate::types::PieceType;
 
 // for debug printing
 use thousands::Separable;
@@ -121,8 +118,38 @@ impl Engine {
             let result = loop {
                 #[cfg(feature = "search-stats")]
                 let nodes_before_attempt = ctx.stats.total_nodes();
-                let result =
-                    self.search_root(board, ctx, best_result.best_move, depth, alpha, beta);
+
+                ctx.previous_best_move = best_result.best_move;
+                ctx.root_best_move = None;
+
+                let eval = self.negamax::<Root>(
+                    board,
+                    ctx,
+                    depth,
+                    alpha,
+                    beta,
+                    false,
+                    0,
+                    PickerFrame::ROOT,
+                    SearchOptions::NORMAL,
+                );
+
+                let mut pv = [None; MAX_PV];
+                pv[0] = ctx.root_best_move;
+
+                let result = SearchResult {
+                    best_move: ctx.root_best_move,
+                    eval,
+                    depth_reached: depth,
+                    seldepth: ctx.seldepth,
+                    stats: ctx.stats,
+                    pv,
+                    elapsed: ctx.elapsed(),
+                    termination: SearchTermination::DepthLimit,
+                    #[cfg(feature = "debug-uci")]
+                    iterations: Vec::new(),
+                };
+
                 track_stat! {
                     let attempt_nodes = ctx.stats.total_nodes() - nodes_before_attempt;
                     if use_aspiration && aspiration_attempt > 0 {
@@ -324,296 +351,15 @@ impl Engine {
         }
         best_result
     }
-
-    fn search_root(
-        &mut self,
-        board: &mut Board,
-        ctx: &mut SearchContext,
-        previous_best_move: Option<Move>,
-        depth: u16,
-        mut alpha: i32,
-        beta: i32,
-    ) -> SearchResult {
-        ctx.stats.node_stats.main += 1;
-        track_stat! {
-            ctx.stats.node_stats.pv += 1;
-            ctx.stats.node_stats.root += 1;
-        }
-
-        let original_alpha = alpha;
-        let root_hash = board.board_hash();
-        let side_to_move = board.side_to_move();
-        track_stat! {
-            if board.in_check(side_to_move) {
-                ctx.stats.node_stats.in_check += 1;
-            }
-        }
-
-        let mut best_eval = NEG_INF;
-        let mut best_move = None;
-        let mut best_pv = [None; MAX_PV];
-
-        let mut legal_moves = 0;
-
-        let mut stopped = false;
-
-        let tt_best_move = self
-            .tt
-            .get(board.board_hash(), TTNodeType::Main)
-            .and_then(|entry| entry.best_move)
-            .or_else(|| {
-                self.tt
-                    .get_any(board.board_hash())
-                    .and_then(|entry| entry.best_move)
-            });
-
-        let mut move_picker = self.new_move_picker(
-            0,
-            ctx,
-            side_to_move,
-            0,
-            PickerFrame::ROOT,
-            previous_best_move,
-            tt_best_move,
-        );
-
-        let mut searched_quiets = [ScoredMove::new(); MAX_QUIETS];
-        let mut q = 0usize;
-        let mut searched_captures = [ScoredMove::new(); MAX_CAPTURES];
-        let mut c = 0usize;
-
-        let mut searched = 0usize;
-
-        let info = MoveGenInfo::calculate(board, side_to_move);
-
-        while let Some(scored_mv) = move_picker.get_next(board, &info, ctx, &self.history) {
-            if ctx.should_stop() {
-                stopped = true;
-                break;
-            }
-
-            let mv = &scored_mv.mv;
-
-            let is_capture = mv.kind() == MoveType::Capture || mv.kind() == MoveType::EnPassant;
-            let is_quiet = !is_capture && mv.promotion().is_none();
-
-            let mut improved_alpha = false;
-
-            let piece = board
-                .piecetype_at(mv.from())
-                .expect("No piece in board in Search Root!");
-
-            let undo = board.make_move(*mv);
-
-            let child_hash = board.board_hash();
-
-            legal_moves += 1;
-
-            ctx.repetition_history.push(child_hash);
-
-            let reduction = match searched + 1 {
-                1 => -2,
-                2..4 => -1,
-                4..6 => 0,
-                6..12 => 1,
-                _ => 2,
-            };
-
-            let search_depth = (depth as i32 - reduction).max(1);
-
-            let eval = -self.negamax(
-                board,
-                ctx,
-                search_depth as u16,
-                -beta,
-                -alpha,
-                1,
-                PickerFrame::ROOT.child(),
-                SearchOptions::NORMAL,
-            );
-
-            ctx.repetition_history.pop();
-
-            board.undo_move(undo);
-
-            searched += 1;
-
-            if ctx.stopped {
-                stopped = true;
-                break;
-            }
-
-            if eval > best_eval {
-                best_eval = eval;
-                best_move = Some(*mv);
-
-                best_pv[0] = Some(*mv);
-            }
-
-            if eval > alpha {
-                alpha = eval;
-                improved_alpha = true;
-            }
-
-            if alpha >= beta {
-                let history_key = if let Some(key) = scored_mv.history_key {
-                    key
-                } else {
-                    let mv = &scored_mv.mv;
-                    HistoryKey::new(side_to_move, piece, mv.to())
-                };
-
-                if is_quiet {
-                    self.history.main.add_bonus(history_key, depth);
-
-                    for scored_mv in &searched_quiets[..q] {
-                        let key = if let Some(k) = scored_mv.history_key {
-                            k
-                        } else {
-                            let mv = &scored_mv.mv;
-                            let piece = board
-                                .piecetype_at(mv.from())
-                                .expect("No piece in board in negamax!");
-                            HistoryKey::new(side_to_move, piece, mv.to())
-                        };
-
-                        self.history.main.add_malus(key, depth);
-                    }
-                } else if is_capture {
-                    let captured_piece = if let Some(piece) = scored_mv.captured {
-                        piece
-                    } else {
-                        match mv.kind() {
-                            MoveType::EnPassant => PieceType::Pawn,
-                            MoveType::Capture => board.piecetype_at(mv.to()).unwrap(),
-                            _ => unreachable!(
-                                "Somehow non capture move in searched captures in negamax! {:?}",
-                                mv.kind()
-                            ),
-                        }
-                    };
-
-                    self.history
-                        .add_capture_bonus(history_key, captured_piece, depth);
-                }
-                for scored_mv in &searched_captures[..c] {
-                    let mv = &scored_mv.mv;
-                    let history_key = if let Some(key) = scored_mv.history_key {
-                        key
-                    } else {
-                        let piece = board
-                            .piecetype_at(mv.from())
-                            .expect("No piece in board in negamax!");
-                        HistoryKey::new(side_to_move, piece, mv.to())
-                    };
-
-                    let captured_piece = if let Some(piece) = scored_mv.captured {
-                        piece
-                    } else {
-                        match mv.kind() {
-                            MoveType::EnPassant => PieceType::Pawn,
-                            MoveType::Capture => board.piecetype_at(mv.to()).unwrap(),
-                            _ => unreachable!(
-                                "Somehow non capture move in searched captures in negamax! {:?}",
-                                mv.kind()
-                            ),
-                        }
-                    };
-
-                    self.history
-                        .add_capture_malus(history_key, captured_piece, depth);
-                }
-                break;
-            }
-
-            if !improved_alpha {
-                if is_quiet && q < MAX_QUIETS {
-                    searched_quiets[q] = scored_mv;
-                    q += 1;
-                } else if is_capture && c < MAX_CAPTURES {
-                    searched_captures[c] = scored_mv;
-                    c += 1;
-                }
-            }
-        }
-        if stopped {
-            track_stat!(ctx.stats.terminal_stats.stopped_returns += 1);
-            // return early before affecting logic with incomplete results
-            return SearchResult {
-                best_move,
-                eval: best_eval,
-                depth_reached: depth,
-                seldepth: ctx.seldepth,
-                stats: ctx.stats,
-                pv: best_pv,
-                elapsed: Duration::ZERO,
-                termination: SearchTermination::DepthLimit,
-                #[cfg(feature = "debug-uci")]
-                iterations: Vec::new(),
-            };
-        }
-
-        if legal_moves == 0 {
-            let eval = if board.in_check(side_to_move) {
-                track_stat!(ctx.stats.terminal_stats.checkmates += 1);
-                -CHECKMATE_SCORE
-            } else {
-                track_stat!(ctx.stats.terminal_stats.stalemates += 1);
-                0
-            };
-            return SearchResult {
-                best_move: None,
-                eval,
-                depth_reached: depth,
-                seldepth: ctx.seldepth,
-                stats: ctx.stats,
-                pv: best_pv,
-                elapsed: Duration::ZERO,
-                termination: SearchTermination::DepthLimit,
-                #[cfg(feature = "debug-uci")]
-                iterations: Vec::new(),
-            };
-        }
-
-        let flag = if best_eval <= original_alpha {
-            TTFlag::UpperBound
-        } else if best_eval >= beta {
-            TTFlag::LowerBound
-        } else {
-            TTFlag::Exact
-        };
-        track_stat!(ctx.stats.tt_stats.main.stores += 1);
-        let _insert_result = self.tt.insert(
-            root_hash,
-            true,
-            flag,
-            u8::try_from(depth).unwrap_or(u8::MAX),
-            score_to_tt(best_eval, 1),
-            i16::MIN,
-            best_move,
-        );
-        track_stat!(ctx.stats.tt_stats.main.record_insert(_insert_result));
-
-        SearchResult {
-            best_move,
-            eval: best_eval,
-            depth_reached: depth,
-            seldepth: ctx.seldepth,
-            stats: ctx.stats,
-            pv: best_pv, // TODO: Implement principal variation
-            elapsed: Duration::ZERO,
-            termination: SearchTermination::DepthLimit,
-            #[cfg(feature = "debug-uci")]
-            iterations: Vec::new(),
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::board::MoveType;
     use crate::engine::SearchLimits;
     use crate::engine::configs::EngineConfig;
+    use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt};
 
     #[test]
     fn node_limits_work_with_or_without_statistics() {
@@ -724,16 +470,19 @@ mod tests {
             let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").unwrap();
             let mut context =
                 SearchContext::new(SearchLimits::depth(depth, 1), vec![board.board_hash()]);
-            let result = engine.search_root(
+            let eval = engine.negamax::<Root>(
                 &mut board,
                 &mut context,
-                None,
                 depth,
                 NEG_INF + 1,
                 POS_INF - 1,
+                false,
+                0,
+                PickerFrame::ROOT,
+                SearchOptions::NORMAL,
             );
-            assert!(result.best_move.is_some());
-            assert_eq!(result.eval, 0);
+            assert!(context.root_best_move.is_some());
+            assert_eq!(eval, 0);
             assert_eq!(
                 engine
                     .tt
@@ -760,20 +509,197 @@ mod tests {
             let mut context =
                 SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
 
-            let result =
-                engine.search_root(&mut board, &mut context, None, 1, NEG_INF + 1, POS_INF - 1);
+            let eval = engine.negamax::<Root>(
+                &mut board,
+                &mut context,
+                1,
+                NEG_INF + 1,
+                POS_INF - 1,
+                false,
+                0,
+                PickerFrame::ROOT,
+                SearchOptions::NORMAL,
+            );
 
-            assert_eq!(result.eval, expected, "wrong terminal score for {fen}");
-            assert_eq!(result.best_move, None);
-            assert_eq!(result.stats.node_stats.main, 1);
+            assert_eq!(eval, expected, "wrong terminal score for {fen}");
+            assert_eq!(context.root_best_move, None);
+            assert_eq!(context.stats.node_stats.main, 1);
             assert_eq!(
-                result.stats.node_stats.root,
+                context.stats.node_stats.root,
                 u64::from(cfg!(feature = "search-stats"))
             );
             assert_eq!(
-                result.stats.terminal_stats.checkmates + result.stats.terminal_stats.stalemates,
+                context.stats.terminal_stats.checkmates + context.stats.terminal_stats.stalemates,
                 u64::from(cfg!(feature = "search-stats"))
             );
         }
+    }
+
+    #[test]
+    fn root_search_ignores_tt_score_returns_and_window_narrowing() {
+        for (flag, cached_score) in [
+            (TTFlag::Exact, 123),
+            (TTFlag::LowerBound, 123),
+            (TTFlag::UpperBound, -123),
+        ] {
+            let config = EngineConfig {
+                tt_size: 1,
+                ..EngineConfig::standard()
+            };
+            let mut engine = Engine::new(config);
+            // The only legal move captures the queen and draws.
+            let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").unwrap();
+            let root_hash = board.board_hash();
+            engine
+                .tt
+                .insert(root_hash, true, flag, 6, cached_score, i16::MIN, None);
+            let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![root_hash]);
+
+            let eval = engine.negamax::<Root>(
+                &mut board,
+                &mut context,
+                1,
+                -1,
+                1,
+                false,
+                0,
+                PickerFrame::ROOT,
+                SearchOptions::NORMAL,
+            );
+
+            assert_eq!(eval, 0, "root accepted the cached {flag:?} score");
+            assert!(context.root_best_move.is_some());
+            assert!(context.stats.total_nodes() > 1);
+            assert_eq!(context.repetition_history, vec![root_hash]);
+            assert_eq!(board.board_hash(), root_hash);
+            board.assert_hash();
+        }
+    }
+
+    #[test]
+    fn root_search_selects_a_move_despite_root_draw_conditions() {
+        for (fen, repeated) in [
+            ("7k/6Q1/4K3/8/8/8/8/8 b - - 4 1", true),
+            ("7k/6Q1/4K3/8/8/8/8/8 b - - 100 1", false),
+            ("7k/8/8/8/8/8/8/K7 w - - 0 1", false),
+        ] {
+            let config = EngineConfig {
+                tt_size: 1,
+                ..EngineConfig::standard()
+            };
+            let mut engine = Engine::new(config);
+            let mut board = Board::from_fen(fen).unwrap();
+            let root_hash = board.board_hash();
+            let history = vec![root_hash; if repeated { 3 } else { 1 }];
+            let mut context = SearchContext::new(SearchLimits::depth(1, 1), history.clone());
+            let legal_moves = board.all_legal_moves();
+
+            let eval = engine.negamax::<Root>(
+                &mut board,
+                &mut context,
+                1,
+                NEG_INF + 1,
+                POS_INF - 1,
+                false,
+                0,
+                PickerFrame::ROOT,
+                SearchOptions::NORMAL,
+            );
+
+            assert_eq!(eval, 0, "wrong draw score for {fen}");
+            let best_move = context.root_best_move.expect("root must search a move");
+            assert!(legal_moves.iter().any(|&mv| mv == best_move));
+            assert_eq!(context.repetition_history, history);
+            assert_eq!(board.board_hash(), root_hash);
+            board.assert_hash();
+        }
+    }
+
+    #[test]
+    fn root_fail_low_keeps_the_preferred_best_move() {
+        let config = EngineConfig {
+            tt_size: 1,
+            ..EngineConfig::standard()
+        };
+        let mut engine = Engine::new(config);
+        // All children draw, so the first searched move wins the tie.
+        let mut board = Board::from_fen("7k/8/8/8/8/8/8/K7 w - - 0 1").unwrap();
+        let preferred = *board.all_legal_moves().as_slice().last().unwrap();
+        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+        context.previous_best_move = Some(preferred);
+
+        let eval = engine.negamax::<Root>(
+            &mut board,
+            &mut context,
+            1,
+            1,
+            2,
+            false,
+            0,
+            PickerFrame::ROOT,
+            SearchOptions::NORMAL,
+        );
+
+        assert_eq!(eval, 0);
+        assert_eq!(context.root_best_move, Some(preferred));
+        let entry = engine.tt.get(board.board_hash(), TTNodeType::Main).unwrap();
+        assert_eq!(entry.flag.bound_type(), TTFlag::UpperBound);
+        assert_eq!(entry.best_move, Some(preferred));
+    }
+
+    #[test]
+    fn root_stores_mate_scores_at_ply_zero() {
+        let config = EngineConfig {
+            tt_size: 1,
+            ..EngineConfig::standard()
+        };
+        let mut engine = Engine::new(config);
+        let mut board = Board::from_fen("7k/5Q2/6K1/8/8/8/8/8 w - - 0 1").unwrap();
+        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+
+        let eval = engine.negamax::<Root>(
+            &mut board,
+            &mut context,
+            1,
+            NEG_INF + 1,
+            POS_INF - 1,
+            false,
+            0,
+            PickerFrame::ROOT,
+            SearchOptions::NORMAL,
+        );
+
+        assert_eq!(eval, CHECKMATE_SCORE - 1);
+        let entry = engine.tt.get(board.board_hash(), TTNodeType::Main).unwrap();
+        assert_eq!(score_from_tt(i32::from(entry.eval), 0), eval);
+        assert_eq!(entry.best_move, context.root_best_move);
+    }
+
+    #[test]
+    fn root_search_handles_an_en_passant_fallback_move() {
+        let config = EngineConfig {
+            tt_size: 1,
+            ..EngineConfig::standard()
+        };
+        let mut engine = Engine::new(config);
+        let mut board = Board::from_fen("7k/8/8/3pP3/8/8/8/K7 w - d6 0 1").unwrap();
+        let root_hash = board.board_hash();
+        let legal_moves = board.all_legal_moves();
+        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![root_hash]);
+
+        let result = engine.search(&board, &mut context, false, false);
+
+        assert_eq!(
+            context.previous_best_move.unwrap().kind(),
+            MoveType::EnPassant
+        );
+        assert_eq!(result.depth_reached, 1);
+        let best_move = result
+            .best_move
+            .expect("completed root search must select a move");
+        assert!(legal_moves.iter().any(|&mv| mv == best_move));
+        assert_eq!(result.pv[0], Some(best_move));
+        assert_eq!(result.best_move, context.root_best_move);
+        assert_eq!(context.repetition_history, vec![root_hash]);
     }
 }
