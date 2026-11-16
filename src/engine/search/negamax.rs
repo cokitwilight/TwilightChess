@@ -32,6 +32,7 @@ impl Engine {
         depth: u16,
         mut alpha: i32,
         mut beta: i32,
+        cut_node: bool,
         ply: usize,
         picker_frame: PickerFrame,
         options: SearchOptions,
@@ -270,6 +271,7 @@ impl Engine {
                 depth - 1 - reduction,
                 -beta,
                 -beta + 1,
+                false,
                 ply + 1,
                 picker_frame.child(),
                 search_options,
@@ -429,6 +431,7 @@ impl Engine {
                     verification_depth,
                     singular_beta - 1,
                     singular_beta,
+                    cut_node,
                     ply, // Same position: do not increase ply
                     picker_frame.child(),
                     SearchOptions {
@@ -569,6 +572,7 @@ impl Engine {
                     full_child_depth,
                     -beta,
                     -alpha,
+                    false,
                     ply + 1,
                     picker_frame.child(),
                     normal_child_options,
@@ -606,6 +610,8 @@ impl Engine {
                     }
                 }
 
+                let passed_cut_node = if reduction > 0 { true } else { false };
+
                 // null window search reduced depth
                 track_stat!(context.stats.pvs_stats.null_window_searches += 1);
                 eval = -self.negamax::<NonPV>(
@@ -614,6 +620,7 @@ impl Engine {
                     reduced_child_depth,
                     -alpha - 1,
                     -alpha,
+                    passed_cut_node,
                     ply + 1,
                     picker_frame.child(),
                     normal_child_options,
@@ -677,6 +684,7 @@ impl Engine {
                                 research_depth,
                                 -alpha - 1,
                                 -alpha,
+                                !cut_node,
                                 ply + 1,
                                 picker_frame.child(),
                                 normal_child_options,
@@ -717,6 +725,7 @@ impl Engine {
                             research_depth,
                             -beta,
                             -alpha,
+                            false,
                             ply + 1,
                             picker_frame.child(),
                             normal_child_options,
@@ -1028,6 +1037,7 @@ mod tests {
                 1,
                 NEG_INF + 1,
                 POS_INF - 1,
+                false,
                 0,
                 PickerFrame::ROOT,
                 SearchOptions::NORMAL,
@@ -1051,6 +1061,7 @@ mod tests {
             1,
             alpha,
             alpha + 1,
+            false,
             0,
             PickerFrame::ROOT,
             SearchOptions::singular_verification(only_legal_move),
@@ -1097,6 +1108,7 @@ mod tests {
             1,
             NEG_INF + 1,
             POS_INF - 1,
+            false,
             0,
             PickerFrame::ROOT,
             SearchOptions::NORMAL,
@@ -1161,6 +1173,7 @@ mod tests {
             1,
             NEG_INF + 1,
             POS_INF - 1,
+            false,
             0,
             PickerFrame::ROOT,
             SearchOptions::NORMAL,
@@ -1193,6 +1206,7 @@ mod tests {
             258,
             NEG_INF + 1,
             POS_INF - 1,
+            false,
             0,
             PickerFrame::ROOT,
             SearchOptions::NORMAL,
@@ -1230,6 +1244,7 @@ mod tests {
             256,
             NEG_INF + 1,
             POS_INF - 1,
+            false,
             0,
             PickerFrame::ROOT,
             SearchOptions::NORMAL,
@@ -1270,6 +1285,7 @@ mod tests {
             depth,
             NEG_INF + 1,
             POS_INF - 1,
+            false,
             0,
             PickerFrame::ROOT,
             SearchOptions::NORMAL,
