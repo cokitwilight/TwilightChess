@@ -3,6 +3,7 @@ use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
 use crate::engine::pruning::calculate_see_threshold;
+use crate::engine::search::NodeType;
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search_stats::track_stat;
 use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
@@ -16,7 +17,7 @@ use crate::types::PieceType;
 const MAX_CHECK_Q_PLIES: usize = 64;
 
 impl Engine {
-    pub(crate) fn quiescence(
+    pub(crate) fn quiescence<NODE: NodeType>(
         &mut self,
         board: &mut Board,
         context: &mut SearchContext,
@@ -350,7 +351,7 @@ impl Engine {
 
             let check_plies = if gives_check { check_plies + 1 } else { 0 };
 
-            let eval = -self.quiescence(
+            let eval = -self.quiescence::<NODE>(
                 board,
                 context,
                 _depth,
@@ -448,6 +449,7 @@ mod tests {
     use super::*;
     use crate::engine::config::POS_INF;
     use crate::engine::configs::EngineConfig;
+    use crate::engine::search::PV;
     use crate::engine::{SearchContext, SearchLimits};
 
     #[test]
@@ -465,7 +467,7 @@ mod tests {
             let mut context =
                 SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
 
-            let score = engine.quiescence(
+            let score = engine.quiescence::<PV>(
                 &mut board,
                 &mut context,
                 1,
@@ -490,7 +492,7 @@ mod tests {
 
         for _ in 0..2 {
             assert_eq!(
-                engine.quiescence(
+                engine.quiescence::<PV>(
                     &mut board,
                     &mut context,
                     6,
@@ -546,7 +548,7 @@ mod tests {
         );
         let mut context = SearchContext::new(SearchLimits::depth(1, 6), vec![board.board_hash()]);
 
-        let score = engine.quiescence(
+        let score = engine.quiescence::<PV>(
             &mut board,
             &mut context,
             6,

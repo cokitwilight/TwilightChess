@@ -9,6 +9,7 @@ use crate::engine::pruning::{
 };
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
+use crate::engine::search::{NodeType, NonPV, PV};
 use crate::engine::search_stats::track_stat;
 #[cfg(feature = "search-stats")]
 use crate::engine::search_stats::{
@@ -24,7 +25,7 @@ use crate::types::PieceType;
 
 impl Engine {
     // Implementation for negamax function
-    pub(crate) fn negamax(
+    pub(crate) fn negamax<NODE: NodeType>(
         &mut self,
         board: &mut Board,
         context: &mut SearchContext,
@@ -42,17 +43,22 @@ impl Engine {
         }
 
         context.stats.node_stats.main += 1;
-        context.seldepth = context.seldepth.max(ply);
+
+        if NODE::PV {
+            context.seldepth = context.seldepth.max(ply);
+        }
 
         // Classify the original window before the TT potentially narrows it.
-        let is_pv = beta != alpha + 1;
 
         track_stat! {
-            if is_pv {
-                context.stats.node_stats.pv += 1;
-            } else {
-                context.stats.node_stats.non_pv += 1;
-            }
+        if NODE::ROOT {
+            context.stats.node_stats.pv += 1;
+            context.stats.node_stats.root += 1;
+        } else if NODE::PV {
+            context.stats.node_stats.pv += 1;
+        } else {
+            context.stats.node_stats.non_pv += 1
+        }
         }
 
         if ply >= MAX_PLY - 1 {
@@ -61,7 +67,7 @@ impl Engine {
         }
 
         if depth == 0 {
-            return self.quiescence(
+            return self.quiescence::<NODE>(
                 board,
                 context,
                 context.limits.max_q_depth,
@@ -73,28 +79,31 @@ impl Engine {
             );
         }
 
-        if Engine::repetition_in_search(
-            context,
-            board.board_hash(),
-            board.halfmove_clock() as usize,
-        ) {
-            track_stat!(context.stats.draw_stats.repetition_returns += 1);
-            return 0;
-        }
+        if !NODE::ROOT {
+            if Engine::repetition_in_search(
+                context,
+                board.board_hash(),
+                board.halfmove_clock() as usize,
+            ) {
+                track_stat!(context.stats.draw_stats.repetition_returns += 1);
+                return 0;
+            }
 
-        if board.halfmove_clock() >= 100 {
-            track_stat!(context.stats.draw_stats.fifty_move_returns += 1);
-            return 0;
-        }
+            if board.halfmove_clock() >= 100 {
+                track_stat!(context.stats.draw_stats.fifty_move_returns += 1);
+                return 0;
+            }
 
-        if board.phase() < 8 && is_insufficient_material(board) {
-            track_stat!(context.stats.draw_stats.insufficient_material_returns += 1);
-            return 0;
+            if board.phase() < 8 && is_insufficient_material(board) {
+                track_stat!(context.stats.draw_stats.insufficient_material_returns += 1);
+                return 0;
+            }
         }
 
         let original_alpha = alpha;
 
         let in_check = board.in_check(board.side_to_move());
+
         track_stat! {
             if in_check {
                 context.stats.node_stats.in_check += 1;
@@ -134,7 +143,7 @@ impl Engine {
 
             tt_eval = entry.static_eval;
 
-            if u16::from(entry.depth) >= depth && options.excluded_move.is_none() {
+            if !NODE::ROOT && u16::from(entry.depth) >= depth && options.excluded_move.is_none() {
                 track_stat!(context.stats.tt_stats.main.usable += 1);
 
                 match entry.flag.bound_type() {
@@ -155,7 +164,8 @@ impl Engine {
                 }
             }
 
-            let suitable_for_singular = options.excluded_move.is_none()
+            let suitable_for_singular = !NODE::ROOT
+                && options.excluded_move.is_none()
                 && self.config.search.singular.enabled
                 && options.allow_singular
                 && depth >= self.config.search.singular.minimum_depth
@@ -192,10 +202,10 @@ impl Engine {
             raw_static_eval
         };
 
-        let can_rfp = !in_check
+        let can_rfp = !NODE::PV
+            && !in_check
             && self.config.search.rfp.enabled
             && options.excluded_move.is_none()
-            && !is_pv
             && beta < MATE_THRESHOLD
             && alpha > -MATE_THRESHOLD
             && ply > 0
@@ -229,14 +239,14 @@ impl Engine {
         // 4 is a placeholder for now
         // use phase for now. Might not be viable though
 
-        let can_null_prune = self.config.search.null_move.enabled
+        let can_null_prune = !NODE::PV
+            && self.config.search.null_move.enabled
             && options.allow_null_move
             && options.excluded_move.is_none()
             && !in_check
             && depth >= self.config.search.null_move.minimum_depth
             && board.phase >= self.config.search.null_move.minimum_phase
             && beta.abs() < MATE_THRESHOLD
-            && !is_pv
             && corrected_static_eval >= calculate_nmp_margin(beta);
 
         if can_null_prune {
@@ -254,7 +264,7 @@ impl Engine {
 
             search_options.allow_null_move = false;
 
-            let score = -self.negamax(
+            let score = -self.negamax::<NonPV>(
                 board,
                 context,
                 depth - 1 - reduction,
@@ -288,13 +298,19 @@ impl Engine {
             tt_best_move
         };
 
+        let pv_move = if NODE::ROOT {
+            context.previous_best_move
+        } else {
+            None
+        };
+
         let mut move_picker = self.new_move_picker(
             0,
             context,
             side_to_move,
             ply,
             picker_frame,
-            None,
+            pv_move,
             ordering_tt_move,
         );
 
@@ -303,13 +319,13 @@ impl Engine {
 
         let mut did_cutoff = false;
 
-        let can_fut = self.config.search.fut.enabled
+        let can_fut = !NODE::PV
+            && self.config.search.fut.enabled
             && depth <= self.config.search.fut.max_depth
             && options.excluded_move.is_none()
             && !in_check
             && alpha.abs() < MATE_THRESHOLD
-            && depth > 0
-            && !is_pv;
+            && depth > 0;
 
         let normal_child_options = SearchOptions {
             allow_null_move: true,
@@ -367,13 +383,10 @@ impl Engine {
             let captured_piece = if is_capture {
                 if let Some(piece) = scored_mv.captured {
                     Some(piece)
+                } else if mv.kind() == MoveType::EnPassant {
+                    Some(PieceType::Pawn)
                 } else {
                     board.piecetype_at(mv.to())
-                    // match mv.kind() {
-                    //     MoveType::Capture => board.piecetype_at(mv.to()),
-                    //     MoveType::EnPassant => Some(PieceType::Pawn),
-                    //     _ => None,
-                    // }
                 }
             } else {
                 None
@@ -410,7 +423,7 @@ impl Engine {
                 #[cfg(feature = "search-stats")]
                 let nodes_before = context.stats.total_nodes();
 
-                let verification_score = self.negamax(
+                let verification_score = self.negamax::<NonPV>(
                     board,
                     context,
                     verification_depth,
@@ -455,14 +468,15 @@ impl Engine {
 
             // pruning section
 
-            let can_reduce = (is_quiet || is_capture)
+            let can_reduce = !NODE::ROOT
+                && (is_quiet || is_capture)
                 && !in_check
                 && Some(*mv) != tt_best_move
                 && extension == 0
                 && options.excluded_move.is_none();
 
             let can_prune =
-                can_reduce && is_quiet && !gives_check && !is_pv && alpha.abs() < MATE_THRESHOLD;
+                !NODE::PV && can_reduce && is_quiet && !gives_check && alpha.abs() < MATE_THRESHOLD;
 
             let can_lmp = can_prune
                 && self.config.search.lmp.enabled
@@ -517,7 +531,7 @@ impl Engine {
                         is_quiet,
                         is_capture,
                         is_improving_2_plies,
-                        is_pv,
+                        NODE::PV,
                         history_score,
                         captured_piece,
                         gives_check,
@@ -533,7 +547,7 @@ impl Engine {
                         is_quiet,
                         is_capture,
                         is_improving_2_plies,
-                        is_pv,
+                        NODE::PV,
                         history_score,
                         captured_piece,
                         gives_check,
@@ -548,8 +562,8 @@ impl Engine {
 
             let mut eval: i32;
 
-            if searched_moves == 0 {
-                eval = -self.negamax(
+            if searched_moves == 0 && NODE::PV {
+                eval = -self.negamax::<PV>(
                     board,
                     context,
                     full_child_depth,
@@ -594,7 +608,7 @@ impl Engine {
 
                 // null window search reduced depth
                 track_stat!(context.stats.pvs_stats.null_window_searches += 1);
-                eval = -self.negamax(
+                eval = -self.negamax::<NonPV>(
                     board,
                     context,
                     reduced_child_depth,
@@ -657,7 +671,7 @@ impl Engine {
                                         context.stats.lmr_stats.dynamic_searches_at_modified_depth += 1;
                                 }
                             }
-                            eval = -self.negamax(
+                            eval = -self.negamax::<NonPV>(
                                 board,
                                 context,
                                 research_depth,
@@ -685,7 +699,7 @@ impl Engine {
                         }
                     }
 
-                    if eval > alpha && eval < beta {
+                    if NODE::PV && eval > alpha && eval < beta {
                         // this move might improve alpha, research it at full depth
                         // full window search, full depth
                         track_stat! {
@@ -697,7 +711,7 @@ impl Engine {
                                 }
                             }
                         }
-                        eval = -self.negamax(
+                        eval = -self.negamax::<PV>(
                             board,
                             context,
                             research_depth,
@@ -735,6 +749,10 @@ impl Engine {
             if eval > max_eval {
                 max_eval = eval;
                 best_move = Some(*mv);
+
+                if NODE::ROOT {
+                    context.root_best_move = best_move;
+                }
             }
 
             if alpha < eval {
@@ -963,7 +981,7 @@ impl Engine {
             let adjusted_depth = u8::try_from(depth).unwrap_or(u8::MAX);
             let _insert_result = self.tt.insert(
                 board.board_hash,
-                is_pv,
+                NODE::PV,
                 flag,
                 adjusted_depth,
                 score_to_tt(max_eval, ply),
@@ -1004,7 +1022,7 @@ mod tests {
             let mut context =
                 SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
 
-            let score = engine.negamax(
+            let score = engine.negamax::<PV>(
                 &mut board,
                 &mut context,
                 1,
@@ -1027,7 +1045,7 @@ mod tests {
         let only_legal_move = Move::new(H8, square(6, 6), MoveType::Capture, None);
         let alpha = -100;
 
-        let score = engine.negamax(
+        let score = engine.negamax::<NonPV>(
             &mut board,
             &mut context,
             1,
@@ -1073,7 +1091,7 @@ mod tests {
             );
         }
         let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
-        engine.negamax(
+        engine.negamax::<PV>(
             &mut board,
             &mut context,
             1,
@@ -1137,7 +1155,7 @@ mod tests {
         );
         let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
 
-        let score = engine.negamax(
+        let score = engine.negamax::<PV>(
             &mut board,
             &mut context,
             1,
@@ -1169,7 +1187,7 @@ mod tests {
             Some(only_legal_move),
         );
         let mut context = SearchContext::new(SearchLimits::depth(258, 1), vec![board.board_hash()]);
-        let score = engine.negamax(
+        let score = engine.negamax::<PV>(
             &mut board,
             &mut context,
             258,
@@ -1206,7 +1224,7 @@ mod tests {
         );
         let mut context = SearchContext::new(SearchLimits::depth(256, 1), vec![board.board_hash()]);
 
-        let score = engine.negamax(
+        let score = engine.negamax::<PV>(
             &mut board,
             &mut context,
             256,
@@ -1246,7 +1264,7 @@ mod tests {
         let mut context =
             SearchContext::new(SearchLimits::depth(depth, 1), vec![board.board_hash()]);
 
-        let score = engine.negamax(
+        let score = engine.negamax::<PV>(
             &mut board,
             &mut context,
             depth,
