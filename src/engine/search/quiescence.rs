@@ -1,8 +1,7 @@
 use crate::board::{Board, Move, MoveType};
 use crate::engine::SearchContext;
-use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
 use crate::engine::ordering::see;
-use crate::engine::pruning::calculate_see_threshold;
+use crate::engine::pruning::{calculate_see_threshold, delta_pruning_bound};
 use crate::engine::search::NodeType;
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search_stats::track_stat;
@@ -10,7 +9,7 @@ use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MAX_PLY, PickerFrame};
 use crate::eval::evaluation_for_turn;
 use crate::moves::MoveGenInfo;
-use crate::types::PieceType;
+use crate::types::{PieceType, Score, is_decisive, is_valid, mated_in};
 
 // const LAZY_MARGIN: i32 = 300;
 
@@ -30,11 +29,14 @@ impl Engine {
     ) -> i32 {
         if context.stopped || (context.stats.total_nodes() & 2047 == 0 && context.should_stop()) {
             track_stat!(context.stats.terminal_stats.stopped_returns += 1);
-            return 0;
+            return Score::ZERO;
         }
 
         context.stats.node_stats.quiescence += 1;
-        context.seldepth = context.seldepth.max(ply);
+
+        if NODE::PV {
+            context.seldepth = context.seldepth.max(ply);
+        }
 
         // NOTE: These will never be true in the first call to quiescence since negamax does this check first before calling if depth == 0 -> quiescence
         // this is why quiescence qtt probes always equals qnodes.
@@ -44,16 +46,16 @@ impl Engine {
             board.halfmove_clock() as usize,
         ) {
             track_stat!(context.stats.draw_stats.repetition_returns += 1);
-            return 0;
+            return Score::ZERO;
         }
         if board.halfmove_clock() >= 100 {
             track_stat!(context.stats.draw_stats.fifty_move_returns += 1);
-            return 0;
+            return Score::ZERO;
         }
 
         if board.phase() < 8 && is_insufficient_material(board) {
             track_stat!(context.stats.draw_stats.insufficient_material_returns += 1);
-            return 0;
+            return Score::ZERO;
         }
 
         if ply >= MAX_PLY - 1 {
@@ -65,6 +67,7 @@ impl Engine {
         }
 
         let in_check = board.in_check(board.side_to_move());
+
         track_stat! {
             if in_check {
                 context.stats.quiescence_stats.in_check_nodes += 1;
@@ -105,33 +108,33 @@ impl Engine {
 
             let tt_score = score_from_tt(entry.eval as i32, ply);
 
-            // if entry.depth == 0 {
-            track_stat!(context.stats.tt_stats.quiescence.usable += 1);
+            if is_valid(tt_score) {
+                track_stat!(context.stats.tt_stats.quiescence.usable += 1);
 
-            match entry.flag.bound_type() {
-                TTFlag::Exact => {
-                    track_stat!(context.stats.tt_stats.quiescence.exact_returns += 1);
+                match entry.flag.bound_type() {
+                    TTFlag::Exact => {
+                        track_stat!(context.stats.tt_stats.quiescence.exact_returns += 1);
+                        return tt_score;
+                    }
+
+                    TTFlag::LowerBound => {
+                        alpha = alpha.max(tt_score);
+                    }
+
+                    TTFlag::UpperBound => {
+                        beta = beta.min(tt_score);
+                    }
+                }
+
+                if alpha >= beta {
+                    track_stat!(context.stats.tt_stats.quiescence.bound_cutoffs += 1);
                     return tt_score;
                 }
-
-                TTFlag::LowerBound => {
-                    alpha = alpha.max(tt_score);
-                }
-
-                TTFlag::UpperBound => {
-                    beta = beta.min(tt_score);
-                }
             }
-
-            if alpha >= beta {
-                track_stat!(context.stats.tt_stats.quiescence.bound_cutoffs += 1);
-                return tt_score;
-            }
-            // }
         }
 
-        let mut best_eval = NEG_INF;
-        let mut stand_pat = NEG_INF;
+        let mut best_eval = -Score::INFINITE;
+        let mut stand_pat = -Score::INFINITE;
         let mut best_move: Option<Move> = None;
 
         let mut move_picker = if in_check {
@@ -159,12 +162,12 @@ impl Engine {
         let info = MoveGenInfo::calculate(board, side_to_move);
         let mut pending_move = move_picker.get_next(board, &info, context, &self.history);
 
-        let mut raw_static_eval = i16::MIN as i32;
+        let mut raw_static_eval = Score::NONE;
 
         if in_check {
             if pending_move.is_none() {
                 track_stat!(context.stats.terminal_stats.checkmates += 1);
-                let score = -CHECKMATE_SCORE + ply as i32;
+                let score = mated_in(ply);
                 track_stat!(context.stats.tt_stats.quiescence.stores += 1);
                 let _insert_result = self.tt.insert(
                     hash,
@@ -172,7 +175,7 @@ impl Engine {
                     TTFlag::Exact,
                     0,
                     score_to_tt(score, ply),
-                    i16::MIN,
+                    Score::NONE as i16,
                     None,
                 );
                 track_stat!(
@@ -191,7 +194,7 @@ impl Engine {
                 track_stat!(context.stats.quiescence_stats.check_ply_limit_returns += 1);
 
                 // Since this is an awkward node, do not store it in the TT.
-                let fallback = 0.clamp(alpha, beta - 1);
+                let fallback = Score::ZERO.clamp(alpha, beta - 1);
                 return fallback;
             }
         } else {
@@ -214,7 +217,7 @@ impl Engine {
                     .is_none()
                 {
                     track_stat!(context.stats.terminal_stats.stalemates += 1);
-                    let score = 0;
+                    let score = Score::ZERO;
                     track_stat!(context.stats.tt_stats.quiescence.stores += 1);
                     let _insert_result = self.tt.insert(
                         hash,
@@ -222,7 +225,7 @@ impl Engine {
                         TTFlag::Exact,
                         0,
                         score_to_tt(score, ply),
-                        i16::MIN,
+                        Score::NONE as i16,
                         None,
                     );
                     track_stat!(
@@ -313,10 +316,11 @@ impl Engine {
 
             let gives_check = board.move_gives_check(mv);
 
-            let can_prune = !in_check
+            let can_prune = !NODE::PV
+                && !in_check
                 && board.phase > 8
                 && mv.promotion().is_none()
-                && alpha.abs() < MATE_THRESHOLD
+                && !is_decisive(alpha)
                 && Some(*mv) != tt_best_move
                 && !gives_check;
 
@@ -324,7 +328,9 @@ impl Engine {
                 // delta pruning
                 if self.config.search.delta.enabled {
                     track_stat!(context.stats.q_pruning_stats.delta_attempts += 1);
-                    if stand_pat + captured_value + self.config.search.delta.margin < alpha {
+                    if delta_pruning_bound(stand_pat, captured_value, &self.config.search.delta)
+                        < alpha
+                    {
                         track_stat!(context.stats.q_pruning_stats.delta_prunes += 1);
                         continue;
                     }
@@ -365,7 +371,7 @@ impl Engine {
             if context.stopped {
                 context.repetition_history.pop();
                 board.undo_move(undo);
-                return 0;
+                return Score::ZERO;
             }
 
             track_stat! {
@@ -447,7 +453,7 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::config::POS_INF;
+
     use crate::engine::configs::EngineConfig;
     use crate::engine::search::PV;
     use crate::engine::{SearchContext, SearchLimits};
@@ -455,7 +461,7 @@ mod tests {
     #[test]
     fn staged_quiescence_detects_checkmate_and_stalemate() {
         let cases = [
-            ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", -CHECKMATE_SCORE),
+            ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", -Score::MATE),
             ("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", 0),
         ];
 
@@ -471,8 +477,8 @@ mod tests {
                 &mut board,
                 &mut context,
                 1,
-                NEG_INF + 1,
-                POS_INF - 1,
+                -Score::INFINITE,
+                Score::INFINITE,
                 0,
                 PickerFrame::ROOT,
                 0,
@@ -496,13 +502,13 @@ mod tests {
                     &mut board,
                     &mut context,
                     6,
-                    NEG_INF + 1,
-                    POS_INF - 1,
+                    -Score::INFINITE,
+                    Score::INFINITE,
                     0,
                     PickerFrame::ROOT,
                     0,
                 ),
-                -CHECKMATE_SCORE,
+                -Score::MATE,
             );
         }
 
@@ -543,7 +549,7 @@ mod tests {
             TTFlag::Exact,
             10,
             123,
-            i16::MIN,
+            Score::NONE as i16,
             None,
         );
         let mut context = SearchContext::new(SearchLimits::depth(1, 6), vec![board.board_hash()]);
@@ -552,8 +558,8 @@ mod tests {
             &mut board,
             &mut context,
             6,
-            NEG_INF + 1,
-            POS_INF - 1,
+            -Score::INFINITE,
+            Score::INFINITE,
             0,
             PickerFrame::ROOT,
             0,

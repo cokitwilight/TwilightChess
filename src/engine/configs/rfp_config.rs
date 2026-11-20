@@ -15,7 +15,7 @@ impl Default for RFPConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            max_depth: 4,
+            max_depth: 20,
             min_phase: 6,
             margin_factor: 80,
         }

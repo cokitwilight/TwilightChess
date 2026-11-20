@@ -1,5 +1,5 @@
 use crate::board::Move;
-use crate::engine::MATE_THRESHOLD;
+use crate::types::{Score, is_loss, is_valid, is_win};
 use std::num::NonZeroU8;
 
 const IS_PV: u8 = 0x80; // PV is the left most bit
@@ -27,7 +27,7 @@ pub enum TTNodeType {
 pub struct TTEntry {
     pub key: u16,
     pub eval: i16,
-    pub static_eval: i16,
+    pub static_eval: i16, // Raw evaluation, or Score::NONE as i16 when unavailable.
     pub best_move: Option<Move>,
     pub depth: u8,
     pub flag: TTPackedFlag,
@@ -115,14 +115,17 @@ impl TTPackedFlag {
 
 #[inline(always)]
 pub fn score_to_tt(score: i32, ply: usize) -> i16 {
+    if !is_valid(score) {
+        return Score::NONE as i16;
+    }
     let ply = ply as i32;
 
-    if score >= MATE_THRESHOLD {
-        // Winning mate: convert root-relative distance
+    if is_win(score) {
+        // Winning mate/tablebase: convert root-relative distance
         // into position-relative distance.
         (score + ply) as i16
-    } else if score <= -MATE_THRESHOLD {
-        // Losing mate.
+    } else if is_loss(score) {
+        // Losing mate/tablebase.
         (score - ply) as i16
     } else {
         score as i16
@@ -131,11 +134,14 @@ pub fn score_to_tt(score: i32, ply: usize) -> i16 {
 
 #[inline(always)]
 pub fn score_from_tt(score: i32, ply: usize) -> i32 {
+    if !is_valid(score) {
+        return Score::NONE;
+    }
     let ply = ply as i32;
 
-    if score >= MATE_THRESHOLD {
+    if is_win(score) {
         score - ply
-    } else if score <= -MATE_THRESHOLD {
+    } else if is_loss(score) {
         score + ply
     } else {
         score
@@ -146,7 +152,7 @@ pub fn score_from_tt(score: i32, ply: usize) -> i32 {
 mod tests {
     use super::*;
     use crate::board::MoveType;
-    use crate::engine::{CHECKMATE_SCORE, MAX_PLY};
+    use crate::engine::MAX_PLY;
     use crate::types::PieceType;
     use std::mem::size_of;
 
@@ -229,8 +235,22 @@ mod tests {
     }
 
     #[test]
+    fn missing_scores_survive_tt_conversion_at_every_ply() {
+        for ply in 0..MAX_PLY {
+            assert_eq!(score_to_tt(Score::NONE, ply), Score::NONE as i16);
+            assert_eq!(score_from_tt(Score::NONE, ply), Score::NONE);
+        }
+    }
+
+    #[test]
     fn ordinary_scores_are_independent_of_ply() {
-        for score in [-MATE_THRESHOLD + 1, -123, 0, 123, MATE_THRESHOLD - 1] {
+        for score in [
+            -Score::TB_WIN_IN_MAX + 1,
+            -123,
+            0,
+            123,
+            Score::TB_WIN_IN_MAX - 1,
+        ] {
             for ply in [0, 1, MAX_PLY - 1] {
                 assert_eq!(i32::from(score_to_tt(score, ply)), score);
                 assert_eq!(score_from_tt(score, ply), score);
@@ -241,10 +261,14 @@ mod tests {
     #[test]
     fn mate_scores_round_trip_and_adjust_to_the_probe_ply() {
         for score in [
-            -CHECKMATE_SCORE,
-            -MATE_THRESHOLD,
-            MATE_THRESHOLD,
-            CHECKMATE_SCORE,
+            -Score::MATE,
+            -Score::MATE_IN_MAX,
+            -Score::TB_WIN_IN_MAX,
+            -Score::TB_WIN,
+            Score::TB_WIN_IN_MAX,
+            Score::TB_WIN,
+            Score::MATE_IN_MAX,
+            Score::MATE,
         ] {
             for store_ply in [0, 1, MAX_PLY - 1] {
                 let stored = i32::from(score_to_tt(score, store_ply));

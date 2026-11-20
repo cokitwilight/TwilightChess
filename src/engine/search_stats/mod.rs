@@ -28,9 +28,11 @@ mod formatting;
 mod futility;
 mod histogram;
 mod history;
+mod improvement;
 mod iterative_deepening;
 mod lmp;
 mod lmr;
+mod main_see;
 mod move_ordering;
 mod moves;
 mod nodes;
@@ -56,9 +58,11 @@ pub use histogram::{
     ReductionHistogram,
 };
 pub use history::HistoryStats;
+pub use improvement::ImprovementStats;
 pub use iterative_deepening::IterativeDeepeningStats;
 pub use lmp::LmpStats;
 pub use lmr::LmrStats;
+pub use main_see::MainSeeStats;
 pub use move_ordering::MoveOrderingStats;
 pub use moves::MoveStats;
 pub use nodes::NodeStats;
@@ -95,6 +99,7 @@ pub(crate) use track_stat;
 #[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct SearchStats {
     pub node_stats: NodeStats,
+    pub improvement_stats: ImprovementStats,
     pub iterative_deepening_stats: IterativeDeepeningStats,
     pub move_stats: MoveStats,
     pub cutoff_stats: CutoffStats,
@@ -107,6 +112,7 @@ pub struct SearchStats {
     pub lmr_stats: LmrStats,
     pub rfp_stats: ReverseFutilityStats,
     pub fut_stats: FutilityStats,
+    pub main_see_stats: MainSeeStats,
     pub null_move_stats: NullMoveStats,
     pub q_pruning_stats: QuiescencePruningStats,
     pub quiescence_stats: QuiescenceStats,
@@ -134,6 +140,7 @@ impl SearchStats {
         report_header(title);
 
         self.print_nodes(elapsed_secs);
+        self.improvement_stats.print();
         self.print_iterative_deepening();
         self.print_moves();
         self.print_cutoffs();
@@ -199,6 +206,7 @@ impl SearchStats {
             && !self.fut_stats.has_data()
             && !self.lmp_stats.has_data()
             && !self.null_move_stats.has_data()
+            && !self.main_see_stats.has_data()
         {
             return;
         }
@@ -208,6 +216,7 @@ impl SearchStats {
         self.lmp_stats.print();
         self.fut_stats.print();
         self.null_move_stats.print();
+        self.main_see_stats.print();
     }
 
     pub fn print_q_pruning(&self) {
@@ -248,6 +257,7 @@ impl Sub for SearchStats {
     fn sub(self, rhs: Self) -> Self {
         Self {
             node_stats: self.node_stats - rhs.node_stats,
+            improvement_stats: self.improvement_stats - rhs.improvement_stats,
             iterative_deepening_stats: self.iterative_deepening_stats
                 - rhs.iterative_deepening_stats,
             move_stats: self.move_stats - rhs.move_stats,
@@ -261,6 +271,7 @@ impl Sub for SearchStats {
             lmr_stats: self.lmr_stats - rhs.lmr_stats,
             rfp_stats: self.rfp_stats - rhs.rfp_stats,
             fut_stats: self.fut_stats - rhs.fut_stats,
+            main_see_stats: self.main_see_stats - rhs.main_see_stats,
             null_move_stats: self.null_move_stats - rhs.null_move_stats,
             q_pruning_stats: self.q_pruning_stats - rhs.q_pruning_stats,
             quiescence_stats: self.quiescence_stats - rhs.quiescence_stats,
@@ -275,6 +286,7 @@ impl Sub for SearchStats {
 impl AddAssign for SearchStats {
     fn add_assign(&mut self, rhs: Self) {
         self.node_stats += rhs.node_stats;
+        self.improvement_stats += rhs.improvement_stats;
         self.iterative_deepening_stats += rhs.iterative_deepening_stats;
         self.move_stats += rhs.move_stats;
         self.cutoff_stats += rhs.cutoff_stats;
@@ -287,6 +299,7 @@ impl AddAssign for SearchStats {
         self.lmr_stats += rhs.lmr_stats;
         self.rfp_stats += rhs.rfp_stats;
         self.fut_stats += rhs.fut_stats;
+        self.main_see_stats += rhs.main_see_stats;
         self.null_move_stats += rhs.null_move_stats;
         self.q_pruning_stats += rhs.q_pruning_stats;
         self.quiescence_stats += rhs.quiescence_stats;
@@ -491,6 +504,11 @@ mod tests {
         let stats = result.stats;
 
         assert!(stats.total_nodes() > 0);
+        assert!(stats.node_stats.cut > 0);
+        assert!(stats.node_stats.cut <= stats.node_stats.non_pv);
+        assert!(stats.improvement_stats.improving > 0);
+        assert!(stats.improvement_stats.non_improving > 0);
+        assert!(stats.improvement_stats.samples() <= stats.node_stats.main);
         assert_eq!(
             stats.iterative_deepening_stats.nodes_by_depth.total(),
             stats.total_nodes()

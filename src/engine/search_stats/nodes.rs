@@ -7,6 +7,8 @@ pub struct NodeStats {
     pub quiescence: u64,
     pub pv: u64,
     pub non_pv: u64,
+    /// Negamax calls entered with the expected cut-node flag set.
+    pub cut: u64,
     pub in_check: u64,
     pub root: u64,
 }
@@ -27,9 +29,10 @@ impl NodeStats {
         super::formatting::metric("Nodes per second", nps(total, elapsed_secs));
         metric_count("PV", self.pv);
         metric_count("Non-PV", self.non_pv);
+        metric_count("Cut nodes", self.cut);
         metric_count("In check", self.in_check);
         metric_count("Root", self.root);
     }
 }
 
-impl_counter_stats_ops!(NodeStats, main, quiescence, pv, non_pv, in_check, root);
+impl_counter_stats_ops!(NodeStats, main, quiescence, pv, non_pv, cut, in_check, root);

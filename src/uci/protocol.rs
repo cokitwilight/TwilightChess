@@ -2,10 +2,8 @@ use std::io::{self, BufRead, BufWriter, Write};
 
 use crate::board::{Board, STARTPOS_FEN};
 use crate::engine::configs::EngineConfig;
-use crate::engine::{
-    CHECKMATE_SCORE, Engine, MATE_THRESHOLD, MAX_PLY, SearchContext, SearchLimits, SearchResult,
-};
-use crate::types::Color;
+use crate::engine::{Engine, MAX_PLY, SearchContext, SearchLimits, SearchResult};
+use crate::types::{Color, Score, is_mate};
 use crate::uci::parse_uci_move;
 
 const ENGINE_NAME: &str = "Twilight Chess";
@@ -404,11 +402,11 @@ pub(crate) fn write_search_info<W: Write>(output: &mut W, result: &SearchResult)
 }
 
 fn format_uci_score(score: i32) -> String {
-    if score.abs() < MATE_THRESHOLD {
+    if !is_mate(score) {
         return format!("cp {score}");
     }
 
-    let plies = (CHECKMATE_SCORE - score.abs()).max(0);
+    let plies = (Score::MATE - score.abs()).max(0);
     let moves = (plies + 1) / 2;
 
     if moves == 0 {
@@ -551,9 +549,9 @@ mod tests {
 
     #[test]
     fn mate_scores_use_uci_mate_notation() {
-        assert_eq!(format_uci_score(CHECKMATE_SCORE - 1), "mate 1");
-        assert_eq!(format_uci_score(-CHECKMATE_SCORE + 2), "mate -1");
-        assert_eq!(format_uci_score(-CHECKMATE_SCORE), "mate 0");
+        assert_eq!(format_uci_score(Score::MATE - 1), "mate 1");
+        assert_eq!(format_uci_score(-Score::MATE + 2), "mate -1");
+        assert_eq!(format_uci_score(-Score::MATE), "mate 0");
         assert_eq!(format_uci_score(42), "cp 42");
     }
 }
