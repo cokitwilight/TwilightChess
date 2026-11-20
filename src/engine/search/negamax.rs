@@ -2,9 +2,9 @@ use crate::board::{Board, Move, MoveType};
 use crate::engine::history::HistoryKey;
 use crate::engine::ordering::see;
 use crate::engine::pruning::{
-    calculate_eval_improvement, calculate_fut_margin, calculate_lmr_research_depth,
-    calculate_nmp_margin, calculate_see_threshold, lmp_history_limit, lmp_threshold,
-    null_move_reduction, rfp_margin, singular_margin, singular_verification_depth,
+    calculate_fut_margin, calculate_lmr_research_depth, calculate_nmp_margin,
+    calculate_see_threshold, lmp_history_limit, lmp_threshold, null_move_reduction, rfp_margin,
+    singular_margin, singular_verification_depth,
 };
 use crate::engine::search::is_insufficient_material;
 use crate::engine::search::iterative::{MAX_CAPTURES, MAX_QUIETS};
@@ -207,11 +207,73 @@ impl Engine {
 
         let corrected_static_eval = raw_static_eval + correction;
 
-        let improvement =
-            calculate_eval_improvement(raw_static_eval, &context.stack, ply, in_check);
+        // let prev_eval_1 = if ply >= 1 && !in_check {
+        //     context.stack[ply - 1].static_eval
+        // } else {
+        //     Score::NONE
+        // };
+
+        let prev_eval_2 = if ply >= 2 && !in_check {
+            context.stack[ply - 2].static_eval
+        } else {
+            Score::NONE
+        };
+
+        let prev_eval_4 = if ply >= 4 && !in_check {
+            context.stack[ply - 4].static_eval
+        } else {
+            Score::NONE
+        };
+
+        let improving_strong = is_valid(prev_eval_2)
+            && is_valid(prev_eval_4)
+            && raw_static_eval > prev_eval_2
+            && prev_eval_2 > prev_eval_4;
+
+        let improving_weak = is_valid(prev_eval_2) && raw_static_eval > prev_eval_2;
+
+        let improvement = if improving_strong {
+            raw_static_eval - prev_eval_4
+        } else if improving_weak {
+            raw_static_eval - prev_eval_2
+        } else {
+            0
+        };
+
+        // let improvement_delta = if is_valid(prev_eval_1) {
+        //     raw_static_eval + prev_eval_1
+        // } else {
+        //     0
+        // };
+
+        // let improvement =
+        //     calculate_eval_improvement(raw_static_eval, &context.stack, ply, in_check);
 
         let is_improving_2_plies = improvement > 0;
-        track_stat!(context.stats.improvement_stats.record(improvement));
+        track_stat! {
+            let stats = &mut context.stats.improvement_stats;
+            stats.record(improvement);
+            stats.ply_below_1 += u64::from(ply < 1);
+            stats.ply_below_2 += u64::from(ply < 2);
+            stats.ply_below_4 += u64::from(ply < 4);
+            // Strong also satisfies the weak flag; count disjoint groups.
+            if improving_strong {
+                stats.strong.record(improvement);
+            } else if improving_weak {
+                stats.weak.record(improvement);
+            }
+            // Count invalid stored values only when the ancestor exists.
+            // Shallow nodes and in-check suppression are not invalid entries.
+            if ply >= 1 && !is_valid(context.stack[ply - 1].static_eval) {
+                stats.invalid_previous_ply_eval += 1;
+            }
+            if ply >= 2 && !is_valid(context.stack[ply - 2].static_eval) {
+                stats.invalid_previous_2_ply_eval += 1;
+            }
+            if ply >= 4 && !is_valid(context.stack[ply - 4].static_eval) {
+                stats.invalid_previous_4_ply_eval += 1;
+            }
+        }
 
         let can_rfp = !NODE::PV
             && !in_check
@@ -1256,14 +1318,85 @@ mod tests {
             let stats = context.stats.improvement_stats;
             #[cfg(feature = "search-stats")]
             {
+                // The experimental implementation clamps non-improving deltas to zero.
+                let improvement = improvement.max(0);
                 assert_eq!(stats.improving, u64::from(improvement > 0));
                 assert_eq!(stats.non_improving, u64::from(improvement <= 0));
                 assert_eq!(stats.average_improvement(), Some(f64::from(improvement)));
                 assert_eq!(stats.highest_improvement, Some(improvement.unsigned_abs()));
                 assert_eq!(stats.lowest_improvement, Some(improvement));
+                assert_eq!(stats.weak.nodes, u64::from(improvement > 0));
+                assert_eq!(stats.strong.nodes, 0);
+                assert_eq!(
+                    (stats.ply_below_1, stats.ply_below_2, stats.ply_below_4),
+                    (0, 0, 1)
+                );
             }
             #[cfg(not(feature = "search-stats"))]
             assert_eq!(stats.samples(), 0);
+        }
+    }
+
+    #[test]
+    fn experimental_improvement_uses_same_side_ancestors_and_counts_invalid_evals() {
+        // Offsets are relative to the current evaluation. Strong requires
+        // eval(now) > eval(ply-2) > eval(ply-4); equal evaluations are not improving.
+        for (prev_2, prev_4, strong, weak, delta) in [
+            (Some(-20), Some(-60), true, false, 60),
+            (Some(-20), Some(-10), false, true, 20),
+            (Some(-20), None, false, true, 20),
+            (Some(0), Some(-60), false, false, 0),
+            (Some(20), Some(-60), false, false, 0),
+            (None, Some(-60), false, false, 0),
+        ] {
+            let mut engine = test_engine();
+            let mut board = Board::from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1").unwrap();
+            let eval = evaluation_for_turn(&board);
+            let mut context =
+                SearchContext::new(SearchLimits::depth(1, 0), vec![board.board_hash()]);
+            context.stack[2].static_eval = prev_2.map_or(Score::NONE, |offset| eval + offset);
+            context.stack[0].static_eval = prev_4.map_or(Score::NONE, |offset| eval + offset);
+            // The immediate parent's unavailable eval must never be used as ply-4.
+            context.stack[3].static_eval = Score::NONE;
+            engine.negamax::<NonPV>(
+                &mut board,
+                &mut context,
+                1,
+                -1,
+                0,
+                false,
+                4,
+                PickerFrame::ROOT,
+                SearchOptions::NORMAL,
+            );
+            let stats = context.stats.improvement_stats;
+            #[cfg(feature = "search-stats")]
+            {
+                assert_eq!(stats.samples(), 1);
+                assert_eq!(stats.strong.nodes, u64::from(strong));
+                assert_eq!(stats.weak.nodes, u64::from(weak));
+                assert_eq!(stats.improvement_sum, delta);
+                assert_eq!(stats.invalid_previous_ply_eval, 1);
+                assert_eq!(
+                    stats.invalid_previous_2_ply_eval,
+                    u64::from(prev_2.is_none())
+                );
+                assert_eq!(
+                    stats.invalid_previous_4_ply_eval,
+                    u64::from(prev_4.is_none())
+                );
+                assert_eq!(
+                    stats.not_reached_percentage(context.stats.node_stats.main),
+                    0.0
+                );
+            }
+            #[cfg(not(feature = "search-stats"))]
+            {
+                let _ = (strong, weak, delta);
+                assert_eq!(stats.samples(), 0);
+                assert_eq!(stats.strong.nodes + stats.weak.nodes, 0);
+                assert_eq!(stats.invalid_previous_ply_eval, 0);
+            }
         }
     }
 
@@ -1293,6 +1426,12 @@ mod tests {
             );
 
             assert_eq!(score, expected, "wrong terminal score for {fen}");
+            let stats = context.stats.improvement_stats;
+            let recorded = u64::from(cfg!(feature = "search-stats"));
+            assert_eq!(
+                (stats.ply_below_1, stats.ply_below_2, stats.ply_below_4),
+                (recorded, recorded, recorded)
+            );
         }
     }
 

@@ -58,7 +58,7 @@ pub use histogram::{
     ReductionHistogram,
 };
 pub use history::HistoryStats;
-pub use improvement::ImprovementStats;
+pub use improvement::{ImprovementGroupStats, ImprovementStats};
 pub use iterative_deepening::IterativeDeepeningStats;
 pub use lmp::LmpStats;
 pub use lmr::LmrStats;
@@ -140,7 +140,7 @@ impl SearchStats {
         report_header(title);
 
         self.print_nodes(elapsed_secs);
-        self.improvement_stats.print();
+        self.improvement_stats.print(self.node_stats.main);
         self.print_iterative_deepening();
         self.print_moves();
         self.print_cutoffs();
@@ -509,6 +509,19 @@ mod tests {
         assert!(stats.improvement_stats.improving > 0);
         assert!(stats.improvement_stats.non_improving > 0);
         assert!(stats.improvement_stats.samples() <= stats.node_stats.main);
+        assert_eq!(
+            stats.improvement_stats.strong.nodes + stats.improvement_stats.weak.nodes,
+            stats.improvement_stats.improving
+        );
+        assert!(
+            stats
+                .improvement_stats
+                .not_reached_nodes(stats.node_stats.main)
+                > 0
+        );
+        assert!(
+            stats.improvement_stats.invalid_previous_ply_eval <= stats.improvement_stats.samples()
+        );
         assert_eq!(
             stats.iterative_deepening_stats.nodes_by_depth.total(),
             stats.total_nodes()

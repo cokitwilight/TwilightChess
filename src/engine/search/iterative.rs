@@ -387,6 +387,10 @@ mod tests {
             let mut context = SearchContext::new(limits, vec![board.board_hash()]);
             context.stats.improvement_stats.record(-1_000_000);
             context.stats.improvement_stats.record(1_000_000);
+            context.stats.improvement_stats.strong.record(1_000_000);
+            context.stats.improvement_stats.record(500_000);
+            context.stats.improvement_stats.weak.record(500_000);
+            context.stats.improvement_stats.invalid_previous_ply_eval = 10;
 
             let result = Engine::new(config).search(&board, &mut context, false, false);
             let stats = result.stats.improvement_stats;
@@ -394,6 +398,18 @@ mod tests {
             assert_eq!(stats.highest_improvement, Some(1_000_000));
             assert_eq!(stats.lowest_improvement, Some(-1_000_000));
             assert_eq!(stats.samples(), context.stats.improvement_stats.samples());
+            assert_eq!(stats.strong.max_improvement, Some(1_000_000));
+            assert_eq!(stats.weak.max_improvement, Some(500_000));
+            assert_eq!(
+                stats.strong.nodes,
+                context.stats.improvement_stats.strong.nodes
+            );
+            assert_eq!(stats.weak.nodes, context.stats.improvement_stats.weak.nodes);
+            assert_eq!(
+                stats.invalid_previous_ply_eval,
+                context.stats.improvement_stats.invalid_previous_ply_eval
+            );
+            assert!(stats.invalid_previous_ply_eval >= 10);
             if max_nodes.is_some() {
                 assert_eq!(result.termination, SearchTermination::NodeLimit);
             } else {
