@@ -6,6 +6,7 @@ use crate::engine::search_stats::formatting::{
 use crate::engine::search_stats::{MOVE_INDEX_BUCKETS, MoveIndexHistogram};
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct MoveOrderingStats {
     pub tt_move_cutoffs: u64,
     pub winning_capture_cutoffs: u64,

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::engine::Engine;
+use crate::engine::{Engine, SearchContext};
 use crate::game::{Game, GameState};
 use crate::opening::OpeningLine;
 use crate::tournament::results::GameResult::{Black, Draw, White};
@@ -33,8 +33,8 @@ pub fn run_game(
     };
 
     // NOTE: This might be expensive as it allocates an entire new engine(with tt for example)
-    let mut white = Engine::new(w_config.clone());
-    let mut black = Engine::new(b_config.clone());
+    let mut white = Engine::new(w_config);
+    let mut black = Engine::new(b_config);
 
     let mut w_count = 0;
     let mut b_count = 0;
@@ -57,22 +57,12 @@ pub fn run_game(
             return Err("Likely Infinite Loop in Run Game".to_string());
         }
 
-        let search_result = match game.board.side_to_move() {
-            Color::White => white.search(
-                &game.board,
-                w_config.limits,
-                &game.repetition_history,
-                false,
-                false,
-            ),
-            Color::Black => black.search(
-                &game.board,
-                b_config.limits,
-                &game.repetition_history,
-                false,
-                false,
-            ),
+        let (engine, limits) = match game.board.side_to_move() {
+            Color::White => (&mut white, w_config.limits),
+            Color::Black => (&mut black, b_config.limits),
         };
+        let mut context = SearchContext::new(limits, game.repetition_history.clone());
+        let search_result = engine.search(&game.board, &mut context, false, false);
 
         let best_move = search_result
             .best_move
@@ -191,7 +181,7 @@ mod tests {
         game_record
             .white_stats
             .print_all(1, game_record.white_time_elapsed.as_secs_f64());
-        println!("");
+        println!();
         println!(
             "Total Time as White: {:.3} seconds",
             game_record.white_time_elapsed.as_secs_f64()
@@ -201,14 +191,14 @@ mod tests {
             game_record.white_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!("Black Bot -- {}", players.black.name);
         game_record
             .black_stats
             .print_all(1, game_record.black_time_elapsed.as_secs_f64());
 
-        println!("");
+        println!();
 
         println!(
             "Total Time as Black: {:.3} seconds",
@@ -219,14 +209,14 @@ mod tests {
             game_record.black_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!(
             "Total engine search time: {:.3} seconds",
             game_record.total_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         let metadata = PgnMetadata {
             event: "Engine Test".to_string(),
@@ -282,7 +272,7 @@ mod tests {
         game_record
             .white_stats
             .print_all(1, game_record.white_time_elapsed.as_secs_f64());
-        println!("");
+        println!();
         println!(
             "Total Time as White: {:.3} seconds",
             game_record.white_time_elapsed.as_secs_f64()
@@ -292,14 +282,14 @@ mod tests {
             game_record.white_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!("Black Bot -- {}", players.black.name);
         game_record
             .black_stats
             .print_all(1, game_record.black_time_elapsed.as_secs_f64());
 
-        println!("");
+        println!();
 
         println!(
             "Total Time as Black: {:.3} seconds",
@@ -310,14 +300,14 @@ mod tests {
             game_record.black_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!(
             "Total engine search time: {:.3} seconds",
             game_record.total_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         let metadata = PgnMetadata {
             event: "Engine Test".to_string(),
@@ -332,7 +322,7 @@ mod tests {
 
         println!("{pgn_text}");
 
-        println!("");
+        println!();
 
         println!(
             "Result: {:?}\n",
@@ -373,7 +363,7 @@ mod tests {
         game_record
             .white_stats
             .print_all(1, game_record.white_time_elapsed.as_secs_f64());
-        println!("");
+        println!();
         println!(
             "Total Time as White: {:.3} seconds",
             game_record.white_time_elapsed.as_secs_f64()
@@ -383,14 +373,14 @@ mod tests {
             game_record.white_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!("Black Bot -- {}", players.black.name);
         game_record
             .black_stats
             .print_all(1, game_record.black_time_elapsed.as_secs_f64());
 
-        println!("");
+        println!();
 
         println!(
             "Total Time as Black: {:.3} seconds",
@@ -401,14 +391,14 @@ mod tests {
             game_record.black_avg_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         println!(
             "Total engine search time: {:.3} seconds",
             game_record.total_time.as_secs_f64()
         );
 
-        println!("");
+        println!();
 
         let metadata = PgnMetadata {
             event: "Engine Test".to_string(),

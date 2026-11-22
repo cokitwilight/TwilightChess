@@ -2,6 +2,8 @@ use crate::engine::SearchLimits;
 use crate::engine::configs::SearchConfig;
 
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "debug-uci", serde(deny_unknown_fields))]
 pub struct EngineConfig {
     pub search: SearchConfig,
     pub limits: SearchLimits,

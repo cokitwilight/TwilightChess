@@ -1,4 +1,5 @@
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct QuiescenceStats {
     pub normal_nodes: u64,
     pub in_check_nodes: u64,

@@ -1,6 +1,6 @@
 use chess_final::board::{Board, STARTPOS_FEN};
 use chess_final::engine::configs::EngineConfig;
-use chess_final::engine::{Engine, SearchLimits};
+use chess_final::engine::{Engine, SearchContext, SearchLimits};
 
 fn main() {
     let board = Board::from_fen(STARTPOS_FEN).expect("valid FEN");
@@ -10,12 +10,11 @@ fn main() {
     config.limits = SearchLimits::depth_and_time(64, 20, 10_000);
 
     let mut engine = Engine::new(config);
-    let history = vec![board.board_hash()];
+    let mut context = SearchContext::new(config.limits, vec![board.board_hash()]);
 
     let result = engine.search(
         &board,
-        config.limits,
-        &history,
+        &mut context,
         false, // Disable the opening book.
         false, // Disable search printing.
     );

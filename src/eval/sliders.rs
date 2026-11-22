@@ -58,6 +58,7 @@ pub fn sliders_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> (i32, i
 
 pub(super) fn bishop_pair_bonus(board: &Board, color: Color) -> (i32, i32) {
     let bishops = board.pieces(color, PieceType::Bishop).count_ones();
+<<<<<<< HEAD
     let mut mg = 0;
     let mut eg = mg;
     if bishops >= 2 {
@@ -65,6 +66,9 @@ pub(super) fn bishop_pair_bonus(board: &Board, color: Color) -> (i32, i32) {
         eg += 30;
     }
     (mg, eg)
+=======
+    if bishops >= 2 { 30 } else { 0 }
+>>>>>>> origin/main
 }
 
 pub(super) fn bishop_blocked_by_pawns_bonus(

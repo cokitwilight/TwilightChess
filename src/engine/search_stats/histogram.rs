@@ -13,6 +13,13 @@ pub struct Histogram<const N: usize> {
     pub bins: [u64; N],
 }
 
+#[cfg(feature = "debug-uci")]
+impl<const N: usize> serde::Serialize for Histogram<N> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serde::Serialize::serialize(self.bins.as_slice(), serializer)
+    }
+}
+
 impl<const N: usize> Histogram<N> {
     pub fn saturating_sub(self, rhs: Self) -> Self {
         self - rhs
@@ -66,7 +73,7 @@ mod tests {
 
     #[test]
     fn reduction_histogram_keeps_large_reductions_separate() {
-        assert!(REDUCTION_BUCKETS > 16);
+        const { assert!(REDUCTION_BUCKETS > 16) };
 
         let mut histogram = ReductionHistogram::default();
         histogram.bins[8] = 2;

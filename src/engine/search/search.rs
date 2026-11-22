@@ -1,24 +1,21 @@
 use crate::board::Board;
-use crate::engine::{Engine, MAX_PV, SearchContext, SearchLimits, SearchResult, SearchTermination};
+use crate::engine::{Engine, MAX_PV, SearchContext, SearchResult, SearchTermination};
 use crate::eval::eval::{BLACK_SQUARES, WHITE_SQUARES};
 use crate::types::{Color, PieceType};
 
 impl Engine {
+    /// Search a position using a fresh context containing its limits and repetition history.
+    /// Debug callers attach cancellation and finder state to the same context before calling.
     pub fn search(
         &mut self,
         board: &Board,
-        limits: SearchLimits,
-        repetition_history: &Vec<u64>,
+        context: &mut SearchContext,
         opening_allowed: bool,
         can_print: bool,
     ) -> SearchResult {
-        // CHECK IF CLONING HERE IS OK FOR REPETITION HISTORY, OR IF WE SHOULD PASS A REFERENCE
-        let mut context = SearchContext::new(limits, repetition_history.clone());
         let mut board = board.clone();
 
         if opening_allowed && let Some(book_mv) = self.get_book_move(&board) {
-            // let piece = board.piece_at(book_mv.from).unwrap();
-
             if can_print {
                 println!("Book Move. {}", book_mv);
             }
@@ -32,19 +29,15 @@ impl Engine {
                 pv: [None; MAX_PV],
                 elapsed: context.elapsed(),
                 termination: SearchTermination::BookMove,
+                #[cfg(feature = "debug-uci")]
+                iterations: Vec::new(),
             };
         }
-
-        // iterative deepening here
-
-        // let adjusted_depth = adjusted_depth_for_phase(context.limits.max_depth, board.phase());
-
-        // context.limits.max_depth = adjusted_depth;
 
         // IMPORTANT: increments generation for the transposition table
         self.tt.new_search();
 
-        self.iterative_deepening(&mut board, &mut context, can_print)
+        self.iterative_deepening(&mut board, context, can_print)
     }
 }
 
@@ -79,8 +72,8 @@ pub fn is_insufficient_material(board: &Board) -> bool {
     let w_bishops = board.pieces(Color::White, PieceType::Bishop);
     let b_bishops = board.pieces(Color::Black, PieceType::Bishop);
 
-    let knights = w_knights & b_knights;
-    let bishops = w_bishops & b_bishops;
+    let knights = w_knights | b_knights;
+    let bishops = w_bishops | b_bishops;
 
     let knight_count = knights.count_ones();
     let bishop_count = bishops.count_ones();

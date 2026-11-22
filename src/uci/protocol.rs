@@ -2,7 +2,9 @@ use std::io::{self, BufRead, BufWriter, Write};
 
 use crate::board::{Board, STARTPOS_FEN};
 use crate::engine::configs::EngineConfig;
-use crate::engine::{CHECKMATE_SCORE, Engine, MATE_THRESHOLD, MAX_PLY, SearchLimits, SearchResult};
+use crate::engine::{
+    CHECKMATE_SCORE, Engine, MATE_THRESHOLD, MAX_PLY, SearchContext, SearchLimits, SearchResult,
+};
 use crate::types::Color;
 use crate::uci::parse_uci_move;
 
@@ -195,24 +197,11 @@ impl UciSession {
             })
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
 
-        let mut output_error = None;
-        let result = self.engine.search_without_stats_with_progress(
-            &self.position.board,
-            limits,
-            &self.position.repetition_history,
-            self.own_book,
-            &mut |iteration| {
-                if output_error.is_none() {
-                    output_error = write_search_info(output, iteration)
-                        .and_then(|()| output.flush())
-                        .err();
-                }
-            },
-        );
+        let mut context = SearchContext::new(limits, self.position.repetition_history.clone());
+        let result = self
+            .engine
+            .search(&self.position.board, &mut context, self.own_book, false);
 
-        if let Some(error) = output_error {
-            return Err(error);
-        }
         write_search_info(output, &result)?;
 
         match result.best_move {
@@ -222,9 +211,9 @@ impl UciSession {
     }
 }
 
-struct UciPosition {
-    board: Board,
-    repetition_history: Vec<u64>,
+pub(crate) struct UciPosition {
+    pub(crate) board: Board,
+    pub(crate) repetition_history: Vec<u64>,
 }
 
 impl UciPosition {
@@ -242,7 +231,7 @@ impl UciPosition {
         })
     }
 
-    fn parse(arguments: &str) -> Result<Self, String> {
+    pub(crate) fn parse(arguments: &str) -> Result<Self, String> {
         let mut tokens = arguments.split_whitespace();
 
         let mut position = match tokens.next() {
@@ -280,7 +269,7 @@ impl UciPosition {
 }
 
 #[derive(Default)]
-struct GoParameters {
+pub(crate) struct GoParameters {
     wtime: Option<u64>,
     btime: Option<u64>,
     winc: Option<u64>,
@@ -292,7 +281,7 @@ struct GoParameters {
 }
 
 impl GoParameters {
-    fn parse(arguments: &str) -> Result<Self, String> {
+    pub(crate) fn parse(arguments: &str) -> Result<Self, String> {
         let mut parameters = Self::default();
         let mut tokens = arguments.split_whitespace();
 
@@ -321,7 +310,7 @@ impl GoParameters {
         Ok(parameters)
     }
 
-    fn to_limits(
+    pub(crate) fn to_limits(
         &self,
         side_to_move: Color,
         defaults: SearchLimits,
@@ -394,7 +383,7 @@ fn allocate_time(remaining_ms: u64, increment_ms: u64, moves_to_go: u64) -> u64 
         .max(1)
 }
 
-fn write_search_info<W: Write>(output: &mut W, result: &SearchResult) -> io::Result<()> {
+pub(crate) fn write_search_info<W: Write>(output: &mut W, result: &SearchResult) -> io::Result<()> {
     let nodes = result.stats.total_nodes();
     let time_ms = result.elapsed.as_millis().min(u64::MAX as u128) as u64;
     let nps = nodes.saturating_mul(1000).checked_div(time_ms).unwrap_or(0);
@@ -526,41 +515,20 @@ mod tests {
     }
 
     #[test]
-    fn completed_depths_are_reported_and_flushed_during_search() {
-        #[derive(Default)]
-        struct ProgressOutput {
-            bytes: Vec<u8>,
-            flushed_depths: Vec<u16>,
-        }
-
-        impl Write for ProgressOutput {
-            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-                self.bytes.extend_from_slice(bytes);
-                Ok(bytes.len())
-            }
-
-            fn flush(&mut self) -> io::Result<()> {
-                let text = std::str::from_utf8(&self.bytes).unwrap();
-                let fields: Vec<_> = text.lines().last().unwrap().split_whitespace().collect();
-                assert_eq!(&fields[..2], &["info", "depth"]);
-                self.flushed_depths.push(fields[2].parse().unwrap());
-                Ok(())
-            }
-        }
-
+    fn regular_search_reports_only_the_final_depth() {
         let mut session = UciSession::new(test_config());
-        let mut output = ProgressOutput::default();
+        let mut output = Vec::new();
         session.go("depth 3", &mut output).unwrap();
 
-        assert_eq!(output.flushed_depths, vec![1, 2, 3]);
-        let text = String::from_utf8(output.bytes).unwrap();
-        for line in text.lines().filter(|line| line.starts_with("info depth ")) {
-            let fields: Vec<_> = line.split_whitespace().collect();
-            let depth: usize = fields[2].parse().unwrap();
-            assert_eq!(fields[3], "seldepth");
-            let seldepth: usize = fields[4].parse().unwrap();
-            assert!(seldepth >= depth, "{line}");
-        }
+        let text = String::from_utf8(output).unwrap();
+        let info: Vec<_> = text
+            .lines()
+            .filter(|line| line.starts_with("info depth "))
+            .collect();
+        assert_eq!(info.len(), 1, "{text}");
+        let fields: Vec<_> = info[0].split_whitespace().collect();
+        assert_eq!(&fields[..4], &["info", "depth", "3", "seldepth"]);
+        assert!(fields[4].parse::<usize>().unwrap() >= 3, "{text}");
         assert!(text.lines().last().unwrap().starts_with("bestmove "));
     }
 

@@ -1,3 +1,7 @@
 /target
 **/*.rs.bk
 .vscode/
+profile.json.gz
+
+/.codex/
+suites/

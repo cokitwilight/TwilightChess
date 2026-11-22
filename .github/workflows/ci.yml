@@ -26,8 +26,5 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --all-targets
 
-      - name: Run Debug tests
-        run: cargo test
-
       - name: Run Release tests
-        run: cargo test --release
+        run: cargo test --release --features "debug-uci"

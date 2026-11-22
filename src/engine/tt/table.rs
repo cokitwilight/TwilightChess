@@ -69,7 +69,6 @@ impl TranspositionTable {
             .iter()
             .flatten()
             .find(|entry| entry.key == entry_key)
-            .map(|entry| entry)
     }
 
     #[inline(always)]
@@ -106,7 +105,7 @@ impl TranspositionTable {
             }
 
             // Depths = 0 is quiescence search
-            let replaced = entry_value(&new_entry) >= entry_value(&old_entry);
+            let replaced = entry_value(&new_entry) >= entry_value(old_entry);
             if replaced {
                 *old_entry = new_entry;
             } else {
@@ -212,7 +211,7 @@ fn replacement_value(entry: &TTEntry, current_generation: u8) -> i32 {
         current_generation as i32 - entry.flag.generation() as i32
     };
 
-    entry_value(&entry) - age * AGE_PENALTY
+    entry_value(entry) - age * AGE_PENALTY
 }
 
 #[cfg(test)]

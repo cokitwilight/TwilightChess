@@ -19,6 +19,12 @@ pub enum MoveError {
     IllegalMove(Move),
 }
 
+impl Default for Game {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Game {
     pub fn new() -> Self {
         let board = Board::from_fen(STARTPOS_FEN).unwrap();

@@ -3,6 +3,7 @@ use crate::engine::search_stats::formatting::{
 };
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct QuiescencePruningStats {
     pub delta_attempts: u64,
     pub delta_prunes: u64,

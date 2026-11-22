@@ -1,6 +1,7 @@
 use crate::engine::search_stats::formatting::{metric_count, nps, section};
 
 #[derive(Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct NodeStats {
     pub main: u64,
     pub quiescence: u64,
