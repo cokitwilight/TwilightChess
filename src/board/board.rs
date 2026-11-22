@@ -35,6 +35,7 @@ pub struct Board {
     // pub non_pawn_hash: u64,
     pub material: i32,
 
+    /// Uncapped material phase. Use phase() for evaluation and search thresholds.
     pub phase: i32,
 
     pub mg_pst: i32,
@@ -61,7 +62,7 @@ impl Board {
             board_hash: 0,
             pawn_hash: 0,
             material: 0, // in centi pawns
-            phase: 24,   // 24 is the default
+            phase: 0,
             mg_pst: 0,
             eg_pst: 0,
         }
@@ -123,7 +124,7 @@ impl Board {
     }
 
     pub fn phase(&self) -> i32 {
-        self.phase
+        self.phase.min(MAX_PHASE)
     }
 
     pub fn mg_pst(&self) -> i32 {
@@ -175,36 +176,16 @@ impl Board {
     }
 
     pub fn update_material_and_phase(&mut self) {
-        let mut material = 0;
-        let mut phase = 0;
+        self.material = crate::eval::material::calculate_material(self);
 
-        for color in COLORS {
-            let sign = match color {
-                Color::White => 1,
-                Color::Black => -1,
-            };
-
-            let pawns = self.pieces(color, PieceType::Pawn).count_ones() as i32;
-            let knights = self.pieces(color, PieceType::Knight).count_ones() as i32;
-            let bishops = self.pieces(color, PieceType::Bishop).count_ones() as i32;
-            let rooks = self.pieces(color, PieceType::Rook).count_ones() as i32;
-            let queens = self.pieces(color, PieceType::Queen).count_ones() as i32;
-
-            material +=
-                sign * (100 * pawns + 310 * knights + 330 * bishops + 500 * rooks + 900 * queens);
-
-            phase += knights + bishops + 2 * rooks + 4 * queens;
+        self.phase = 0;
+        for kind in PIECE_TYPES {
+            let pieces = self.pieces(Color::White, kind) | self.pieces(Color::Black, kind);
+            self.phase += pieces.count_ones() as i32 * kind.phase_value();
         }
 
-        phase = phase.min(MAX_PHASE);
-
-        let mg_pst_bonus = crate::eval::pst::mg_pst_bonus(self);
-        let eg_pst_bonus = crate::eval::pst::eg_pst_bonus(self);
-
-        self.material = material;
-        self.phase = phase;
-        self.mg_pst = mg_pst_bonus;
-        self.eg_pst = eg_pst_bonus;
+        self.mg_pst = crate::eval::pst::mg_pst_bonus(self);
+        self.eg_pst = crate::eval::pst::eg_pst_bonus(self);
     }
 
     // *************************

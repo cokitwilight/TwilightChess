@@ -22,7 +22,7 @@ impl Engine {
         context: &mut SearchContext,
         _depth: u16,
         mut alpha: i32,
-        mut beta: i32,
+        beta: i32,
         ply: usize,
         picker_frame: PickerFrame,
         check_plies: usize,
@@ -78,7 +78,6 @@ impl Engine {
         }
 
         let original_alpha = alpha;
-        let original_beta = beta;
         let hash = board.board_hash();
         let side_to_move = board.side_to_move();
 
@@ -104,29 +103,25 @@ impl Engine {
             //     context.stats.tt_stats.quiescence.depth_rejected_hits += 1;
             // }
 
-            tt_best_move = entry.best_move;
+            tt_best_move = entry.best_move.filter(|mv| {
+                in_check || mv.is_capture() || mv.promotion() == Some(PieceType::Queen)
+            });
 
             let tt_score = score_from_tt(entry.eval as i32, ply);
 
             if is_valid(tt_score) {
                 track_stat!(context.stats.tt_stats.quiescence.usable += 1);
 
-                match entry.flag.bound_type() {
+                let cutoff = match entry.flag.bound_type() {
                     TTFlag::Exact => {
                         track_stat!(context.stats.tt_stats.quiescence.exact_returns += 1);
                         return tt_score;
                     }
+                    TTFlag::LowerBound => tt_score >= beta,
+                    TTFlag::UpperBound => tt_score <= alpha,
+                };
 
-                    TTFlag::LowerBound => {
-                        alpha = alpha.max(tt_score);
-                    }
-
-                    TTFlag::UpperBound => {
-                        beta = beta.min(tt_score);
-                    }
-                }
-
-                if alpha >= beta {
+                if cutoff {
                     track_stat!(context.stats.tt_stats.quiescence.bound_cutoffs += 1);
                     return tt_score;
                 }
@@ -265,7 +260,7 @@ impl Engine {
                     false,
                     TTFlag::LowerBound,
                     0,
-                    score_to_tt(raw_static_eval, ply),
+                    score_to_tt(stand_pat, ply),
                     raw_static_eval as i16,
                     None,
                 );
@@ -318,7 +313,7 @@ impl Engine {
 
             let can_prune = !NODE::PV
                 && !in_check
-                && board.phase > 8
+                && board.phase() > 8
                 && mv.promotion().is_none()
                 && !is_decisive(alpha)
                 && Some(*mv) != tt_best_move
@@ -422,7 +417,7 @@ impl Engine {
 
         let flag = if best_eval <= original_alpha {
             TTFlag::UpperBound
-        } else if best_eval >= original_beta {
+        } else if best_eval >= beta {
             TTFlag::LowerBound
         } else {
             TTFlag::Exact
@@ -486,6 +481,45 @@ mod tests {
 
             assert_eq!(score, expected, "wrong terminal score for {fen}");
         }
+    }
+
+    #[test]
+    fn noncutting_tt_bound_and_quiet_hash_move_preserve_stand_pat() {
+        let mut config = EngineConfig::standard();
+        config.tt_size = 1;
+        let mut engine = Engine::new(config);
+        let mut board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
+        let hash = board.board_hash();
+        let stand_pat = evaluation_for_turn(&board);
+        let quiet = crate::uci::parse_uci_move(&board, "e2e4").unwrap();
+        engine.tt.insert(
+            hash,
+            false,
+            TTFlag::UpperBound,
+            1,
+            score_to_tt(stand_pat, 0),
+            stand_pat as i16,
+            Some(quiet),
+        );
+        let mut context = SearchContext::new(SearchLimits::depth(1, 6), vec![hash]);
+
+        let score = engine.quiescence::<PV>(
+            &mut board,
+            &mut context,
+            6,
+            stand_pat - 10,
+            stand_pat + 10,
+            0,
+            PickerFrame::ROOT,
+            0,
+        );
+
+        assert_eq!(score, stand_pat);
+        assert_eq!(context.stats.node_stats.quiescence, 1);
+        assert_eq!(
+            engine.tt.get_any(hash).unwrap().flag.bound_type(),
+            TTFlag::Exact
+        );
     }
 
     #[test]

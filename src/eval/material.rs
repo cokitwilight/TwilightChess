@@ -1,7 +1,7 @@
 use crate::board::Board;
 use crate::types::{COLORS, Color, PIECE_TYPES};
 
-// FOR DEBUGGING
+/// Recomputes White's material advantage from the pieces on the board.
 pub fn calculate_material(board: &Board) -> i32 {
     let mut material = 0;
 

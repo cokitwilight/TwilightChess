@@ -114,13 +114,11 @@ impl Engine {
         }
 
         let mut tt_best_move: Option<Move> = None;
-
         let mut candidate_move: Option<(Move, i32)> = None;
+        let mut tt_eval = Score::NONE;
+        let mut tt_pv = false;
 
         track_stat!(context.stats.tt_stats.main.probes += 1);
-
-        let mut tt_eval = Score::NONE;
-
         if let Some(entry) = self.tt.get(board.board_hash, TTNodeType::Main) {
             track_stat!(context.stats.tt_stats.main.hits += 1);
 
@@ -143,10 +141,10 @@ impl Engine {
             let tt_score = score_from_tt(entry.eval as i32, ply);
 
             tt_best_move = entry.best_move;
-
             tt_eval = i32::from(entry.static_eval);
+            tt_pv = entry.flag.is_pv();
 
-            if !NODE::ROOT
+            if !NODE::PV
                 && is_valid(tt_score)
                 && u16::from(entry.depth) >= depth
                 && options.excluded_move.is_none()
@@ -197,6 +195,10 @@ impl Engine {
             evaluation_for_turn(board)
         };
 
+        if !in_check {
+            context.stack[ply].static_eval = raw_static_eval;
+        }
+
         let correction = if self.config.search.correction.enabled {
             let c = self.history.correction.get(board);
             track_stat!(context.stats.correction_stats.record_main_lookup(c));
@@ -230,7 +232,8 @@ impl Engine {
             && raw_static_eval > prev_eval_2
             && prev_eval_2 > prev_eval_4;
 
-        let improving_weak = is_valid(prev_eval_2) && raw_static_eval > prev_eval_2;
+        let improving_weak =
+            !improving_strong && is_valid(prev_eval_2) && raw_static_eval > prev_eval_2;
 
         let improvement = if improving_strong {
             raw_static_eval - prev_eval_4
@@ -318,9 +321,10 @@ impl Engine {
             && options.excluded_move.is_none()
             && !in_check
             && depth >= self.config.search.null_move.minimum_depth
-            && board.phase >= self.config.search.null_move.minimum_phase
+            && board.phase() >= self.config.search.null_move.minimum_phase
             && !is_decisive(beta)
-            && corrected_static_eval >= calculate_nmp_margin(beta);
+            && corrected_static_eval
+                >= calculate_nmp_margin(beta, depth as i32, improvement, tt_pv);
 
         if can_null_prune {
             #[cfg(feature = "search-stats")]
@@ -329,7 +333,23 @@ impl Engine {
             track_stat!(context.stats.null_move_stats.attempts += 1);
             track_stat!(context.stats.null_move_stats.attempts_by_depth.bins[depth_bucket] += 1);
 
-            let reduction = null_move_reduction(depth);
+            let reduction = null_move_reduction(
+                beta,
+                corrected_static_eval,
+                depth as i32,
+                improving_strong,
+                improving_weak,
+            );
+
+            #[cfg(feature = "search-stats")]
+            let reduction_bucket = (reduction.max(0) as usize).min(REDUCTION_BUCKETS - 1);
+            track_stat! {
+                context.stats.null_move_stats.reduction_histogram.bins[reduction_bucket] += 1;
+            }
+
+            let reduced_depth = (depth as i32 - 1 - reduction).max(0);
+
+            context.stack[ply + 1] = SearchStackEntry::default();
 
             let undo = board.make_null_move();
 
@@ -340,7 +360,7 @@ impl Engine {
             let score = -self.negamax::<NonPV>(
                 board,
                 context,
-                depth - 1 - reduction,
+                reduced_depth as u16,
                 -beta,
                 -beta + 1,
                 false,
@@ -358,6 +378,9 @@ impl Engine {
             if score >= beta {
                 track_stat!(context.stats.null_move_stats.cutoffs += 1);
                 track_stat!(context.stats.null_move_stats.cutoffs_by_depth.bins[depth_bucket] += 1);
+                track_stat!(
+                    context.stats.null_move_stats.cutoffs_by_reduction.bins[reduction_bucket] += 1
+                );
                 return beta;
             }
         }
@@ -406,10 +429,6 @@ impl Engine {
             allow_singular: options.allow_singular,
             excluded_move: None,
         };
-
-        if !in_check {
-            context.stack[ply].static_eval = raw_static_eval;
-        }
 
         let mut searched_quiets = [ScoredMove::new(); MAX_QUIETS];
         let mut q = 0usize;
@@ -689,7 +708,7 @@ impl Engine {
                     }
                 }
 
-                let passed_cut_node = if reduction > 0 { true } else { false };
+                let passed_cut_node = if reduction > 0 { true } else { !cut_node };
 
                 // null window search reduced depth
                 track_stat!(context.stats.pvs_stats.null_window_searches += 1);
@@ -1011,9 +1030,10 @@ impl Engine {
         let can_update_correction = self.config.search.correction.enabled
             && !in_check
             && options.excluded_move.is_none()
-            && !is_decisive(alpha)
-            && !is_decisive(beta)
-            && depth < 3;
+            && depth < 3
+            && is_valid(max_eval)
+            && !is_decisive(max_eval)
+            && best_move.is_some_and(|mv| !mv.is_capture() && !mv.is_promotion());
 
         if can_update_correction {
             track_stat!(context.stats.correction_stats.record_update_opportunity());
@@ -1028,7 +1048,7 @@ impl Engine {
                         .correction_stats
                         .record_update(CorrectionUpdateKind::Exact, delta)
                 );
-            } else if max_eval >= beta && beta > corrected_static_eval {
+            } else if max_eval >= beta && !is_decisive(beta) && beta > corrected_static_eval {
                 // Fail High
                 let delta = beta - corrected_static_eval;
                 self.history.correction.update(board, delta, depth);
@@ -1038,7 +1058,10 @@ impl Engine {
                         .correction_stats
                         .record_update(CorrectionUpdateKind::FailHigh, delta)
                 );
-            } else if max_eval <= original_alpha && original_alpha < corrected_static_eval {
+            } else if max_eval <= original_alpha
+                && !is_decisive(original_alpha)
+                && original_alpha < corrected_static_eval
+            {
                 // Fail Low
                 let delta = original_alpha - corrected_static_eval;
                 self.history.correction.update(board, delta, depth);
@@ -1092,6 +1115,61 @@ mod tests {
         let mut config = EngineConfig::standard();
         config.tt_size = 1;
         Engine::new(config)
+    }
+
+    #[test]
+    #[cfg(feature = "search-stats")]
+    fn correction_updates_require_a_quiet_best_move_and_an_ordinary_score() {
+        use crate::engine::search::nodetype::Root;
+
+        let fen = "7k/P7/8/3pP3/8/8/8/K7 w - d6 0 1";
+        for (uci, score, alpha, beta, expected_updates) in [
+            ("a1b1", 20, -Score::INFINITE, Score::INFINITE, 1),
+            ("e5d6", 20, -100, 100, 0),               // en passant
+            ("a7a8q", 20, -100, 100, 0),              // quiet promotion
+            ("a1b1", -Score::MATE + 4, -100, -99, 0), // quiet fail-low in a losing mate
+        ] {
+            let mut engine = test_engine();
+            engine.config.search.correction.enabled = true;
+            let mut board = Board::from_fen(fen).unwrap();
+            let best = crate::uci::parse_uci_move(&board, uci).unwrap();
+
+            // Exact child scores select the best move independently of eval tuning.
+            for &mv in board.all_legal_moves().iter() {
+                let undo = board.make_move(mv);
+                let parent_score = if mv == best { score } else { score - 1 };
+                engine.tt.insert(
+                    board.board_hash(),
+                    false,
+                    TTFlag::Exact,
+                    0,
+                    score_to_tt(-parent_score, 1),
+                    Score::NONE as i16,
+                    None,
+                );
+                board.undo_move(undo);
+            }
+
+            let mut context =
+                SearchContext::new(SearchLimits::depth(1, 6), vec![board.board_hash()]);
+            let result = engine.negamax::<Root>(
+                &mut board,
+                &mut context,
+                1,
+                alpha,
+                beta,
+                false,
+                0,
+                PickerFrame::ROOT,
+                SearchOptions::NORMAL,
+            );
+            assert_eq!(result, score, "{uci}");
+            assert_eq!(context.root_best_move, Some(best), "{uci}");
+            assert_eq!(
+                context.stats.correction_stats.update_calls, expected_updates,
+                "{uci}"
+            );
+        }
     }
 
     #[test]

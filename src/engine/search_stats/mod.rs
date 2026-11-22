@@ -357,6 +357,8 @@ mod tests {
         total.lmr_stats.dynamic_searches = 5;
         total.lmr_stats.dynamic_searches_at_modified_depth = 4;
         total.fut_stats.pruned_moves = 7;
+        total.null_move_stats.reduction_histogram.bins[4] = 3;
+        total.null_move_stats.cutoffs_by_reduction.bins[4] = 2;
         total.correction_stats.record(8);
         total.correction_stats.record(-16);
 
@@ -371,6 +373,8 @@ mod tests {
         additional.lmr_stats.dynamic_searches = 2;
         additional.lmr_stats.dynamic_searches_at_modified_depth = 1;
         additional.fut_stats.pruned_moves = 2;
+        additional.null_move_stats.reduction_histogram.bins[4] = 2;
+        additional.null_move_stats.cutoffs_by_reduction.bins[4] = 1;
         additional.correction_stats.record(25);
 
         total += additional;
@@ -386,6 +390,10 @@ mod tests {
         assert_eq!(total.lmr_stats.dynamic_searches, 7);
         assert_eq!(total.lmr_stats.dynamic_searches_at_modified_depth, 5);
         assert_eq!(total.fut_stats.pruned_moves, 9);
+        assert_eq!(total.null_move_stats.reduction_histogram.bins[4], 5);
+        assert_eq!(total.null_move_stats.cutoffs_by_reduction.bins[4], 3);
+        assert_eq!(delta.null_move_stats.reduction_histogram.bins[4], 3);
+        assert_eq!(delta.null_move_stats.cutoffs_by_reduction.bins[4], 2);
         assert_eq!(total.correction_stats.lookups, 3);
         assert_eq!(total.correction_stats.magnitude_histogram.total(), 3);
         assert_eq!(delta.node_stats.main, 100);
@@ -577,6 +585,18 @@ mod tests {
         assert_eq!(
             stats.null_move_stats.attempts_by_depth.total(),
             stats.null_move_stats.attempts
+        );
+        assert_eq!(
+            stats.null_move_stats.reduction_histogram.total(),
+            stats.null_move_stats.attempts
+        );
+        assert_eq!(
+            stats.null_move_stats.cutoffs_by_depth.total(),
+            stats.null_move_stats.cutoffs
+        );
+        assert_eq!(
+            stats.null_move_stats.cutoffs_by_reduction.total(),
+            stats.null_move_stats.cutoffs
         );
         assert_eq!(
             stats.tt_stats.main.exact_hits
