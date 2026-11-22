@@ -13,14 +13,13 @@ use crate::types::{PieceType, Score, is_decisive, is_valid, mated_in};
 
 // const LAZY_MARGIN: i32 = 300;
 
-const MAX_CHECK_Q_PLIES: usize = 64;
+const MAX_CHECK_Q_PLIES: usize = 65;
 
 impl Engine {
     pub(crate) fn quiescence<NODE: NodeType>(
         &mut self,
         board: &mut Board,
         context: &mut SearchContext,
-        _depth: u16,
         mut alpha: i32,
         beta: i32,
         ply: usize,
@@ -98,10 +97,6 @@ impl Engine {
                     context.stats.tt_stats.quiescence.move_hits += 1;
                 }
             }
-
-            // if entry.depth < depth as u8 {
-            //     context.stats.tt_stats.quiescence.depth_rejected_hits += 1;
-            // }
 
             tt_best_move = entry.best_move.filter(|mv| {
                 in_check || mv.is_capture() || mv.promotion() == Some(PieceType::Queen)
@@ -355,7 +350,6 @@ impl Engine {
             let eval = -self.quiescence::<NODE>(
                 board,
                 context,
-                _depth,
                 -beta,
                 -alpha,
                 ply + 1,
@@ -465,13 +459,11 @@ mod tests {
             config.tt_size = 1;
             let mut engine = Engine::new(config);
             let mut board = Board::from_fen(fen).expect("valid terminal FEN");
-            let mut context =
-                SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
 
             let score = engine.quiescence::<PV>(
                 &mut board,
                 &mut context,
-                1,
                 -Score::INFINITE,
                 Score::INFINITE,
                 0,
@@ -501,12 +493,11 @@ mod tests {
             stand_pat as i16,
             Some(quiet),
         );
-        let mut context = SearchContext::new(SearchLimits::depth(1, 6), vec![hash]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![hash]);
 
         let score = engine.quiescence::<PV>(
             &mut board,
             &mut context,
-            6,
             stand_pat - 10,
             stand_pat + 10,
             0,
@@ -528,14 +519,13 @@ mod tests {
         config.tt_size = 1;
         let mut engine = Engine::new(config);
         let mut board = Board::from_fen("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1").unwrap();
-        let mut context = SearchContext::new(SearchLimits::depth(1, 6), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
 
         for _ in 0..2 {
             assert_eq!(
                 engine.quiescence::<PV>(
                     &mut board,
                     &mut context,
-                    6,
                     -Score::INFINITE,
                     Score::INFINITE,
                     0,
@@ -586,12 +576,11 @@ mod tests {
             Score::NONE as i16,
             None,
         );
-        let mut context = SearchContext::new(SearchLimits::depth(1, 6), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
 
         let score = engine.quiescence::<PV>(
             &mut board,
             &mut context,
-            6,
             -Score::INFINITE,
             Score::INFINITE,
             0,

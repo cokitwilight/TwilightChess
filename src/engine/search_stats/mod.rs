@@ -24,6 +24,7 @@ mod aspiration;
 mod correction_history;
 mod cutoffs;
 mod draws;
+mod estimated_score;
 mod formatting;
 mod futility;
 mod histogram;
@@ -33,6 +34,7 @@ mod iterative_deepening;
 mod lmp;
 mod lmr;
 mod main_see;
+mod mate_distance;
 mod move_ordering;
 mod moves;
 mod nodes;
@@ -51,6 +53,7 @@ pub use correction_history::{
 };
 pub use cutoffs::CutoffStats;
 pub use draws::DrawStats;
+pub use estimated_score::EstimatedScoreStats;
 pub use futility::FutilityStats;
 pub use histogram::{
     CORRECTION_MAGNITUDE_BUCKETS, CorrectionMagnitudeHistogram, DepthHistogram, Histogram,
@@ -63,6 +66,7 @@ pub use iterative_deepening::IterativeDeepeningStats;
 pub use lmp::LmpStats;
 pub use lmr::LmrStats;
 pub use main_see::MainSeeStats;
+pub use mate_distance::MateDistanceStats;
 pub use move_ordering::MoveOrderingStats;
 pub use moves::MoveStats;
 pub use nodes::NodeStats;
@@ -70,7 +74,7 @@ pub use null_move::NullMoveStats;
 pub use pvs::PvsStats;
 pub use quiescence::QuiescenceStats;
 pub use quiescence_pruning::QuiescencePruningStats;
-pub use reverse_futility::ReverseFutilityStats;
+pub use reverse_futility::{DepthPruningStats, DepthPruningStats as ReverseFutilityStats};
 pub use singular_extensions::SingularExtensionStats;
 pub use terminal::TerminalStats;
 pub use transposition_table::TranspositionTableStats;
@@ -110,6 +114,9 @@ pub struct SearchStats {
     pub correction_stats: CorrectionHistoryStats,
     pub lmp_stats: LmpStats,
     pub lmr_stats: LmrStats,
+    pub estimated_score_stats: EstimatedScoreStats,
+    pub mate_distance_stats: MateDistanceStats,
+    pub razoring_stats: DepthPruningStats,
     pub rfp_stats: ReverseFutilityStats,
     pub fut_stats: FutilityStats,
     pub main_see_stats: MainSeeStats,
@@ -149,6 +156,7 @@ impl SearchStats {
         self.print_aspiration();
         self.print_history();
         self.print_correction_history();
+        self.estimated_score_stats.print();
         self.print_reductions();
         self.print_main_pruning();
         self.print_quiescence();
@@ -202,7 +210,9 @@ impl SearchStats {
     }
 
     pub fn print_main_pruning(&self) {
-        if !self.rfp_stats.has_data()
+        if self.mate_distance_stats.checks == 0
+            && !self.razoring_stats.has_data()
+            && !self.rfp_stats.has_data()
             && !self.fut_stats.has_data()
             && !self.lmp_stats.has_data()
             && !self.null_move_stats.has_data()
@@ -212,7 +222,9 @@ impl SearchStats {
         }
 
         section("Main-Search Pruning");
-        self.rfp_stats.print();
+        self.mate_distance_stats.print();
+        self.razoring_stats.print("Razoring");
+        self.rfp_stats.print("Reverse futility pruning");
         self.lmp_stats.print();
         self.fut_stats.print();
         self.null_move_stats.print();
@@ -269,6 +281,9 @@ impl Sub for SearchStats {
             correction_stats: self.correction_stats - rhs.correction_stats,
             lmp_stats: self.lmp_stats - rhs.lmp_stats,
             lmr_stats: self.lmr_stats - rhs.lmr_stats,
+            estimated_score_stats: self.estimated_score_stats - rhs.estimated_score_stats,
+            mate_distance_stats: self.mate_distance_stats - rhs.mate_distance_stats,
+            razoring_stats: self.razoring_stats - rhs.razoring_stats,
             rfp_stats: self.rfp_stats - rhs.rfp_stats,
             fut_stats: self.fut_stats - rhs.fut_stats,
             main_see_stats: self.main_see_stats - rhs.main_see_stats,
@@ -297,6 +312,9 @@ impl AddAssign for SearchStats {
         self.correction_stats += rhs.correction_stats;
         self.lmp_stats += rhs.lmp_stats;
         self.lmr_stats += rhs.lmr_stats;
+        self.estimated_score_stats += rhs.estimated_score_stats;
+        self.mate_distance_stats += rhs.mate_distance_stats;
+        self.razoring_stats += rhs.razoring_stats;
         self.rfp_stats += rhs.rfp_stats;
         self.fut_stats += rhs.fut_stats;
         self.main_see_stats += rhs.main_see_stats;
@@ -503,7 +521,7 @@ mod tests {
         let result = engine.search(
             &game.board,
             &mut crate::engine::SearchContext::new(
-                SearchLimits::depth(4, 4),
+                SearchLimits::depth(4),
                 game.repetition_history.clone(),
             ),
             false,

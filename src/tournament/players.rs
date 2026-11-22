@@ -31,16 +31,9 @@ impl MatchPlayers {
         }
     }
 
-    pub fn from_depth(
-        white: String,
-        black: String,
-        w_depth: u16,
-        w_q_depth: u16,
-        b_depth: u16,
-        b_q_depth: u16,
-    ) -> Self {
-        let white_limit = SearchLimits::depth(w_depth, w_q_depth);
-        let black_limit = SearchLimits::depth(b_depth, b_q_depth);
+    pub fn from_depth(white: String, black: String, w_depth: u16, b_depth: u16) -> Self {
+        let white_limit = SearchLimits::depth(w_depth);
+        let black_limit = SearchLimits::depth(b_depth);
 
         let mut white_config = EngineConfig::default();
         let mut black_config = EngineConfig::default();

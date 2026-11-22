@@ -381,7 +381,7 @@ mod tests {
                 tt_size: 1,
                 ..EngineConfig::standard()
             };
-            let mut limits = SearchLimits::depth(if max_nodes.is_some() { 20 } else { 3 }, 3);
+            let mut limits = SearchLimits::depth(if max_nodes.is_some() { 20 } else { 3 });
             limits.max_nodes = max_nodes;
             let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
             let mut context = SearchContext::new(limits, vec![board.board_hash()]);
@@ -433,7 +433,7 @@ mod tests {
         };
         let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
         for max_nodes in [0, 2048] {
-            let mut limits = SearchLimits::depth(20, 3);
+            let mut limits = SearchLimits::depth(20);
             limits.max_nodes = Some(max_nodes);
             let mut context = SearchContext::new(limits, vec![board.board_hash()]);
             let result = Engine::new(config).search(&board, &mut context, false, false);
@@ -459,7 +459,7 @@ mod tests {
         let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
         let result = Engine::new(config).search(
             &board,
-            &mut SearchContext::new(SearchLimits::depth(3, 2), vec![board.board_hash()]),
+            &mut SearchContext::new(SearchLimits::depth(3), vec![board.board_hash()]),
             false,
             false,
         );
@@ -497,11 +497,11 @@ mod tests {
         let history = vec![board.board_hash()];
         let completed = Engine::new(config).search(
             &board,
-            &mut SearchContext::new(SearchLimits::depth(1, 2), history.clone()),
+            &mut SearchContext::new(SearchLimits::depth(1), history.clone()),
             false,
             false,
         );
-        let mut limits = SearchLimits::depth(3, 2);
+        let mut limits = SearchLimits::depth(3);
         limits.max_nodes = Some(completed.stats.total_nodes() + 1);
         let result = Engine::new(config).search(
             &board,
@@ -533,7 +533,7 @@ mod tests {
             // material. Even a huge requested depth finishes immediately.
             let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").unwrap();
             let mut context =
-                SearchContext::new(SearchLimits::depth(depth, 1), vec![board.board_hash()]);
+                SearchContext::new(SearchLimits::depth(depth), vec![board.board_hash()]);
             let eval = engine.negamax::<Root>(
                 &mut board,
                 &mut context,
@@ -570,8 +570,7 @@ mod tests {
             config.tt_size = 1;
             let mut engine = Engine::new(config);
             let mut board = Board::from_fen(fen).expect("valid terminal FEN");
-            let mut context =
-                SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
 
             let eval = engine.negamax::<Root>(
                 &mut board,
@@ -623,7 +622,7 @@ mod tests {
                 Score::NONE as i16,
                 None,
             );
-            let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![root_hash]);
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![root_hash]);
 
             let eval = engine.negamax::<Root>(
                 &mut board,
@@ -661,7 +660,7 @@ mod tests {
             let mut board = Board::from_fen(fen).unwrap();
             let root_hash = board.board_hash();
             let history = vec![root_hash; if repeated { 3 } else { 1 }];
-            let mut context = SearchContext::new(SearchLimits::depth(1, 1), history.clone());
+            let mut context = SearchContext::new(SearchLimits::depth(1), history.clone());
             let legal_moves = board.all_legal_moves();
 
             let eval = engine.negamax::<Root>(
@@ -695,7 +694,7 @@ mod tests {
         // All children draw, so the first searched move wins the tie.
         let mut board = Board::from_fen("7k/8/8/8/8/8/8/K7 w - - 0 1").unwrap();
         let preferred = *board.all_legal_moves().as_slice().last().unwrap();
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
         context.previous_best_move = Some(preferred);
 
         let eval = engine.negamax::<Root>(
@@ -729,7 +728,7 @@ mod tests {
                 config.search.aspiration.mate_margin = margin;
                 let board = Board::from_fen(fen).unwrap();
                 let mut context =
-                    SearchContext::new(SearchLimits::depth(3, 0), vec![board.board_hash()]);
+                    SearchContext::new(SearchLimits::depth(3), vec![board.board_hash()]);
                 let result = Engine::new(config).search(&board, &mut context, false, false);
                 assert_eq!(result.eval, expected);
                 assert_eq!(result.depth_reached, 3);
@@ -746,7 +745,7 @@ mod tests {
         };
         let mut engine = Engine::new(config);
         let mut board = Board::from_fen("7k/5Q2/6K1/8/8/8/8/8 w - - 0 1").unwrap();
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
 
         let eval = engine.negamax::<Root>(
             &mut board,
@@ -776,7 +775,7 @@ mod tests {
         let mut board = Board::from_fen("7k/8/8/3pP3/8/8/8/K7 w - d6 0 1").unwrap();
         let root_hash = board.board_hash();
         let legal_moves = board.all_legal_moves();
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![root_hash]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![root_hash]);
 
         let result = engine.search(&board, &mut context, false, false);
 

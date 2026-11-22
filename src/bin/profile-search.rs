@@ -7,7 +7,7 @@ fn main() {
 
     let mut config = EngineConfig::standard();
     config.tt_size = 128;
-    config.limits = SearchLimits::depth_and_time(64, 20, 10_000);
+    config.limits = SearchLimits::depth_and_time(64, 10_000);
 
     let mut engine = Engine::new(config);
     let mut context = SearchContext::new(config.limits, vec![board.board_hash()]);

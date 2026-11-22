@@ -20,7 +20,7 @@ use crate::engine::{Engine, MAX_PLY, PickerFrame, SearchStackEntry};
 use crate::engine::{SearchContext, SearchOptions};
 use crate::eval::evaluation_for_turn;
 use crate::moves::MoveGenInfo;
-use crate::types::{PieceType, Score, is_decisive, is_loss, is_valid, is_win, mated_in};
+use crate::types::{PieceType, Score, is_decisive, is_loss, is_valid, is_win, mate_in, mated_in};
 
 impl Engine {
     // Implementation for negamax function
@@ -64,22 +64,8 @@ impl Engine {
         }
         }
 
-        if ply >= MAX_PLY - 1 {
-            track_stat!(context.stats.terminal_stats.max_ply_returns += 1);
-            return evaluation_for_turn(board);
-        }
-
         if depth == 0 {
-            return self.quiescence::<NODE>(
-                board,
-                context,
-                context.limits.max_q_depth,
-                alpha,
-                beta,
-                ply,
-                picker_frame,
-                0,
-            );
+            return self.quiescence::<NODE>(board, context, alpha, beta, ply, picker_frame, 0);
         }
 
         if !NODE::ROOT {
@@ -101,6 +87,28 @@ impl Engine {
                 track_stat!(context.stats.draw_stats.insufficient_material_returns += 1);
                 return Score::ZERO;
             }
+
+            if ply >= MAX_PLY - 1 {
+                track_stat!(context.stats.terminal_stats.max_ply_returns += 1);
+                return evaluation_for_turn(board);
+            }
+
+            // Mate Distance Pruning:
+            #[cfg(feature = "search-stats")]
+            let previous_window = (alpha, beta);
+            alpha = alpha.max(mated_in(ply));
+            beta = beta.min(mate_in(ply + 1));
+
+            track_stat! {
+                let stats = &mut context.stats.mate_distance_stats;
+                stats.checks += 1;
+                stats.alpha_raised += u64::from(alpha > previous_window.0);
+                stats.beta_lowered += u64::from(beta < previous_window.1);
+            }
+            if alpha >= beta {
+                track_stat!(context.stats.mate_distance_stats.cutoffs += 1);
+                return alpha;
+            }
         }
 
         let original_alpha = alpha;
@@ -116,9 +124,12 @@ impl Engine {
         let mut tt_best_move: Option<Move> = None;
         let mut candidate_move: Option<(Move, i32)> = None;
         let mut tt_eval = Score::NONE;
-        let mut tt_pv = false;
+        let mut tt_pv = NODE::PV;
+        let mut tt_score = Score::NONE;
+        let mut tt_bound: Option<TTFlag> = None;
 
         track_stat!(context.stats.tt_stats.main.probes += 1);
+
         if let Some(entry) = self.tt.get(board.board_hash, TTNodeType::Main) {
             track_stat!(context.stats.tt_stats.main.hits += 1);
 
@@ -138,11 +149,11 @@ impl Engine {
                 track_stat!(context.stats.tt_stats.main.depth_rejected_hits += 1);
             }
 
-            let tt_score = score_from_tt(entry.eval as i32, ply);
-
+            tt_score = score_from_tt(entry.eval as i32, ply);
             tt_best_move = entry.best_move;
             tt_eval = i32::from(entry.static_eval);
-            tt_pv = entry.flag.is_pv();
+            tt_pv |= entry.flag.is_pv();
+            tt_bound = Some(entry.flag.bound_type());
 
             if !NODE::PV
                 && is_valid(tt_score)
@@ -175,7 +186,7 @@ impl Engine {
                 && options.allow_singular
                 && depth >= self.config.search.singular.minimum_depth
                 && u16::from(entry.depth) >= depth.saturating_sub(2)
-                && matches!(entry.flag.bound_type(), TTFlag::Exact | TTFlag::LowerBound)
+                && entry.flag.bound_type() != TTFlag::UpperBound
                 && is_valid(tt_score)
                 && !is_decisive(tt_score);
 
@@ -195,10 +206,6 @@ impl Engine {
             evaluation_for_turn(board)
         };
 
-        if !in_check {
-            context.stack[ply].static_eval = raw_static_eval;
-        }
-
         let correction = if self.config.search.correction.enabled {
             let c = self.history.correction.get(board);
             track_stat!(context.stats.correction_stats.record_main_lookup(c));
@@ -209,6 +216,33 @@ impl Engine {
 
         let corrected_static_eval = raw_static_eval + correction;
 
+        if !in_check {
+            context.stack[ply].static_eval = corrected_static_eval;
+        }
+
+        track_stat!(context.stats.estimated_score_stats.estimates += 1);
+        let estimated_score = if !in_check
+            && options.excluded_move.is_none()
+            && is_valid(tt_score)
+            && match tt_bound {
+                Some(TTFlag::UpperBound) => tt_score < corrected_static_eval,
+                Some(TTFlag::LowerBound) => tt_score > corrected_static_eval,
+                Some(TTFlag::Exact) => true,
+                _ => false,
+            } {
+            track_stat! {
+                let stats = &mut context.stats.estimated_score_stats;
+                let magnitude = tt_score.abs_diff(corrected_static_eval);
+                stats.tt_selections += 1;
+                stats.changed_scores += u64::from(magnitude != 0);
+                stats.absolute_delta_sum += u64::from(magnitude);
+            }
+            tt_score
+        } else {
+            corrected_static_eval
+        };
+
+        // Not used right now
         // let prev_eval_1 = if ply >= 1 && !in_check {
         //     context.stack[ply - 1].static_eval
         // } else {
@@ -235,7 +269,9 @@ impl Engine {
         let improving_weak =
             !improving_strong && is_valid(prev_eval_2) && raw_static_eval > prev_eval_2;
 
-        let improvement = if improving_strong {
+        let improvement = if in_check {
+            0
+        } else if improving_strong {
             raw_static_eval - prev_eval_4
         } else if improving_weak {
             raw_static_eval - prev_eval_2
@@ -249,10 +285,8 @@ impl Engine {
         //     0
         // };
 
-        // let improvement =
-        //     calculate_eval_improvement(raw_static_eval, &context.stack, ply, in_check);
-
         let is_improving_2_plies = improvement > 0;
+
         track_stat! {
             let stats = &mut context.stats.improvement_stats;
             stats.record(improvement);
@@ -275,6 +309,37 @@ impl Engine {
             }
             if ply >= 4 && !is_valid(context.stack[ply - 4].static_eval) {
                 stats.invalid_previous_4_ply_eval += 1;
+            }
+        }
+
+        // Razoring
+        if !NODE::PV
+            && !in_check
+            && is_valid(estimated_score)
+            && estimated_score < alpha - (400 + 300 * depth as i32 * depth as i32)
+            && alpha < 2048
+            && !is_decisive(alpha)
+            && !is_decisive(beta)
+            && options.excluded_move.is_none()
+            && tt_best_move.is_some_and(|mv: Move| !mv.is_quiet())
+            && tt_bound != Some(TTFlag::LowerBound)
+        {
+            #[cfg(feature = "search-stats")]
+            let depth_bucket = usize::from(depth).min(MAX_TRACKED_DEPTH - 1);
+            track_stat! {
+                context.stats.razoring_stats.attempts += 1;
+                context.stats.razoring_stats.attempts_by_depth.bins[depth_bucket] += 1;
+            }
+            let razor = self.quiescence::<NODE>(board, context, alpha, beta, ply, picker_frame, 0);
+
+            if razor <= alpha {
+                track_stat! {
+                    if !context.stopped {
+                        context.stats.razoring_stats.cutoffs += 1;
+                        context.stats.razoring_stats.cutoffs_by_depth.bins[depth_bucket] += 1;
+                    }
+                }
+                return razor;
             }
         }
 
@@ -301,14 +366,14 @@ impl Engine {
             let margin = rfp_margin(depth as i32, improvement, &self.config.search.rfp);
             // dynamic RFP margin
 
-            if corrected_static_eval - margin >= beta {
+            if estimated_score - margin >= beta {
                 track_stat! {
                     context.stats.rfp_stats.cutoffs += 1;
                     context.stats.rfp_stats.cutoffs_by_depth.bins[depth_bucket] += 1;
                 }
 
                 // integer lerp
-                let result = (3000 * corrected_static_eval + 7000 * beta) / 10000;
+                let result = (3000 * estimated_score + 7000 * beta) / 10000;
 
                 return result;
             }
@@ -323,8 +388,7 @@ impl Engine {
             && depth >= self.config.search.null_move.minimum_depth
             && board.phase() >= self.config.search.null_move.minimum_phase
             && !is_decisive(beta)
-            && corrected_static_eval
-                >= calculate_nmp_margin(beta, depth as i32, improvement, tt_pv);
+            && estimated_score >= calculate_nmp_margin(beta, depth as i32, improvement, tt_pv);
 
         if can_null_prune {
             #[cfg(feature = "search-stats")]
@@ -335,7 +399,7 @@ impl Engine {
 
             let reduction = null_move_reduction(
                 beta,
-                corrected_static_eval,
+                estimated_score,
                 depth as i32,
                 improving_strong,
                 improving_weak,
@@ -446,8 +510,8 @@ impl Engine {
                 continue;
             }
 
-            let is_quiet = mv.kind() == MoveType::Normal && mv.promotion().is_none();
-            let is_capture = mv.kind() == MoveType::Capture || mv.kind() == MoveType::EnPassant;
+            let is_quiet = mv.is_quiet();
+            let is_capture = mv.is_capture();
             let gives_check = board.move_gives_check(mv);
 
             if is_quiet {
@@ -498,7 +562,11 @@ impl Engine {
             {
                 track_stat!(context.stats.singular_stats.attempts += 1);
 
-                let margin = singular_margin(depth, &self.config.search.singular);
+                let margin = singular_margin(
+                    depth,
+                    &self.config.search.singular,
+                    tt_bound.expect("No tt bound for a singular extension check!"),
+                );
 
                 let singular_beta = candidate.1 - margin;
                 let verification_depth = singular_verification_depth(depth);
@@ -562,6 +630,7 @@ impl Engine {
             // Also protects the first search: -INFINITE counts as a loss.
             // A losing mate found so far must not hide an unsearched escape.
             let can_prune_moves = !is_loss(max_eval);
+
             let can_prune = !NODE::PV
                 && can_reduce
                 && can_prune_moves
@@ -1030,10 +1099,10 @@ impl Engine {
         let can_update_correction = self.config.search.correction.enabled
             && !in_check
             && options.excluded_move.is_none()
-            && depth < 3
+            // && depth < 3
             && is_valid(max_eval)
             && !is_decisive(max_eval)
-            && best_move.is_some_and(|mv| !mv.is_capture() && !mv.is_promotion());
+            && best_move.is_none_or(|mv| !mv.is_capture() && !mv.is_promotion());
 
         if can_update_correction {
             track_stat!(context.stats.correction_stats.record_update_opportunity());
@@ -1119,6 +1188,84 @@ mod tests {
 
     #[test]
     #[cfg(feature = "search-stats")]
+    fn razor_probe_records_tt_selection_and_absolute_delta() {
+        for (flag, score, selected, magnitude) in [
+            (TTFlag::Exact, 100, 1, 0),
+            (TTFlag::Exact, 230, 1, 130),
+            (TTFlag::UpperBound, -50, 1, 150),
+            (TTFlag::UpperBound, 200, 0, 0),
+        ] {
+            let mut engine = test_engine();
+            let mut board = Board::from_fen("7k/8/8/3pP3/8/8/8/K7 w - d6 0 1").unwrap();
+            let capture = crate::uci::parse_uci_move(&board, "e5d6").unwrap();
+            engine.tt.insert(
+                board.board_hash(),
+                false,
+                flag,
+                1,
+                score,
+                100,
+                Some(capture),
+            );
+            let mut context = SearchContext::new(SearchLimits::depth(2), vec![board.board_hash()]);
+            engine.negamax::<NonPV>(
+                &mut board,
+                &mut context,
+                2,
+                2000,
+                2001,
+                false,
+                1,
+                PickerFrame::ROOT,
+                SearchOptions::NORMAL,
+            );
+            let estimate = context.stats.estimated_score_stats;
+            assert_eq!(estimate.estimates, 1);
+            assert_eq!(estimate.tt_selections, selected);
+            assert_eq!(estimate.changed_scores, u64::from(magnitude != 0));
+            assert_eq!(estimate.absolute_delta_sum, magnitude);
+            let razor = context.stats.razoring_stats;
+            assert_eq!((razor.attempts, razor.cutoffs), (1, 1));
+            assert_eq!(
+                (
+                    razor.attempts_by_depth.bins[2],
+                    razor.cutoffs_by_depth.bins[2]
+                ),
+                (1, 1)
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "search-stats")]
+    fn mate_distance_cutoffs_record_the_tightened_bound() {
+        let mut engine = test_engine();
+        let mut board = Board::from_fen("7k/8/8/3pP3/8/8/8/K7 w - d6 0 1").unwrap();
+        for (alpha, beta, raised, lowered) in [
+            (mated_in(1) - 1, mated_in(1), 1, 0),
+            (mate_in(2), mate_in(2) + 1, 0, 1),
+        ] {
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
+            engine.negamax::<NonPV>(
+                &mut board,
+                &mut context,
+                1,
+                alpha,
+                beta,
+                false,
+                1,
+                PickerFrame::ROOT,
+                SearchOptions::NORMAL,
+            );
+            let stats = context.stats.mate_distance_stats;
+            assert_eq!((stats.checks, stats.cutoffs), (1, 1));
+            assert_eq!((stats.alpha_raised, stats.beta_lowered), (raised, lowered));
+            assert_eq!(context.stats.estimated_score_stats.estimates, 0);
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "search-stats")]
     fn correction_updates_require_a_quiet_best_move_and_an_ordinary_score() {
         use crate::engine::search::nodetype::Root;
 
@@ -1150,8 +1297,7 @@ mod tests {
                 board.undo_move(undo);
             }
 
-            let mut context =
-                SearchContext::new(SearchLimits::depth(1, 6), vec![board.board_hash()]);
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
             let result = engine.negamax::<Root>(
                 &mut board,
                 &mut context,
@@ -1188,12 +1334,11 @@ mod tests {
                     None,
                 );
                 let mut context =
-                    SearchContext::new(SearchLimits::depth(1, 0), vec![board.board_hash()]);
+                    SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
                 let score = if quiescence {
                     engine.quiescence::<NonPV>(
                         &mut board,
                         &mut context,
-                        0,
                         -1,
                         0,
                         0,
@@ -1255,7 +1400,7 @@ mod tests {
             -5000,
             Some(first_move),
         );
-        let mut context = SearchContext::new(SearchLimits::depth(2, 0), vec![hash]);
+        let mut context = SearchContext::new(SearchLimits::depth(2), vec![hash]);
         let score = engine.negamax::<NonPV>(
             &mut board,
             &mut context,
@@ -1297,7 +1442,7 @@ mod tests {
         engine.config.search.fut.enabled = false;
         engine.config.search.lmp.enabled = false;
         engine.config.search.lmr.enabled = false;
-        let mut context = SearchContext::new(SearchLimits::depth(2, 0), vec![hash]);
+        let mut context = SearchContext::new(SearchLimits::depth(2), vec![hash]);
         let score = engine.negamax::<NonPV>(
             &mut board,
             &mut context,
@@ -1326,7 +1471,7 @@ mod tests {
         // Two captures: the first must be searched, and the later capture can
         // exercise SEE pruning after a non-losing score has been established.
         let mut board = Board::from_fen("7k/8/8/3p4/8/4p3/3Q4/4K3 w - - 0 1").unwrap();
-        let mut context = SearchContext::new(SearchLimits::depth(1, 0), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
         engine.negamax::<NonPV>(
             &mut board,
             &mut context,
@@ -1345,7 +1490,6 @@ mod tests {
             assert_eq!(stats.attempts, stats.pruned_moves);
             assert_eq!(stats.attempts_by_depth.bins[1], stats.attempts);
             assert_eq!(stats.pruned_moves_by_depth.bins[1], stats.pruned_moves);
-            // Qsearch stops at depth zero before any SEE pruning.
             assert_eq!(context.stats.q_pruning_stats.see_attempts, 0);
         }
         #[cfg(not(feature = "search-stats"))]
@@ -1373,8 +1517,7 @@ mod tests {
             let mut engine = test_engine();
             // A stalemate reaches the improving check without searching children.
             let mut board = Board::from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1").unwrap();
-            let mut context =
-                SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
             context.stack[0].static_eval = evaluation_for_turn(&board) - improvement;
             engine.negamax::<NonPV>(
                 &mut board,
@@ -1430,8 +1573,7 @@ mod tests {
             let mut engine = test_engine();
             let mut board = Board::from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1").unwrap();
             let eval = evaluation_for_turn(&board);
-            let mut context =
-                SearchContext::new(SearchLimits::depth(1, 0), vec![board.board_hash()]);
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
             context.stack[2].static_eval = prev_2.map_or(Score::NONE, |offset| eval + offset);
             context.stack[0].static_eval = prev_4.map_or(Score::NONE, |offset| eval + offset);
             // The immediate parent's unavailable eval must never be used as ply-4.
@@ -1488,8 +1630,7 @@ mod tests {
         for (fen, expected) in cases {
             let mut engine = test_engine();
             let mut board = Board::from_fen(fen).expect("valid terminal FEN");
-            let mut context =
-                SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
 
             let score = engine.negamax::<PV>(
                 &mut board,
@@ -1517,7 +1658,7 @@ mod tests {
     fn singular_verification_does_not_count_the_excluded_move_as_searched() {
         let mut engine = test_engine();
         let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").expect("valid FEN");
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
         let only_legal_move = Move::new(H8, square(6, 6), MoveType::Capture, None);
         let alpha = -100;
 
@@ -1567,7 +1708,7 @@ mod tests {
                 None,
             );
         }
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
         engine.negamax::<PV>(
             &mut board,
             &mut context,
@@ -1631,7 +1772,7 @@ mod tests {
             Score::NONE as i16,
             None,
         );
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
 
         let score = engine.negamax::<PV>(
             &mut board,
@@ -1665,7 +1806,7 @@ mod tests {
             Score::NONE as i16,
             Some(only_legal_move),
         );
-        let mut context = SearchContext::new(SearchLimits::depth(258, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(258), vec![board.board_hash()]);
         let score = engine.negamax::<PV>(
             &mut board,
             &mut context,
@@ -1702,7 +1843,7 @@ mod tests {
             Score::NONE as i16,
             None,
         );
-        let mut context = SearchContext::new(SearchLimits::depth(256, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(256), vec![board.board_hash()]);
 
         let score = engine.negamax::<PV>(
             &mut board,
@@ -1742,8 +1883,7 @@ mod tests {
             None,
         );
         let depth = u16::from(u8::MAX) + 1;
-        let mut context =
-            SearchContext::new(SearchLimits::depth(depth, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(depth), vec![board.board_hash()]);
 
         let score = engine.negamax::<PV>(
             &mut board,

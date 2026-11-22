@@ -194,7 +194,7 @@ mod tests {
     fn cut_node_modifier_counts_only_changes_to_the_final_clamped_reduction() {
         let config = LMRConfig::default();
         let mut table = LmrTable::new(&config);
-        let mut context = SearchContext::new(SearchLimits::depth(8, 4), vec![]);
+        let mut context = SearchContext::new(SearchLimits::depth(8), vec![]);
         for (depth, cut_node, base, expected) in [
             (8, false, 512, 2),
             (8, true, 512, 3),

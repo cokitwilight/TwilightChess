@@ -43,7 +43,6 @@ pub fn fields() -> Vec<ConfigField> {
         let (min, max) = match path {
             "tt_size" => (Some(1), Some(4096)),
             "limits.max_depth" => (Some(1), Some((MAX_PLY - 1) as i64)),
-            "limits.max_q_depth" => (Some(0), Some((MAX_PLY - 1) as i64)),
             "search.fut.margin" | "search.fut.history_margin" => (Some(0), Some(u16::MAX as i64)),
             p if p.ends_with(".min_depth")
                 || p.ends_with(".max_depth")
@@ -185,7 +184,6 @@ pub fn validate(config: &EngineConfig) -> Result<(), String> {
     if !(1..=4096).contains(&config.tt_size)
         || config.limits.max_depth == 0
         || config.limits.max_depth as usize >= MAX_PLY
-        || config.limits.max_q_depth as usize >= MAX_PLY
     {
         return Err("invalid hash size or search depth".into());
     }

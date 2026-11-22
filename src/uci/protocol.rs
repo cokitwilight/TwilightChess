@@ -342,7 +342,6 @@ impl GoParameters {
 
         Ok(SearchLimits {
             max_depth,
-            max_q_depth: defaults.max_q_depth,
             max_nodes: self.nodes,
             soft_time_limit_ms: time_limit,
             hard_time_limit_ms: time_limit,
@@ -426,7 +425,7 @@ mod tests {
     fn test_config() -> EngineConfig {
         EngineConfig {
             tt_size: 1,
-            limits: SearchLimits::depth(2, 2),
+            limits: SearchLimits::depth(2),
             ..EngineConfig::default()
         }
     }
@@ -490,11 +489,10 @@ mod tests {
         )
         .unwrap();
         let limits = parameters
-            .to_limits(Color::White, SearchLimits::depth(8, 6))
+            .to_limits(Color::White, SearchLimits::depth(8))
             .unwrap();
 
         assert_eq!(limits.max_depth, 12);
-        assert_eq!(limits.max_q_depth, 6);
         assert_eq!(limits.max_nodes, Some(100000));
         assert!(limits.soft_time_limit_ms.is_some_and(|time| time < 60000));
     }

@@ -437,7 +437,7 @@ mod tests {
     }
 
     fn test_context() -> SearchContext {
-        SearchContext::new(SearchLimits::depth(1, 1), Vec::new())
+        SearchContext::new(SearchLimits::depth(1), Vec::new())
     }
 
     fn legal_moves(board: &Board) -> Vec<Move> {

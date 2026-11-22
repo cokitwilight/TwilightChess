@@ -17,7 +17,7 @@ impl Default for EngineConfig {
     fn default() -> Self {
         Self {
             search: SearchConfig::default(),
-            limits: SearchLimits::depth_and_time(50, 6, 250),
+            limits: SearchLimits::depth_and_time(50, 250),
             tt_size: 128,
         }
     }
@@ -25,7 +25,7 @@ impl Default for EngineConfig {
 
 impl EngineConfig {
     pub fn standard() -> Self {
-        let limits = SearchLimits::depth_and_time(50, 24, 250);
+        let limits = SearchLimits::depth_and_time(50, 250);
         let tt_size = 128;
 
         Self {

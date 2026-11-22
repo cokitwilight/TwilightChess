@@ -9,6 +9,4 @@ pub const MATE_THRESHOLD: i32 = Score::MATE_IN_MAX;
 pub const NEG_INF: i32 = -Score::INFINITE;
 pub const POS_INF: i32 = Score::INFINITE;
 
-pub const MAX_Q_DEPTH: usize = 4;
-
 pub const RFP_MAX_DEPTH: usize = 4;
