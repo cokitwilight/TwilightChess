@@ -2,9 +2,8 @@ use std::io::{self, Write};
 
 use crate::board::{Board, STARTPOS_FEN};
 use crate::eval::debug::breakdown::{
-    KingBreakdown, ScoreLine, endgame_pst_lines, evaluation_breakdown, king_breakdown,
-    knight_lines, material_lines, middlegame_pst_lines, mobility_lines, pawn_lines, slider_lines,
-    summary_breakdown, tempo_lines,
+    KingBreakdown, ScoreLine, endgame_pst_lines, king_breakdown, knight_lines, material_lines,
+    middlegame_pst_lines, mobility_lines, pawn_lines, slider_lines, summary_breakdown, tempo_lines,
 };
 use crate::eval::{EvalInfo, MAX_PHASE};
 use crate::types::{Color, PieceType};
@@ -214,20 +213,20 @@ impl EvalViewer {
             Section::Summary => print_summary(board, &info),
             Section::Material => print_score_table("MATERIAL", &material_lines(board)),
             Section::Pst => print_pst(board, &info),
-            Section::Mobility => print_score_table("MOBILITY", &mobility_lines(board, &info)),
-            Section::Pawns => print_score_table("PAWNS", &pawn_lines(board, &info)),
-            Section::Knights => print_score_table("KNIGHTS", &knight_lines(board, &info)),
-            Section::Sliders => print_score_table("SLIDERS", &slider_lines(board, &info)),
+            Section::Mobility => print_score_table("MOBILITY (MG)", &mobility_lines(board, &info)),
+            Section::Pawns => print_score_table("PAWNS (MG)", &pawn_lines(board, &info)),
+            Section::Knights => print_score_table("KNIGHTS (MG)", &knight_lines(board, &info)),
+            Section::Sliders => print_score_table("SLIDERS (MG)", &slider_lines(board, &info)),
             Section::King => print_king(board, &info),
             Section::Tempo => print_score_table("TEMPO", &tempo_lines(board)),
             Section::All => {
                 print_summary(board, &info);
                 print_score_table("MATERIAL", &material_lines(board));
                 print_pst(board, &info);
-                print_score_table("MOBILITY", &mobility_lines(board, &info));
-                print_score_table("PAWNS", &pawn_lines(board, &info));
-                print_score_table("KNIGHTS", &knight_lines(board, &info));
-                print_score_table("SLIDERS", &slider_lines(board, &info));
+                print_score_table("MOBILITY (MG)", &mobility_lines(board, &info));
+                print_score_table("PAWNS (MG)", &pawn_lines(board, &info));
+                print_score_table("KNIGHTS (MG)", &knight_lines(board, &info));
+                print_score_table("SLIDERS (MG)", &slider_lines(board, &info));
                 print_king(board, &info);
                 print_score_table("TEMPO", &tempo_lines(board));
             }
@@ -298,25 +297,25 @@ impl EvalViewer {
             ),
             Section::Pst => print_comparison_pst(first, &first_info, second, &second_info),
             Section::Mobility => print_comparison_table(
-                "MOBILITY COMPARISON",
+                "MOBILITY COMPARISON (MG)",
                 &mobility_lines(first, &first_info),
                 &mobility_lines(second, &second_info),
                 true,
             ),
             Section::Pawns => print_comparison_table(
-                "PAWN COMPARISON",
+                "PAWN COMPARISON (MG)",
                 &pawn_lines(first, &first_info),
                 &pawn_lines(second, &second_info),
                 true,
             ),
             Section::Knights => print_comparison_table(
-                "KNIGHT COMPARISON",
+                "KNIGHT COMPARISON (MG)",
                 &knight_lines(first, &first_info),
                 &knight_lines(second, &second_info),
                 true,
             ),
             Section::Sliders => print_comparison_table(
-                "SLIDER COMPARISON",
+                "SLIDER COMPARISON (MG)",
                 &slider_lines(first, &first_info),
                 &slider_lines(second, &second_info),
                 true,
@@ -338,25 +337,25 @@ impl EvalViewer {
                 );
                 print_comparison_pst(first, &first_info, second, &second_info);
                 print_comparison_table(
-                    "MOBILITY COMPARISON",
+                    "MOBILITY COMPARISON (MG)",
                     &mobility_lines(first, &first_info),
                     &mobility_lines(second, &second_info),
                     true,
                 );
                 print_comparison_table(
-                    "PAWN COMPARISON",
+                    "PAWN COMPARISON (MG)",
                     &pawn_lines(first, &first_info),
                     &pawn_lines(second, &second_info),
                     true,
                 );
                 print_comparison_table(
-                    "KNIGHT COMPARISON",
+                    "KNIGHT COMPARISON (MG)",
                     &knight_lines(first, &first_info),
                     &knight_lines(second, &second_info),
                     true,
                 );
                 print_comparison_table(
-                    "SLIDER COMPARISON",
+                    "SLIDER COMPARISON (MG)",
                     &slider_lines(first, &first_info),
                     &slider_lines(second, &second_info),
                     true,
@@ -529,75 +528,27 @@ fn print_king(board: &Board, info: &EvalInfo) {
     let breakdown = king_breakdown(board, info);
 
     println!();
-    println!("KING SAFETY - DANGER INPUTS");
+    println!("KING SAFETY - MIDDLEGAME DANGER INPUTS");
+    println!(
+        "MG base index = 20 + 3 × attacker weight + shield + diagonals + escapes + round((3 × open files + defenders) / 2)."
+    );
     println!("Higher values mean greater danger to that king.");
     println!("{:<30} {:>12} {:>12}", "Factor", "White king", "Black king");
     println!("{:-<56}", "");
-    print_king_danger_line(
-        "Attacker weight",
-        breakdown.white.attacker_weight,
-        breakdown.black.attacker_weight,
-    );
-    print_king_danger_line(
-        "Pawn shield",
-        breakdown.white.pawn_shield,
-        breakdown.black.pawn_shield,
-    );
-    print_king_danger_line(
-        "Open files",
-        breakdown.white.open_files,
-        breakdown.black.open_files,
-    );
-    print_king_danger_line(
-        "Open diagonals",
-        breakdown.white.open_diagonals,
-        breakdown.black.open_diagonals,
-    );
-    print_king_danger_line(
-        "Escape squares",
-        breakdown.white.escape_squares,
-        breakdown.black.escape_squares,
-    );
-    print_king_danger_line(
-        "Defenders",
-        breakdown.white.defenders,
-        breakdown.black.defenders,
-    );
-    println!("{:-<56}", "");
-    print_king_danger_line(
-        "Raw danger",
-        breakdown.white.raw_danger,
-        breakdown.black.raw_danger,
-    );
-    print_king_danger_line(
-        "Clamped danger index",
-        breakdown.white.clamped_danger,
-        breakdown.black.clamped_danger,
-    );
+    for row in king_danger_lines(breakdown) {
+        print_king_danger_line(row.name, row.white, row.black);
+    }
 
     println!();
-    println!("KING SAFETY - FINAL SCORE");
+    println!("KING SAFETY - MIDDLEGAME SCORE");
     println!(
         "{:<30} {:>12} {:>12} {:>12}",
         "Stage", "White", "Black", "Net W-B"
     );
     println!("{:-<69}", "");
-    print_king_score_line(
-        "Danger table penalty",
-        breakdown.white.table_penalty,
-        breakdown.black.table_penalty,
-    );
-    print_king_score_line(
-        "Phase-scaled king score",
-        breakdown.white.final_score,
-        breakdown.black.final_score,
-    );
-
-    let compact = evaluation_breakdown(board);
-    debug_assert_eq!(
-        breakdown.white.final_score - breakdown.black.final_score,
-        compact.king
-    );
+    for row in king_score_lines(breakdown) {
+        print_king_score_line(row.name, row.white, row.black);
+    }
 }
 
 fn print_comparison_king(
@@ -742,6 +693,41 @@ fn print_king_score_line(name: &str, white: i32, black: i32) {
 fn king_danger_lines(breakdown: KingBreakdown) -> Vec<ScoreLine> {
     vec![
         score_line(
+            "Zone attackers (pieces)",
+            breakdown.white.attackers.pieces,
+            breakdown.black.attackers.pieces,
+        ),
+        score_line(
+            "Zone piece weight (raw)",
+            breakdown.white.attackers.weight,
+            breakdown.black.attackers.weight,
+        ),
+        score_line(
+            "Adjacent attack contacts",
+            breakdown.white.attackers.adjacent_contacts,
+            breakdown.black.attackers.adjacent_contacts,
+        ),
+        score_line(
+            "Coordination (index)",
+            breakdown.white.pressure.coordination,
+            breakdown.black.pressure.coordination,
+        ),
+        score_line(
+            "Weak zone squares",
+            breakdown.white.pressure.weak_squares,
+            breakdown.black.pressure.weak_squares,
+        ),
+        score_line(
+            "Unsafe check squares",
+            breakdown.white.pressure.unsafe_checks,
+            breakdown.black.pressure.unsafe_checks,
+        ),
+        score_line(
+            "Flank contacts",
+            breakdown.white.pressure.flank_contacts,
+            breakdown.black.pressure.flank_contacts,
+        ),
+        score_line(
             "Attacker weight",
             breakdown.white.attacker_weight,
             breakdown.black.attacker_weight,
@@ -786,6 +772,16 @@ fn king_danger_lines(breakdown: KingBreakdown) -> Vec<ScoreLine> {
 
 fn king_score_lines(breakdown: KingBreakdown) -> Vec<ScoreLine> {
     vec![
+        score_line(
+            "Flank penalty (before fade)",
+            -breakdown.white.pressure.flank_cp(),
+            -breakdown.black.pressure.flank_cp(),
+        ),
+        score_line(
+            "Safe checks (before fade)",
+            -breakdown.white.pressure.safe_check_cp,
+            -breakdown.black.pressure.safe_check_cp,
+        ),
         score_line(
             "Danger table penalty",
             breakdown.white.table_penalty,

@@ -8,7 +8,7 @@ use crate::engine::search::is_insufficient_material;
 use crate::engine::search_stats::track_stat;
 use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MAX_PLY, PickerFrame};
-use crate::eval::evaluation_for_turn;
+use crate::eval::evaluation;
 use crate::moves::MoveGenInfo;
 use crate::types::PieceType;
 
@@ -61,7 +61,7 @@ impl Engine {
                 context.stats.quiescence_stats.max_ply_returns += 1;
                 context.stats.terminal_stats.max_ply_returns += 1;
             }
-            return evaluation_for_turn(board);
+            return evaluation(board, board.side_to_move());
         }
 
         let in_check = board.in_check(board.side_to_move());
@@ -236,7 +236,7 @@ impl Engine {
                 }
             }
 
-            raw_static_eval = evaluation_for_turn(board);
+            raw_static_eval = evaluation(board, board.side_to_move());
 
             stand_pat = if self.config.search.correction.enabled {
                 let correction = self.history.correction.get(board);

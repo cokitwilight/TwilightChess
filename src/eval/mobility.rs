@@ -5,8 +5,10 @@ use crate::bitboard::{
 
 use crate::board::Board;
 use crate::eval::EvalInfo;
-use crate::eval::lookup::{BISHOP_MOVE, KNIGHT_MOVE, QUEEN_MOVE, ROOK_MOVE};
-use crate::eval::scale_by_phase;
+use crate::eval::lookup::{
+    BISHOP_MOVE_EG, BISHOP_MOVE_MG, KNIGHT_MOVE_EG, KNIGHT_MOVE_MG, QUEEN_MOVE_EG, QUEEN_MOVE_MG,
+    ROOK_MOVE_EG, ROOK_MOVE_MG,
+};
 use crate::types::{Color, PieceType};
 
 pub fn mobility_score(board: &Board, info: &EvalInfo) -> (i32, i32) {
@@ -62,27 +64,17 @@ pub(super) fn development_penalty(board: &Board, color: Color, info: &EvalInfo) 
         non_developed_pieces += starting_rooks;
     }
 
-    let mg_bonus = if info.phase() < 16 { -5 } else { -3 };
-    let eg_bonus = mg_bonus;
+    let mg_bonus = -7;
+    let eg_bonus = -3;
 
     let mg = non_developed_pieces * mg_bonus;
     let eg = non_developed_pieces * eg_bonus;
     (mg, eg)
 }
 
-// per pawn: range: 0 <-> ~80. // number of pawns moves varies based on starting rank
-// per knight: range: -30 <-> 35
-// per bishop: range: -30 <-> 35
-// per rook: range: -25 <-> 30
-// per queen: range: -130 <-> 50
 pub(super) fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> (i32, i32) {
     let mut mg = 0;
-    let mut eg = mg;
-
-    // gives a beginning opening bonus so as not to overvalue development over other values.
-    // For example in the beginning the queen has 0 moves so it slaps a -300 bonus on the eval.
-    // tapered bonus will give an added index to the lookup table while in the opening
-    let tapered_bonus = scale_by_phase(8, info.phase(), 16, 24) as u32;
+    let mut eg = 0;
 
     let enemy_color = color.opposite();
 
@@ -109,16 +101,18 @@ pub(super) fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> (
 
     while let Some(sq) = pop_lsb(&mut knights) {
         let knight_moves = knight_attacks(sq) & !friends & !pawn_attacks;
-        mg += KNIGHT_MOVE[(knight_moves.count_ones() + tapered_bonus / 4).min(8) as usize];
-        eg += KNIGHT_MOVE[(knight_moves.count_ones() + tapered_bonus / 4).min(8) as usize];
+        let count = knight_moves.count_ones() as usize;
+        mg += KNIGHT_MOVE_MG[count];
+        eg += KNIGHT_MOVE_EG[count];
     }
 
     let mut bishops = board.pieces(color, PieceType::Bishop);
 
     while let Some(sq) = pop_lsb(&mut bishops) {
         let bishop_moves = bishop_attacks(sq, occupancy) & !friends & !pawn_attacks;
-        mg += BISHOP_MOVE[(bishop_moves.count_ones() + tapered_bonus / 2).min(13) as usize];
-        eg += BISHOP_MOVE[(bishop_moves.count_ones() + tapered_bonus / 2).min(13) as usize];
+        let count = bishop_moves.count_ones() as usize;
+        mg += BISHOP_MOVE_MG[count];
+        eg += BISHOP_MOVE_EG[count];
     }
 
     let mut rooks = board.pieces(color, PieceType::Rook);
@@ -126,8 +120,9 @@ pub(super) fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> (
     while let Some(sq) = pop_lsb(&mut rooks) {
         let rook_moves =
             rook_attacks(sq, occupancy) & !friends & !pawn_attacks & !knight_and_bishop_attacks;
-        mg += ROOK_MOVE[(rook_moves.count_ones() + tapered_bonus).min(14) as usize];
-        eg += ROOK_MOVE[(rook_moves.count_ones() + tapered_bonus).min(14) as usize];
+        let count = rook_moves.count_ones() as usize;
+        mg += ROOK_MOVE_MG[count];
+        eg += ROOK_MOVE_EG[count];
     }
 
     let mut queens = board.pieces(color, PieceType::Queen);
@@ -138,8 +133,9 @@ pub(super) fn available_moves(board: &Board, color: Color, info: &EvalInfo) -> (
             & !pawn_attacks
             & !knight_and_bishop_attacks
             & !enemy_rook_attacks;
-        mg += QUEEN_MOVE[(queen_moves.count_ones() + tapered_bonus * 2).min(27) as usize];
-        eg += QUEEN_MOVE[(queen_moves.count_ones() + tapered_bonus * 2).min(27) as usize];
+        let count = queen_moves.count_ones() as usize;
+        mg += QUEEN_MOVE_MG[count];
+        eg += QUEEN_MOVE_EG[count];
     }
 
     (mg, eg)
@@ -172,7 +168,7 @@ pub(super) fn move_aggression(board: &Board, color: Color, info: &EvalInfo) -> (
     let num_pieces = (enemy_half & board.occupancy_of(color)).count_ones() as i32;
 
     let mg = num_attacks + (num_pieces * 4);
-    let eg = mg;
+    let eg = mg / 2;
     (mg, eg)
 }
 
@@ -208,10 +204,9 @@ pub(super) fn space_bonus(board: &Board, color: Color, info: &EvalInfo) -> (i32,
     let available_space =
         space_mask & !info.all_attacks(color.opposite()) & !board.occupancy_of(color.opposite());
 
-    let mut mg = available_space.count_ones() as i32 * 3;
-    let mut eg = mg;
-    mg = scale_by_phase(mg, info.phase(), 8, 16);
-    eg = scale_by_phase(eg, info.phase(), 8, 16);
+    let mg = available_space.count_ones() as i32 * 3;
+    let eg = available_space.count_ones() as i32;
+
     (mg, eg)
 }
 

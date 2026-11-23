@@ -1,11 +1,12 @@
 use crate::bitboard::pop_lsb;
 use crate::board::Board;
 use crate::eval::EvalInfo;
-use crate::eval::MAX_PHASE;
 use crate::eval::eval::MAX_DANGER;
+use crate::eval::eval::blend;
 use crate::eval::king::{
-    defender_danger_bonus, escape_score_danger_bonus, king_eval, king_eval_danger_raw,
-    open_diagonal_danger_bonus, open_file_danger_bonus, pawn_shield_danger_score,
+    KingAttackers, KingPressure, defender_danger_bonus, escape_score_danger_bonus, king_eval,
+    king_eval_danger_raw, king_pressure, open_diagonal_danger_bonus, open_file_danger_bonus,
+    pawn_shield_danger_score,
 };
 use crate::eval::knight::{knight_eval, knight_eval_raw, knight_outpost_bonus};
 use crate::eval::lookup::KING_DANGER_TABLE;
@@ -15,13 +16,14 @@ use crate::eval::mobility::{
 };
 use crate::eval::pawn::{
     backwards_pawn_bonus, center_pawns_bonus, isolated_pawns_bonus, passed_pawn_bonus, pawn_chain,
-    pawn_eval, pawn_eval_raw, pawn_storm_bonus, pawn_tempo_bonus, stacked_pawns_bonus,
+    pawn_eval, pawn_eval_raw, pawn_safe_push, pawn_storm_bonus, pawn_tempo_bonus, phalanx_pawns,
+    stacked_pawns_bonus,
 };
 use crate::eval::pst::{eg_pst_bonus_at, mg_pst_bonus_at};
 use crate::eval::sliders::{
-    bishop_blocked_by_pawns_bonus, bishop_pair_bonus, connected_diagonals_bonus,
-    connected_file_bonus, rook_on_the_seventh, sliders_eval, sliders_eval_raw,
-    straights_on_open_file, straights_xray_bonus, xray_pressure_diagonal_bonus,
+    bishop_blocked_by_pawns_bonus, bishop_long_diagonal_bonus, bishop_pair_bonus,
+    connected_diagonals_bonus, connected_file_bonus, rook_on_open_file_bonus, rook_on_the_seventh,
+    sliders_eval, sliders_eval_raw, straights_xray_bonus,
 };
 use crate::types::{Color, PIECE_TYPES, PieceType};
 
@@ -47,14 +49,24 @@ pub struct EvalBreakdown {
 pub fn evaluation_breakdown(board: &Board) -> EvalBreakdown {
     let eval_info = EvalInfo::calculate(board);
     let phase = board.phase();
-    let eg_phase = MAX_PHASE - phase;
-    let pst = (board.mg_pst() * phase + board.eg_pst() * eg_phase) / MAX_PHASE;
+    // Allocate each term its change in the rounded running total. The rows then
+    // sum to the single tapered division used by the production evaluator.
+    let (mut mg, mut eg, mut rounded) = (0, 0, 0);
+    let mut contribution = |(m, e)| {
+        mg += m;
+        eg += e;
+        let next = blend(mg, eg, phase);
+        let delta = next - rounded;
+        rounded = next;
+        delta
+    };
     let material = board.material();
-    let mobility = mobility_score(board, &eval_info).0;
-    let pawns = pawn_eval(board, &eval_info).0;
-    let knights = knight_eval(board, &eval_info).0;
-    let sliders = sliders_eval(board, &eval_info).0;
-    let king = king_eval(board, &eval_info).0;
+    let pst = contribution((board.mg_pst(), board.eg_pst()));
+    let mobility = contribution(mobility_score(board, &eval_info));
+    let pawns = contribution(pawn_eval(board, &eval_info));
+    let knights = contribution(knight_eval(board, &eval_info));
+    let sliders = contribution(sliders_eval(board, &eval_info));
+    let king = contribution(king_eval(board, &eval_info));
     let tempo = match board.side_to_move() {
         Color::White => 15,
         Color::Black => -15,
@@ -123,44 +135,41 @@ pub(super) fn summary_breakdown(board: &Board, info: &EvalInfo) -> SummaryBreakd
 
     let (white_mg, white_eg) = pst_for_color(board, Color::White);
     let phase = board.phase();
-    let eg_phase = MAX_PHASE - phase;
-    let white_pst = (white_mg * phase + white_eg * eg_phase) / MAX_PHASE;
-
-    // The production evaluator tapers the net PST and performs one integer
-    // division. Allocate any one-centipawn rounding difference to Black so the
-    // displayed White - Black value exactly matches production.
-    let black_pst = white_pst - compact.pst;
+    let component = |name, (mg, eg), net| {
+        let white = blend(mg, eg, phase);
+        ScoreLine::from_sides(name, white, white - net)
+    };
 
     let tempo_white = i32::from(board.side_to_move() == Color::White) * 15;
     let tempo_black = i32::from(board.side_to_move() == Color::Black) * 15;
 
     let components = vec![
         ScoreLine::from_sides("Material", material_white, material_black),
-        ScoreLine::with_net("Piece-square tables", white_pst, black_pst, compact.pst),
-        ScoreLine::from_sides(
+        component("Piece-square tables", (white_mg, white_eg), compact.pst),
+        component(
             "Mobility",
-            mobility_score_raw(board, Color::White, info).0,
-            mobility_score_raw(board, Color::Black, info).0,
+            mobility_score_raw(board, Color::White, info),
+            compact.mobility,
         ),
-        ScoreLine::from_sides(
+        component(
             "Pawns",
-            pawn_eval_raw(board, Color::White, info).0,
-            pawn_eval_raw(board, Color::Black, info).0,
+            pawn_eval_raw(board, Color::White, info),
+            compact.pawns,
         ),
-        ScoreLine::from_sides(
+        component(
             "Knights",
-            knight_eval_raw(board, Color::White, info).0,
-            knight_eval_raw(board, Color::Black, info).0,
+            knight_eval_raw(board, Color::White, info),
+            compact.knights,
         ),
-        ScoreLine::from_sides(
+        component(
             "Sliders",
-            sliders_eval_raw(board, Color::White, info).0,
-            sliders_eval_raw(board, Color::Black, info).0,
+            sliders_eval_raw(board, Color::White, info),
+            compact.sliders,
         ),
-        ScoreLine::from_sides(
+        component(
             "King safety",
-            king_eval_danger_raw(board, Color::White, info).0,
-            king_eval_danger_raw(board, Color::Black, info).0,
+            king_eval_danger_raw(board, Color::White, info),
+            compact.king,
         ),
         ScoreLine::from_sides("Tempo", tempo_white, tempo_black),
     ];
@@ -240,6 +249,16 @@ pub(super) fn pawn_lines(board: &Board, info: &EvalInfo) -> Vec<ScoreLine> {
             pawn_storm_bonus(board, Color::Black, black_pawns, info).0,
         ),
         ScoreLine::from_sides(
+            "Phalanx pawns",
+            phalanx_pawns(board, Color::White, white_pawns, info).0,
+            phalanx_pawns(board, Color::Black, black_pawns, info).0,
+        ),
+        ScoreLine::from_sides(
+            "Safe pawn pushes",
+            pawn_safe_push(board, Color::White, white_pawns, info).0,
+            pawn_safe_push(board, Color::Black, black_pawns, info).0,
+        ),
+        ScoreLine::from_sides(
             "Pawn chain",
             pawn_chain(board, Color::White, white_pawns, info).0,
             pawn_chain(board, Color::Black, black_pawns, info).0,
@@ -317,9 +336,9 @@ pub(super) fn slider_lines(board: &Board, info: &EvalInfo) -> Vec<ScoreLine> {
             connected_diagonals_bonus(board, Color::Black, black_diagonals, info).0,
         ),
         ScoreLine::from_sides(
-            "Diagonal x-ray pressure",
-            xray_pressure_diagonal_bonus(board, Color::White, white_diagonals, info).0,
-            xray_pressure_diagonal_bonus(board, Color::Black, black_diagonals, info).0,
+            "Bishops on long diagonals",
+            bishop_long_diagonal_bonus(board, Color::White).0,
+            bishop_long_diagonal_bonus(board, Color::Black).0,
         ),
         ScoreLine::from_sides(
             "Bishop pair",
@@ -342,9 +361,9 @@ pub(super) fn slider_lines(board: &Board, info: &EvalInfo) -> Vec<ScoreLine> {
             rook_on_the_seventh(board, Color::Black, info).0,
         ),
         ScoreLine::from_sides(
-            "Open/semi-open files",
-            straights_on_open_file(board, Color::White, white_straights, info).0,
-            straights_on_open_file(board, Color::Black, black_straights, info).0,
+            "Rooks on open/semi-open files",
+            rook_on_open_file_bonus(board, Color::White).0,
+            rook_on_open_file_bonus(board, Color::Black).0,
         ),
         ScoreLine::from_sides(
             "Straight x-ray pressure",
@@ -356,6 +375,8 @@ pub(super) fn slider_lines(board: &Board, info: &EvalInfo) -> Vec<ScoreLine> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct KingSideBreakdown {
+    pub attackers: KingAttackers,
+    pub pressure: KingPressure,
     pub attacker_weight: i32,
     pub pawn_shield: i32,
     pub open_files: i32,
@@ -411,18 +432,27 @@ fn side_feature_lines<const N: usize>(
 fn king_side_breakdown(board: &Board, color: Color, info: &EvalInfo) -> KingSideBreakdown {
     let king_sq = info.king_square(color);
     let attacker_weight = info.king_attack_weight(color);
+    let pressure = king_pressure(board, color, info);
     let pawn_shield = pawn_shield_danger_score(board, color, king_sq, info).0;
     let open_files = open_file_danger_bonus(board, color, king_sq, info).0;
     let open_diagonals = open_diagonal_danger_bonus(board, color, king_sq, info).0;
     let escape_squares = escape_score_danger_bonus(board, color, info).0;
     let defenders = defender_danger_bonus(board, color, info).0;
-    let raw_danger =
-        attacker_weight + pawn_shield + open_files + open_diagonals + escape_squares + defenders;
+    let raw_danger = crate::eval::king::base_mg_danger(
+        attacker_weight,
+        pawn_shield,
+        open_files,
+        open_diagonals,
+        escape_squares,
+        defenders,
+    ) + pressure.index_bonus();
     let clamped_danger = raw_danger.clamp(0, MAX_DANGER as i32);
     let table_penalty = -KING_DANGER_TABLE[clamped_danger as usize];
     let final_score = king_eval_danger_raw(board, color, info).0;
 
     KingSideBreakdown {
+        attackers: info.king_attackers[color.idx()],
+        pressure,
         attacker_weight,
         pawn_shield,
         open_files,
@@ -512,7 +542,11 @@ mod tests {
             let breakdown = evaluation_breakdown(&board);
             let summary = summary_breakdown(&board, &EvalInfo::calculate(&board));
 
-            assert_eq!(breakdown.total, evaluation(&board), "FEN: {fen}");
+            assert_eq!(
+                breakdown.total,
+                evaluation(&board, Color::White),
+                "FEN: {fen}"
+            );
             assert_eq!(summary.total.net, breakdown.total, "FEN: {fen}");
             assert_eq!(summary.total.white - summary.total.black, breakdown.total);
         }

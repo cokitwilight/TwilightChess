@@ -123,7 +123,7 @@ impl Board {
     }
 
     pub fn phase(&self) -> i32 {
-        self.phase
+        self.phase.min(MAX_PHASE)
     }
 
     pub fn mg_pst(&self) -> i32 {
@@ -184,19 +184,12 @@ impl Board {
                 Color::Black => -1,
             };
 
-            let pawns = self.pieces(color, PieceType::Pawn).count_ones() as i32;
-            let knights = self.pieces(color, PieceType::Knight).count_ones() as i32;
-            let bishops = self.pieces(color, PieceType::Bishop).count_ones() as i32;
-            let rooks = self.pieces(color, PieceType::Rook).count_ones() as i32;
-            let queens = self.pieces(color, PieceType::Queen).count_ones() as i32;
-
-            material +=
-                sign * (100 * pawns + 310 * knights + 330 * bishops + 500 * rooks + 900 * queens);
-
-            phase += knights + bishops + 2 * rooks + 4 * queens;
+            for piece in PIECE_TYPES {
+                let count = self.pieces(color, piece).count_ones() as i32;
+                material += sign * count * piece.value();
+                phase += count * piece.phase_value();
+            }
         }
-
-        phase = phase.min(MAX_PHASE);
 
         let mg_pst_bonus = crate::eval::pst::mg_pst_bonus(self);
         let eg_pst_bonus = crate::eval::pst::eg_pst_bonus(self);

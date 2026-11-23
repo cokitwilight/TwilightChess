@@ -19,7 +19,7 @@ use crate::engine::staged::ScoredMove;
 use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MATE_THRESHOLD, MAX_PLY, PickerFrame, SearchStackEntry};
 use crate::engine::{SearchContext, SearchOptions};
-use crate::eval::evaluation_for_turn;
+use crate::eval::evaluation;
 use crate::moves::MoveGenInfo;
 use crate::types::PieceType;
 
@@ -64,7 +64,7 @@ impl Engine {
 
         if ply >= MAX_PLY - 1 {
             track_stat!(context.stats.terminal_stats.max_ply_returns += 1);
-            return evaluation_for_turn(board);
+            return evaluation(board, board.side_to_move());
         }
 
         if depth == 0 {
@@ -187,7 +187,7 @@ impl Engine {
         let raw_static_eval = if tt_eval != i16::MIN {
             tt_eval as i32
         } else {
-            evaluation_for_turn(board)
+            evaluation(board, board.side_to_move())
         };
 
         let corrected_static_eval = if self.config.search.correction.enabled {
@@ -1081,7 +1081,7 @@ mod tests {
     fn assert_static_eval_is_available(cached: Option<(u8, i16)>) {
         let mut engine = test_engine();
         let mut board = Board::from_fen("7k/8/8/8/8/8/4Q3/4K3 w - - 0 1").unwrap();
-        let computed_eval = evaluation_for_turn(&board);
+        let computed_eval = evaluation(&board, board.side_to_move());
         assert_ne!(
             computed_eval, 0,
             "the fixture must expose a missing evaluation"

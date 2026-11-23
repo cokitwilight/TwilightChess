@@ -182,13 +182,14 @@ fn parse_castling_rights(s: &str) -> Result<u8, String> {
 mod tests {
     use crate::board::{Board, MoveType};
     use crate::eval::calculate_phase;
-    use crate::eval::material::calculate_material;
     use crate::eval::pst::{eg_pst_bonus, mg_pst_bonus};
 
     fn assert_material_matches_recompute(board: &Board) {
+        let mut rebuilt = board.clone();
+        rebuilt.update_material_and_phase();
         assert_eq!(
             board.material(),
-            calculate_material(board),
+            rebuilt.material(),
             "cached material does not match full recomputation"
         );
     }
@@ -233,11 +234,28 @@ mod tests {
         "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
         // En passant available: white can play e5xd6 en passant
         "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+        "7k/8/8/8/8/8/q7/R3K3 w - - 0 1",
         // Promotion available
         "7k/P7/8/8/8/8/7p/4K3 w - - 0 1",
         // More imbalanced material
         "2r2rk1/pp3ppp/2n1pn2/q2p4/3P4/2PBPN2/PPQ2PPP/R4RK1 w - - 0 1",
     ];
+
+    #[test]
+    fn queen_capture_and_undo_use_the_fen_material_value() {
+        let mut board = Board::from_fen("7k/8/8/8/8/8/q7/R3K3 w - - 0 1").unwrap();
+        assert_eq!(board.material(), -400);
+        let capture = board
+            .all_legal_moves()
+            .iter()
+            .copied()
+            .find(|mv| mv.to() == 8)
+            .unwrap();
+        let undo = board.make_move(capture);
+        assert_eq!(board.material(), 500);
+        board.undo_move(undo);
+        assert_eq!(board.material(), -400);
+    }
 
     #[test]
     fn from_fen_initializes_eval_state_correctly() {

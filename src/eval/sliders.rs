@@ -5,7 +5,7 @@ use crate::bitboard::{
 };
 use crate::board::Board;
 use crate::eval::EvalInfo;
-use crate::eval::eval::{BLACK_SQUARES, CENTER_SQUARES, WHITE_SQUARES};
+use crate::eval::eval::{BLACK_SQUARES, CENTER_4, CENTER_SQUARES, WHITE_SQUARES};
 use crate::eval::lookup::ray_mask;
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
@@ -29,7 +29,7 @@ pub fn sliders_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> (i32, i
     let (term_mg, term_eg) = connected_diagonals_bonus(board, color, diagonal_sliders, info);
     mg += term_mg;
     eg += term_eg;
-    let (term_mg, term_eg) = xray_pressure_diagonal_bonus(board, color, diagonal_sliders, info);
+    let (term_mg, term_eg) = bishop_long_diagonal_bonus(board, color);
     mg += term_mg;
     eg += term_eg;
     let (term_mg, term_eg) = bishop_pair_bonus(board, color);
@@ -46,7 +46,7 @@ pub fn sliders_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> (i32, i
     let (term_mg, term_eg) = rook_on_the_seventh(board, color, info);
     mg += term_mg;
     eg += term_eg;
-    let (term_mg, term_eg) = straights_on_open_file(board, color, straight_sliders, info);
+    let (term_mg, term_eg) = rook_on_open_file_bonus(board, color);
     mg += term_mg;
     eg += term_eg;
     let (term_mg, term_eg) = straights_xray_bonus(board, color, straight_sliders, info);
@@ -58,7 +58,6 @@ pub fn sliders_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> (i32, i
 
 pub(super) fn bishop_pair_bonus(board: &Board, color: Color) -> (i32, i32) {
     let bishops = board.pieces(color, PieceType::Bishop).count_ones();
-<<<<<<< HEAD
     let mut mg = 0;
     let mut eg = mg;
     if bishops >= 2 {
@@ -66,9 +65,6 @@ pub(super) fn bishop_pair_bonus(board: &Board, color: Color) -> (i32, i32) {
         eg += 30;
     }
     (mg, eg)
-=======
-    if bishops >= 2 { 30 } else { 0 }
->>>>>>> origin/main
 }
 
 pub(super) fn bishop_blocked_by_pawns_bonus(
@@ -248,82 +244,17 @@ pub(super) fn connected_diagonals_bonus(
     (mg, eg)
 }
 
-pub(super) fn xray_pressure_diagonal_bonus(
-    board: &Board,
-    color: Color,
-    sliders: Bitboard,
-    info: &EvalInfo,
-) -> (i32, i32) {
-    if sliders == 0 {
-        return (0, 0);
-    }
+pub(super) fn bishop_long_diagonal_bonus(board: &Board, color: Color) -> (i32, i32) {
+    let pawns =
+        board.pieces(Color::White, PieceType::Pawn) | board.pieces(Color::Black, PieceType::Pawn);
+    let mut bishops = board.pieces(color, PieceType::Bishop);
     let mut mg = 0;
-    let mut eg = mg;
-
-    let mut sliders = sliders;
-
-    let enemy_pawns = board.pieces(color.opposite(), PieceType::Pawn);
-    let friendly_pawns = board.pieces(color, PieceType::Pawn);
-
-    let relevant_blockers = enemy_pawns
-        | friendly_pawns
-        | (board.occupancy_of(color.opposite()) & info.attacks(color.opposite(), PieceType::Pawn));
-
-    let directions: &[(i8, i8); 4] = &[(1, 1), (-1, -1), (-1, 1), (1, -1)];
-
-    while let Some(sq) = pop_lsb(&mut sliders) {
-        for (dx, dy) in directions {
-            let full_xray = ray_mask(sq, *dx, *dy);
-
-            if full_xray.count_ones() < 3 {
-                continue;
-            }
-
-            let blocked_ray = bishop_attacks(sq, relevant_blockers) & full_xray;
-
-            mg += blocked_ray.count_ones() as i32 * 2; // prefers longer unblocked rays
-            eg += blocked_ray.count_ones() as i32 * 2;
-
-            let enemy_pawns = full_xray & enemy_pawns;
-
-            let friendly_pawns = full_xray & friendly_pawns;
-
-            // enemy pawns can become targets while friendly pawns generally block the bishop so overvalue friendly pawns
-
-            mg -= (enemy_pawns.count_ones() as i32 + friendly_pawns.count_ones() as i32 * 3) * 4;
-            eg -= (enemy_pawns.count_ones() as i32 + friendly_pawns.count_ones() as i32 * 3) * 4;
-
-            let king_ring = info.king_ring(color.opposite());
-
-            if full_xray & king_ring != 0 {
-                if blocked_ray & king_ring != 0 {
-                    mg += 20; // directly sees the king ring
-                    eg += 20;
-
-                    if (blocked_ray & king_ring)
-                        & (info.attacked_by_two(color.opposite())
-                            & board.occupancy_of(color.opposite()))
-                        != 0
-                    {
-                        mg -= 15;
-                        eg -= 15;
-                        // sees the king ring but the square is defended
-                    } else {
-                        mg += 15;
-                        eg += 15;
-                    }
-                } else {
-                    mg += 10;
-                    eg += 10;
-                }
-            } else {
-                mg -= 10;
-                eg -= 10;
-            }
+    while let Some(sq) = pop_lsb(&mut bishops) {
+        if (bishop_attacks(sq, pawns) & CENTER_4).count_ones() >= 2 {
+            mg += 21;
         }
     }
-
-    (mg, eg)
+    (mg, 0)
 }
 
 pub(super) fn connected_file_bonus(
@@ -466,74 +397,25 @@ pub(super) fn straights_xray_bonus(
     )
 }
 
-pub(super) fn straights_on_open_file(
-    board: &Board,
-    color: Color,
-    sliders: Bitboard,
-    info: &EvalInfo,
-) -> (i32, i32) {
-    if sliders == 0 {
-        return (0, 0);
-    }
-    let mut mg = 0;
-    let mut eg = mg;
-
+pub(super) fn rook_on_open_file_bonus(board: &Board, color: Color) -> (i32, i32) {
     let friendly_pawns = board.pieces(color, PieceType::Pawn);
     let enemy_pawns = board.pieces(color.opposite(), PieceType::Pawn);
-
-    let friendly_occ = board.occupancy_of(color) & !friendly_pawns;
-    let enemy_occ = board.occupancy_of(color.opposite()) & !enemy_pawns;
-
-    // add an xray bonus.
-    // change to if the file is open from the rooks perseptive not the entire file(encourages lifted rooks)
-
-    let mut sliders = sliders;
-
-    while let Some(sq) = pop_lsb(&mut sliders) {
-        let ray = ray_mask(
-            sq,
-            0,
-            match color {
-                Color::White => 1,
-                Color::Black => -1,
-            },
-        );
-        let friendly_pawn_count = (ray & friendly_pawns).count_ones();
-        let enemy_pawn_count =
-            (ray & enemy_pawns & info.attacks(color.opposite(), PieceType::Pawn)).count_ones();
-
-        let total_pawns = friendly_pawn_count + enemy_pawn_count;
-
-        if friendly_pawn_count >= 1 {
-            // later add if the pawn is a passed pawn give a bonus.
-            // NOTE: passed pawn already has a is_defended() bonus so it may double count
+    let mut rooks = board.pieces(color, PieceType::Rook);
+    let (mut mg, mut eg) = (0, 0);
+    while let Some(sq) = pop_lsb(&mut rooks) {
+        let file = FILE_MASKS[file_of(sq) as usize];
+        if file & friendly_pawns != 0 {
             continue;
-        } else if total_pawns != 0 {
-            // semi-open. Although there can be more than 1 enemy pawns these pawns will be doubled and weak anyways
-            mg += 10;
-            eg += 10;
+        }
+        let (file_mg, file_eg) = if file & enemy_pawns == 0 {
+            (21, 10)
         } else {
-            mg += 20;
-            eg += 20;
-        }
-
-        let enemy_pieces = (enemy_occ & ray).count_ones() as i32;
-
-        let friendly_pieces = (friendly_occ & ray).count_ones() as i32;
-
-        mg += (2 * enemy_pieces - friendly_pieces) * 5;
-        eg += (2 * enemy_pieces - friendly_pieces) * 5;
-
-        if ray & info.king_ring(color.opposite()) != 0 {
-            mg += 30;
-            eg += 30;
-        }
+            (9, 3)
+        };
+        mg += file_mg;
+        eg += file_eg;
     }
-
-    (
-        scale_by_phase(mg, info.phase(), 6, 12),
-        scale_by_phase(eg, info.phase(), 6, 12),
-    )
+    (mg, eg)
 }
 
 pub(super) fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo) -> (i32, i32) {

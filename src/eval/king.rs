@@ -1,5 +1,9 @@
 use crate::bitboard::lookup::BETWEEN;
-use crate::bitboard::{Square, bit, file_mask, file_of, pop_lsb};
+use crate::bitboard::{
+    Bitboard, FILE_A, FILE_B, FILE_C, FILE_D, FILE_E, FILE_F, FILE_G, FILE_H, RANK_1, RANK_2,
+    RANK_3, RANK_6, RANK_7, RANK_8, Square, bishop_attacks, bit, file_mask, file_of, king_attacks,
+    knight_attacks, pop_lsb, rook_attacks,
+};
 use crate::board::Board;
 use crate::eval::EvalInfo;
 use crate::eval::eval::MAX_DANGER;
@@ -7,39 +11,172 @@ use crate::eval::lookup::{KING_DANGER_TABLE, KING_PAWN_SHIELD, KING_PAWN_TWO_SHI
 use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
+// Indexed by the defending king's file.
+const KING_FLANK: [Bitboard; 8] = [
+    FILE_A | FILE_B | FILE_C,
+    FILE_A | FILE_B | FILE_C | FILE_D,
+    FILE_A | FILE_B | FILE_C | FILE_D,
+    FILE_C | FILE_D | FILE_E | FILE_F,
+    FILE_C | FILE_D | FILE_E | FILE_F,
+    FILE_E | FILE_F | FILE_G | FILE_H,
+    FILE_E | FILE_F | FILE_G | FILE_H,
+    FILE_F | FILE_G | FILE_H,
+];
+
+pub(super) fn attack_zone(color: Color, square: Square) -> Bitboard {
+    let mut zone = king_attacks(square);
+    match color {
+        Color::White if bit(square) & RANK_1 != 0 => zone |= zone << 8,
+        Color::Black if bit(square) & RANK_8 != 0 => zone |= zone >> 8,
+        _ => {}
+    }
+    match file_of(square) {
+        0 => zone | (zone << 1),
+        7 => zone | (zone >> 1),
+        _ => zone,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct KingAttackers {
+    pub zone: Bitboard,
+    pub pieces: i32,
+    pub weight: i32,
+    pub adjacent_contacts: i32,
+}
+
+impl KingAttackers {
+    // Called once per attacking piece while its individual attack mask is available.
+    pub(super) fn record(&mut self, piece: PieceType, attacks: Bitboard, neighbors: Bitboard) {
+        if attacks & self.zone == 0 {
+            return;
+        }
+        self.pieces += 1;
+        self.weight += match piece {
+            PieceType::Knight => 77,
+            PieceType::Bishop => 55,
+            PieceType::Rook => 44,
+            PieceType::Queen => 10,
+            _ => unreachable!("only non-pawn, non-king attackers are recorded"),
+        };
+        self.adjacent_contacts += (attacks & neighbors).count_ones() as i32;
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct KingPressure {
+    pub flank_contacts: i32,
+    pub weak_squares: i32,
+    pub coordination: i32,
+    pub safe_check_cp: i32,
+    pub unsafe_checks: i32,
+}
+
+impl KingPressure {
+    pub(super) fn index_bonus(self) -> i32 {
+        self.coordination + 3 * self.weak_squares + 2 * self.unsafe_checks
+    }
+
+    pub(super) fn flank_cp(self) -> i32 {
+        6 * self.flank_contacts
+    }
+}
+
+// Score checking destinations on the static attack maps. Multiple safe destinations
+// for the same piece type earn one bonus. Unsafe squares are shared across types.
+fn checking_threats(board: &Board, defender: Color, info: &EvalInfo, weak: Bitboard) -> (i32, i32) {
+    let enemy = defender.opposite();
+    let king = info.king_square(defender);
+    let occupancy = board.all_occupancy() ^ board.pieces(defender, PieceType::Queen);
+    let straight = rook_attacks(king, occupancy);
+    let diagonal = bishop_attacks(king, occupancy);
+    let available = !board.occupancy_of(enemy);
+    let safe = !info.all_attacks(defender) | (weak & info.king_double_attacks[enemy.idx()]);
+    let queen_checks = (straight | diagonal) & !info.attacks(defender, PieceType::Queen);
+    let mut safe_cp = 0;
+    let mut unsafe_squares = 0;
+    for (piece, checks, bonus) in [
+        (PieceType::Queen, queen_checks, 90),
+        (PieceType::Rook, straight, 90),
+        (PieceType::Bishop, diagonal, 45),
+        (PieceType::Knight, knight_attacks(king), 90),
+    ] {
+        let candidates = checks & info.attacks(enemy, piece) & available;
+        if candidates & safe != 0 {
+            safe_cp += bonus;
+        } else if piece != PieceType::Queen {
+            unsafe_squares |= candidates;
+        }
+    }
+    unsafe_squares &= !info.attacks(defender, PieceType::Pawn);
+    (safe_cp, unsafe_squares.count_ones() as i32)
+}
+
+pub(super) fn king_pressure(board: &Board, defender: Color, info: &EvalInfo) -> KingPressure {
+    let enemy = defender.opposite();
+    let attackers = info.king_attackers[defender.idx()];
+    let enemy_attacks = info.all_attacks(enemy);
+    let camp = match defender {
+        Color::White => !(RANK_6 | RANK_7 | RANK_8),
+        Color::Black => !(RANK_1 | RANK_2 | RANK_3),
+    };
+    let flank = KING_FLANK[file_of(info.king_square(defender)) as usize] & camp & enemy_attacks;
+    let weak = enemy_attacks
+        & !info.king_double_attacks[defender.idx()]
+        & (!info.all_attacks(defender)
+            | info.attacks(defender, PieceType::King)
+            | info.attacks(defender, PieceType::Queen));
+    let (safe_check_cp, unsafe_checks) = checking_threats(board, defender, info, weak);
+    let pawn_contacts = (attackers.zone & info.attacks(enemy, PieceType::Pawn)).count_ones() as i32;
+    KingPressure {
+        flank_contacts: (flank.count_ones()
+            + (flank & info.king_double_attacks[enemy.idx()]).count_ones())
+            as i32,
+        weak_squares: (weak & attackers.zone).count_ones() as i32,
+        // Convert SF10's relative piece weights to the engine's smaller danger index.
+        coordination: (attackers.pieces + pawn_contacts) * attackers.weight / 64
+            + attackers.adjacent_contacts,
+        safe_check_cp,
+        unsafe_checks,
+    }
+}
+
 pub fn king_eval(board: &Board, info: &EvalInfo) -> (i32, i32) {
     let (white_mg, white_eg) = king_eval_danger_raw(board, Color::White, info);
     let (black_mg, black_eg) = king_eval_danger_raw(board, Color::Black, info);
     (white_mg - black_mg, white_eg - black_eg)
 }
 
+pub(super) fn base_mg_danger(
+    ring: i32,
+    shield: i32,
+    files: i32,
+    diagonals: i32,
+    escapes: i32,
+    defenders: i32,
+) -> i32 {
+    // Files and defenders share one rounding step. Round half points upward.
+    20 + 3 * ring + shield + diagonals + escapes + (3 * files + defenders + 1).div_euclid(2)
+}
+
 pub fn king_eval_danger_raw(board: &Board, color: Color, info: &EvalInfo) -> (i32, i32) {
-    let mut mg = 0;
-    let mut eg = mg;
-
-    let Some(king_sq) = pop_lsb(&mut board.pieces(color, PieceType::King)) else {
-        panic!("No king in board.pieces in king_eval_danger_raw!");
-    };
-
-    mg += info.king_attack_weight(color);
-    eg += info.king_attack_weight(color);
-    let (term_mg, term_eg) = pawn_shield_danger_score(board, color, king_sq, info);
-    mg += term_mg;
-    eg += term_eg;
-    let (term_mg, term_eg) = open_file_danger_bonus(board, color, king_sq, info);
-    mg += term_mg;
-    eg += term_eg;
-    let (term_mg, term_eg) = open_diagonal_danger_bonus(board, color, king_sq, info);
-    mg += term_mg;
-    eg += term_eg;
-    let (term_mg, term_eg) = escape_score_danger_bonus(board, color, info);
-    mg += term_mg;
-    eg += term_eg;
-    let (term_mg, term_eg) = defender_danger_bonus(board, color, info);
-    mg += term_mg;
-    eg += term_eg;
+    if info.phase() <= 4 {
+        return (0, 0);
+    }
+    let king_sq = info.king_square(color);
+    let pressure = king_pressure(board, color, info);
+    let ring = info.king_attack_weight(color);
+    let shield = pawn_shield_danger_score(board, color, king_sq, info);
+    let files = open_file_danger_bonus(board, color, king_sq, info);
+    let diagonals = open_diagonal_danger_bonus(board, color, king_sq, info);
+    let escapes = escape_score_danger_bonus(board, color, info);
+    let defenders = defender_danger_bonus(board, color, info);
+    let mut mg = base_mg_danger(ring, shield.0, files.0, diagonals.0, escapes.0, defenders.0)
+        + pressure.index_bonus();
+    let mut eg = ring + shield.1 + files.1 + diagonals.1 + escapes.1 + defenders.1;
 
     mg = -KING_DANGER_TABLE[mg.clamp(0, MAX_DANGER as i32) as usize];
+    mg -= pressure.flank_cp() + pressure.safe_check_cp;
     eg = -KING_DANGER_TABLE[eg.clamp(0, MAX_DANGER as i32) as usize];
     mg = scale_by_phase(mg, info.phase(), 4, 12);
     eg = scale_by_phase(eg, info.phase(), 4, 12);
@@ -301,4 +438,91 @@ pub(super) fn defender_danger_bonus(board: &Board, color: Color, info: &EvalInfo
     eg -= local_defenders.count_ones() as i32 * 3;
 
     (mg, eg)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bitboard::{A1, G1, H8, square_from_algebraic};
+
+    fn pressure(fen: &str, defender: Color) -> KingPressure {
+        let board = Board::from_fen(fen).unwrap();
+        king_pressure(&board, defender, &EvalInfo::calculate(&board))
+    }
+
+    #[test]
+    fn middlegame_danger_rounds_the_combined_file_and_defender_weights() {
+        assert_eq!(base_mg_danger(2, -3, 7, 4, 1, -3), 37);
+        assert_eq!(base_mg_danger(0, 0, 1, 0, 0, 0), 22);
+        assert_eq!(base_mg_danger(0, 0, 0, 0, 0, -3), 19);
+    }
+
+    #[test]
+    fn corner_zones_extend_inward_and_leave_the_escape_ring_alone() {
+        let white = attack_zone(Color::White, A1);
+        assert_eq!(white, 0x070707 & !bit(A1));
+        assert_eq!(attack_zone(Color::Black, H8), white.reverse_bits());
+        let board = Board::from_fen("7k/8/8/8/8/8/8/K7 w - - 0 1").unwrap();
+        let info = EvalInfo::calculate(&board);
+        assert_eq!(info.king_ring(Color::White), bit(A1) | king_attacks(A1));
+    }
+
+    #[test]
+    fn flank_counts_contacts_in_camp_and_counts_overlap_twice() {
+        let rook = pressure("k6r/8/8/8/8/8/8/6K1 w - - 0 1", Color::White);
+        let both = pressure("k6r/8/3b4/8/8/8/8/6K1 w - - 0 1", Color::White);
+        let mirrored = pressure("6k1/8/8/8/8/3B4/8/K6R b - - 0 1", Color::Black);
+        assert_eq!(rook.flank_contacts, 5);
+        assert_eq!(both.flank_contacts, 9);
+        assert_eq!(both, mirrored);
+    }
+
+    #[test]
+    fn a_rook_earns_one_safe_check_bonus_or_counts_unsafe_destinations() {
+        // From h8 the rook can give check on a8 or h1. Nb6 covers a8, Nf2 covers h1.
+        for (fen, safe, unsafe_count) in [
+            ("7r/6k1/8/8/8/8/8/K7 w - - 0 1", 90, 0),
+            ("7r/6k1/1N6/8/8/8/8/K7 w - - 0 1", 90, 0),
+            ("7r/6k1/1N6/8/8/8/5N2/K7 w - - 0 1", 0, 2),
+        ] {
+            let value = pressure(fen, Color::White);
+            assert_eq!(
+                (value.safe_check_cp, value.unsafe_checks),
+                (safe, unsafe_count)
+            );
+        }
+    }
+
+    #[test]
+    fn pawn_and_king_together_defend_a_weak_zone_square() {
+        let h3 = bit(square_from_algebraic("h3").unwrap());
+        let bare = pressure("k7/8/4b3/8/8/6K1/8/8 w - - 0 1", Color::White);
+        let board = Board::from_fen("k7/8/4b3/8/8/6K1/6P1/8 w - - 0 1").unwrap();
+        let info = EvalInfo::calculate(&board);
+        assert_ne!(info.king_double_attacks[Color::White.idx()] & h3, 0);
+        assert_eq!(info.attacked_by_two(Color::White) & h3, 0);
+        assert_eq!(
+            king_pressure(&board, Color::White, &info).weak_squares,
+            bare.weak_squares - 1
+        );
+    }
+
+    #[test]
+    fn participants_and_contacts_are_distinct() {
+        let neighbors = king_attacks(G1);
+        let mut group = KingAttackers {
+            zone: attack_zone(Color::White, G1),
+            ..Default::default()
+        };
+        group.record(
+            PieceType::Knight,
+            knight_attacks(square_from_algebraic("g3").unwrap()),
+            neighbors,
+        );
+        group.record(PieceType::Bishop, FILE_A, neighbors);
+        assert_eq!(
+            (group.pieces, group.weight, group.adjacent_contacts),
+            (1, 77, 2)
+        );
+    }
 }

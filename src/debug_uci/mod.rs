@@ -293,7 +293,7 @@ fn run_search_request(
     crate::bitboard::magic::rook_attack_table();
     let mut warmup = Board::from_fen(STARTPOS_FEN).map_err(io::Error::other)?;
     warmup.all_legal_moves();
-    crate::eval::evaluation_for_turn(&warmup);
+    crate::eval::evaluation(&warmup, warmup.side_to_move());
     config.limits = limits;
     let mut engine = Engine::new(config);
     let mut context = SearchContext::new(limits, history.to_vec());
