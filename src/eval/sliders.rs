@@ -61,8 +61,8 @@ pub(super) fn bishop_pair_bonus(board: &Board, color: Color) -> (i32, i32) {
     let mut mg = 0;
     let mut eg = mg;
     if bishops >= 2 {
-        mg += 30;
-        eg += 30;
+        mg += 40;
+        eg += 40;
     }
     (mg, eg)
 }
@@ -86,8 +86,8 @@ pub(super) fn bishop_blocked_by_pawns_bonus(
         let friendly_pawns = (BLACK_SQUARES & CENTER_SQUARES & board.pieces(color, PieceType::Pawn))
             .count_ones() as i32;
 
-        mg -= (2 * enemy_pawns) + (5 * friendly_pawns);
-        eg -= (2 * enemy_pawns) + (5 * friendly_pawns);
+        mg -= (1 * enemy_pawns) + (3 * friendly_pawns);
+        eg -= (1 * enemy_pawns) + (7 * friendly_pawns);
     }
 
     if white_bishop != 0 {
@@ -98,8 +98,8 @@ pub(super) fn bishop_blocked_by_pawns_bonus(
         let friendly_pawns = (WHITE_SQUARES & CENTER_SQUARES & board.pieces(color, PieceType::Pawn))
             .count_ones() as i32;
 
-        mg -= (2 * enemy_pawns) + (5 * friendly_pawns);
-        eg -= (2 * enemy_pawns) + (5 * friendly_pawns);
+        mg -= (1 * enemy_pawns) + (3 * friendly_pawns);
+        eg -= (1 * enemy_pawns) + (7 * friendly_pawns);
     }
 
     (mg, eg)
@@ -145,8 +145,8 @@ pub(super) fn connected_diagonals_bonus(
 
         while let Some(other_sq) = pop_lsb(&mut connected) {
             // connected slider
-            mg += 15;
-            eg += 15;
+            mg += 3;
+            eg += 2;
 
             // remaining bonuses should only apply if the connected sliders are actually powerful
 
@@ -181,11 +181,11 @@ pub(super) fn connected_diagonals_bonus(
 
             if bit(forward_sq) & board.pieces(color, PieceType::Queen) != 0 {
                 // led by the queen
-                mg += 15;
-                eg += 15;
+                mg += 3;
+                eg += 1;
             } else {
-                mg -= 10;
-                eg -= 10;
+                mg -= 2;
+                eg -= 1;
             }
 
             let total_ray_length = (backwards_ray | bit(sq) | forward_ray).count_ones() as i32;
@@ -208,35 +208,35 @@ pub(super) fn connected_diagonals_bonus(
 
             // enemy pawns can become targets while friendly pawns generally block the bishop so overvalue friendly pawns
 
-            mg -= (enemy_pawns.count_ones() as i32 + friendly_pawns.count_ones() as i32 * 3) * 4;
-            eg -= (enemy_pawns.count_ones() as i32 + friendly_pawns.count_ones() as i32 * 3) * 4;
+            mg -= (enemy_pawns.count_ones() as i32 + friendly_pawns.count_ones() as i32 * 3) * 1;
+            eg -= (enemy_pawns.count_ones() as i32 + friendly_pawns.count_ones() as i32 * 3) * 1;
 
             let king_ring = info.king_ring(color.opposite());
 
             if xray & king_ring != 0 {
                 if blocked_ray & king_ring != 0 {
-                    mg += 30; // directly sees the king ring
-                    eg += 30;
+                    mg += 8; // directly sees the king ring
+                    eg += 2;
 
                     if (blocked_ray & king_ring)
                         & (info.attacked_by_two(color.opposite())
                             & board.occupancy_of(color.opposite()))
                         != 0
                     {
-                        mg -= 20;
-                        eg -= 20;
+                        mg -= 4;
+                        eg -= 1;
                         // sees the king ring but the square is defended
                     } else {
-                        mg += 20;
-                        eg += 20;
+                        mg += 4;
+                        eg += 1;
                     }
                 } else {
-                    mg += 10;
-                    eg += 10;
+                    mg += 2;
+                    eg += 1;
                 }
             } else {
-                mg -= 15;
-                eg -= 15;
+                mg -= 3;
+                eg -= 1;
             }
         }
     }
@@ -319,19 +319,19 @@ pub(super) fn connected_file_bonus(
         let blocked = blockers >= 1 || friendly_pawns & ray != 0;
 
         if pawn_count >= 1 || blocked {
-            mg -= 20;
-            eg -= 20;
+            mg -= 3;
+            eg -= 2;
         } else {
-            mg += 40;
-            eg += 40;
+            mg += 6;
+            eg += 5;
         }
 
-        mg += enemy_pieces.count_ones() as i32 * 5;
-        eg += enemy_pieces.count_ones() as i32 * 5;
+        mg += enemy_pieces.count_ones() as i32 * 2;
+        eg += enemy_pieces.count_ones() as i32 * 3;
 
         if info.king_ring(color.opposite()) & file != 0 {
-            mg += 30;
-            eg += 30;
+            mg += 4;
+            eg += 1;
         }
     }
 
@@ -382,12 +382,12 @@ pub(super) fn straights_xray_bonus(
             .max(0)
             - enemy_pawns_on_ray.count_ones() as i32;
 
-        mg += hits * 5; // note open file already gives a bonus to a rook with no pawns on the file
-        eg += hits * 5;
+        mg += hits * 2; // note open file already gives a bonus to a rook with no pawns on the file
+        eg += hits * 3;
 
         if file & info.king_ring(color.opposite()) != 0 {
-            mg += 10;
-            eg += 10;
+            mg += 3;
+            eg += 1;
         }
     }
 
@@ -440,19 +440,19 @@ pub(super) fn rook_on_the_seventh(board: &Board, color: Color, _info: &EvalInfo)
         return (0, 0);
     }
 
-    mg += 10 * count;
-    eg += 10 * count;
+    mg += 2 * count;
+    eg += 4 * count;
 
     if board.pieces(enemy_color, PieceType::King) & last_row != 0 {
         // king trapped by rook
-        mg += 20;
-        eg += 20;
+        mg += 3;
+        eg += 6;
     }
 
     let targets = (board.occupancy_of(enemy_color) & seventh_row).count_ones() as i32;
 
-    mg += targets * 3;
-    eg += targets * 3;
+    mg += targets * 4;
+    eg += targets * 7;
 
     (mg, eg)
 }
