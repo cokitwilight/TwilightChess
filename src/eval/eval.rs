@@ -1,5 +1,5 @@
 use crate::bitboard::{
-    Bitboard, Square, bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square,
+    Bitboard, NOT_FILE_A, NOT_FILE_H, Square, bishop_attacks, bit, king_attacks, knight_attacks,
     pop_lsb, queen_attacks, rook_attacks,
 };
 use crate::board::Board;
@@ -124,15 +124,14 @@ impl EvalInfo {
             let defender_idx = color.opposite().idx();
             let neighbors = king_rings[defender_idx];
 
-            let mut pawns = board.pieces(color, PieceType::Pawn);
-            while let Some(sq) = pop_lsb(&mut pawns) {
-                // OPTIMIZE THIS TO JUST USE SHIFTS
-                let attacks = pawn_attacks_from_square(color, sq);
-
-                attack_counts[color_idx].add(attacks);
-
-                eval_info.attacks[color_idx][PieceType::Pawn.idx()] |= attacks;
-            }
+            let pawns = board.pieces(color, PieceType::Pawn);
+            let (left, right) = match color {
+                Color::White => ((pawns & NOT_FILE_A) << 7, (pawns & NOT_FILE_H) << 9),
+                Color::Black => ((pawns & NOT_FILE_A) >> 9, (pawns & NOT_FILE_H) >> 7),
+            };
+            attack_counts[color_idx].ones = left ^ right;
+            attack_counts[color_idx].twos = left & right;
+            eval_info.attacks[color_idx][PieceType::Pawn.idx()] = left | right;
 
             let mut knights = board.pieces(color, PieceType::Knight);
             while let Some(sq) = pop_lsb(&mut knights) {
@@ -200,7 +199,8 @@ impl EvalInfo {
 
         for defender in COLORS {
             let attacker = defender.opposite();
-            let mut current_king_ring = king_rings[defender.idx()];
+            let mut current_king_ring =
+                king_rings[defender.idx()] & eval_info.all_attacks(attacker);
             let mut danger = 0i32;
 
             while let Some(sq) = pop_lsb(&mut current_king_ring) {

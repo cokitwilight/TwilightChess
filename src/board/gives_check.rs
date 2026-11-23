@@ -1,128 +1,67 @@
-use crate::bitboard::{bit, king_in_check};
+use crate::bitboard::lookup::squares_aligned;
+use crate::bitboard::{
+    Square, bishop_attacks, bit, file_of, knight_attacks, pawn_attacks_from_square, queen_attacks,
+    rank_of, rook_attacks, square,
+};
 use crate::board::{Board, Move, MoveType};
-use crate::types::{Color, PieceType};
+use crate::types::PieceType;
 
 impl Board {
-    // HOTSPOT. TRY TO OPTIMIZE THIS CODE
+    /// Predicts whether a legal move checks the opposing king.
     pub fn move_gives_check(&self, mv: &Move) -> bool {
+        let us = self.side_to_move();
+        let them = us.opposite();
+        let king = self.pieces(them, PieceType::King).trailing_zeros() as Square;
         let from = mv.from();
         let to = mv.to();
+        let target = bit(to);
+        let mut occupied = (self.all_occupancy() & !bit(from)) | target;
 
-        let from_bb = bit(mv.from());
-        let to_bb = bit(mv.to());
-
-        let side_to_move = self.side_to_move();
-
-        let piece = self.piece_at(from).expect("No piece in move_gives_check!");
-
-        let mut all_pieces = self.all_pieces();
-        let mut occupancy = self.all_occupancy();
-
-        if mv.kind() == MoveType::EnPassant || mv.kind() == MoveType::Castle {
-            let mut temp = self.clone();
-
-            temp.make_move(*mv);
-
-            return temp.in_check(temp.side_to_move());
+        if mv.kind() == MoveType::Castle {
+            // Only the castling rook can check. Its old corner cannot block
+            // the ray to its destination, and the king now occupies `to`.
+            let rook_to = (from + to) / 2;
+            return rook_attacks(king, occupied) & bit(rook_to) != 0;
         }
 
-        match mv.kind() {
-            MoveType::Normal => {
-                // move the piece from mv.from -> mv.to
-                all_pieces[side_to_move.idx()][piece.kind.idx()] &= !from_bb;
-                occupancy &= !from_bb;
+        let en_passant = mv.kind() == MoveType::EnPassant;
+        let piece = if en_passant {
+            occupied &= !bit(square(file_of(to), rank_of(from)));
+            PieceType::Pawn
+        } else {
+            mv.promotion()
+                .unwrap_or_else(|| self.piecetype_at(from).expect("missing moving piece"))
+        };
 
-                if let Some(pc) = mv.promotion() {
-                    all_pieces[side_to_move.idx()][pc.idx()] |= to_bb;
-                } else {
-                    all_pieces[side_to_move.idx()][piece.kind.idx()] |= to_bb;
-                }
+        let direct = match piece {
+            PieceType::Pawn => pawn_attacks_from_square(them, king),
+            PieceType::Knight => knight_attacks(king),
+            PieceType::Bishop => bishop_attacks(king, occupied),
+            PieceType::Rook => rook_attacks(king, occupied),
+            PieceType::Queen => queen_attacks(king, occupied),
+            PieceType::King => 0,
+        };
+        if direct & target != 0 {
+            return true;
+        }
 
-                occupancy |= to_bb;
-                king_in_check(&all_pieces, occupancy, side_to_move.opposite())
-            }
-            MoveType::Capture => {
-                let captured_piece = self
-                    .piece_at(to)
-                    .expect("No captured piece in move_gives_check!");
-
-                all_pieces[side_to_move.idx()][piece.kind.idx()] &= !from_bb; // remove the moving piece
-                all_pieces[side_to_move.opposite().idx()][captured_piece.kind.idx()] &= !to_bb; // remove the captured piece
-
-                if let Some(pc) = mv.promotion() {
-                    all_pieces[side_to_move.idx()][pc.idx()] |= to_bb;
-                } else {
-                    all_pieces[side_to_move.idx()][piece.kind.idx()] |= to_bb;
-                }
-
-                occupancy &= !from_bb; // adjust occupancy. Note the to square remains the same
-
-                king_in_check(&all_pieces, occupancy, side_to_move.opposite())
-            }
-            // since these are rare and edge cases just clone the board
-            MoveType::EnPassant => {
-                let captured_sq = match side_to_move {
-                    Color::White => to
-                        .checked_sub(8)
-                        .expect("Invalid white en-passant destination"),
-                    Color::Black => to
-                        .checked_add(8)
-                        .expect("Invalid black en-passant destination"),
-                };
-                let captured_bb = bit(captured_sq);
-
-                // Remove the moving pawn from its original square.
-                all_pieces[side_to_move.idx()][PieceType::Pawn.idx()] &= !from_bb;
-
-                // Remove the captured enemy pawn from its actual square.
-                all_pieces[side_to_move.opposite().idx()][PieceType::Pawn.idx()] &= !captured_bb;
-
-                // Place the moving pawn on the en-passant destination.
-                all_pieces[side_to_move.idx()][PieceType::Pawn.idx()] |= to_bb;
-
-                // Update occupancy for all three affected squares.
-                occupancy &= !from_bb;
-                occupancy &= !captured_bb;
-                occupancy |= to_bb;
-
-                king_in_check(&all_pieces, occupancy, side_to_move.opposite())
-            }
-            MoveType::Castle => {
-                let (rook_from, rook_to) = match (side_to_move, to) {
-                    (Color::White, 6) => (7, 5),    // e1g1: h1 -> f1
-                    (Color::White, 2) => (0, 3),    // e1c1: a1 -> d1
-                    (Color::Black, 62) => (63, 61), // e8g8: h8 -> f8
-                    (Color::Black, 58) => (56, 59), // e8c8: a8 -> d8
-
-                    _ => panic!(
-                        "Invalid castling move in move_gives_check: {:?} -> {:?}",
-                        mv.from(),
-                        mv.to()
-                    ),
-                };
-
-                let rook_from_bb = bit(rook_from);
-                let rook_to_bb = bit(rook_to);
-
-                // Move the king.
-                all_pieces[side_to_move.idx()][PieceType::King.idx()] &= !from_bb;
-                all_pieces[side_to_move.idx()][PieceType::King.idx()] |= to_bb;
-
-                // Move the rook.
-                all_pieces[side_to_move.idx()][PieceType::Rook.idx()] &= !rook_from_bb;
-                all_pieces[side_to_move.idx()][PieceType::Rook.idx()] |= rook_to_bb;
-
-                // Remove both pieces from their original squares.
-                occupancy &= !from_bb;
-                occupancy &= !rook_from_bb;
-
-                // Add both pieces to their destination squares.
-                occupancy |= to_bb;
-                occupancy |= rook_to_bb;
-
-                king_in_check(&all_pieces, occupancy, side_to_move.opposite())
+        // Normally only the source can uncover a slider. En passant vacates two squares.
+        if !en_passant && !squares_aligned(from, king) {
+            return false;
+        }
+        let queens = self.pieces(us, PieceType::Queen);
+        let straight = file_of(from) == file_of(king) || rank_of(from) == rank_of(king);
+        if straight || en_passant {
+            let sliders = (self.pieces(us, PieceType::Rook) | queens) & !bit(from);
+            if rook_attacks(king, occupied) & sliders != 0 {
+                return true;
             }
         }
+        if !straight || en_passant {
+            let sliders = (self.pieces(us, PieceType::Bishop) | queens) & !bit(from);
+            return bishop_attacks(king, occupied) & sliders != 0;
+        }
+        false
     }
 }
 
@@ -171,6 +110,38 @@ mod move_gives_check_tests {
             predicted, actual,
             "move_gives_check disagreed with make_move + in_check"
         );
+    }
+
+    #[test]
+    fn pawn_stays_between_rook_and_king() {
+        let mv = Move::new(28, 36, MoveType::Normal, None); // e4-e5
+        assert_move_gives_check("8/4k3/8/8/4P3/4R3/8/K7 w - - 0 1", mv, false);
+    }
+
+    #[test]
+    fn promoted_slider_checks_from_its_destination() {
+        for piece in [PieceType::Rook, PieceType::Queen] {
+            let mv = Move::new(50, 58, MoveType::Normal, Some(piece)); // c7-c8
+            assert_move_gives_check("8/2P4k/8/8/8/8/8/K7 w - - 0 1", mv, false);
+        }
+        for piece in [PieceType::Bishop, PieceType::Queen] {
+            let mv = Move::new(54, 63, MoveType::Capture, Some(piece)); // g7xh8
+            assert_move_gives_check("7r/6P1/5k2/8/8/8/8/K7 w - - 0 1", mv, true);
+        }
+    }
+
+    #[test]
+    fn en_passant_opens_rank_through_both_pawns() {
+        let white = Move::new(36, 43, MoveType::EnPassant, None); // e5xd6
+        assert_move_gives_check("8/8/8/R2pP2k/8/8/8/K7 w - d6 0 1", white, true);
+        let black = Move::new(28, 19, MoveType::EnPassant, None); // e4xd3
+        assert_move_gives_check("k7/8/8/8/r2Pp2K/8/8/8 b - d3 0 1", black, true);
+    }
+
+    #[test]
+    fn castling_away_from_enemy_kings_file_is_not_check() {
+        let mv = Move::new(4, 6, MoveType::Castle, None);
+        assert_move_gives_check("4k3/8/8/8/8/8/8/4K2R w K - 0 1", mv, false);
     }
 
     #[test]

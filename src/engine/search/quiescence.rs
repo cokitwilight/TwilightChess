@@ -1,3 +1,4 @@
+use crate::bitboard::{Square, queen_attacks};
 use crate::board::{Board, Move, MoveType};
 use crate::engine::SearchContext;
 use crate::engine::config::{CHECKMATE_SCORE, MATE_THRESHOLD, NEG_INF};
@@ -10,7 +11,7 @@ use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MAX_PLY, PickerFrame};
 use crate::eval::evaluation;
 use crate::moves::MoveGenInfo;
-use crate::types::PieceType;
+use crate::types::{Color, PieceType};
 
 // const LAZY_MARGIN: i32 = 300;
 
@@ -156,8 +157,21 @@ impl Engine {
             )
         };
 
-        let info = MoveGenInfo::calculate(board, side_to_move);
-        let mut pending_move = move_picker.get_next(board, &info, context, &self.history);
+        // Outside check, a pawn off every ray from its king can always push into an empty square.
+        let has_legal_push = !in_check && {
+            let empty = !board.all_occupancy();
+            let push_sources = match side_to_move {
+                Color::White => empty >> 8,
+                Color::Black => empty << 8,
+            };
+            let king = board.pieces(side_to_move, PieceType::King).trailing_zeros() as Square;
+            board.pieces(side_to_move, PieceType::Pawn) & push_sources & !queen_attacks(king, 0)
+                != 0
+        };
+        let info = (!has_legal_push).then(|| MoveGenInfo::calculate(board, side_to_move));
+        let mut pending_move = info
+            .as_ref()
+            .and_then(|info| move_picker.get_next(board, info, context, &self.history));
 
         let mut raw_static_eval = i16::MIN as i32;
 
@@ -195,7 +209,9 @@ impl Engine {
                 return fallback;
             }
         } else {
-            if pending_move.is_none() {
+            if let Some(info) = &info
+                && pending_move.is_none()
+            {
                 // A capture-only picker cannot distinguish stalemate from a
                 // position with only quiet moves. Probe one move from a main
                 // picker on a separate frame while this picker remains alive.
@@ -210,7 +226,7 @@ impl Engine {
                 );
 
                 if legal_move_picker
-                    .get_next(board, &info, context, &self.history)
+                    .get_next(board, info, context, &self.history)
                     .is_none()
                 {
                     track_stat!(context.stats.terminal_stats.stalemates += 1);
@@ -282,6 +298,7 @@ impl Engine {
             }
         }
 
+        let info = info.unwrap_or_else(|| MoveGenInfo::calculate(board, side_to_move));
         #[cfg(feature = "search-stats")]
         let mut searched_moves = 0;
 
@@ -457,6 +474,8 @@ mod tests {
         let cases = [
             ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", -CHECKMATE_SCORE),
             ("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", 0),
+            // g3 is empty, but moving the g2 pawn would expose the king to Be4.
+            ("8/8/8/8/4b3/8/5kP1/5n1K w - - 0 1", 0),
         ];
 
         for (fen, expected) in cases {

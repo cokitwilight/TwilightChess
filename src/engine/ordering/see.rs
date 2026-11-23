@@ -49,7 +49,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
         panic!("Castle move found in SEE!");
     }
 
-    let mut gains: Vec<i32> = Vec::with_capacity(32);
+    // Each recapture consumes a distinct source square.
+    let mut gains = [0; 64];
 
     let mut initial_gain = victim_value;
 
@@ -57,7 +58,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
         initial_gain += promotion.value() - PieceType::Pawn.value();
     }
 
-    gains.push(initial_gain);
+    gains[0] = initial_gain;
+    let mut gain_count = 1;
 
     let from_mask = bit(mv.from());
 
@@ -145,7 +147,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
                 captured_value
             };
 
-            gains.push(gain);
+            gains[gain_count] = gain;
+            gain_count += 1;
 
             captured_value = if is_promotion_sq {
                 PieceType::Queen.value()
@@ -175,7 +178,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
             }
             attackers &= !attacker_mask;
 
-            gains.push(captured_value);
+            gains[gain_count] = captured_value;
+            gain_count += 1;
 
             captured_value = PieceType::Knight.value();
 
@@ -202,7 +206,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
             }
             // legal bishop capture
 
-            gains.push(captured_value);
+            gains[gain_count] = captured_value;
+            gain_count += 1;
 
             captured_value = PieceType::Bishop.value();
 
@@ -234,7 +239,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
 
             // legal rook capture
 
-            gains.push(captured_value);
+            gains[gain_count] = captured_value;
+            gain_count += 1;
 
             captured_value = PieceType::Rook.value();
 
@@ -263,7 +269,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
                 continue;
             }
 
-            gains.push(captured_value);
+            gains[gain_count] = captured_value;
+            gain_count += 1;
 
             captured_value = PieceType::Queen.value();
 
@@ -317,7 +324,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
                 break;
             }
 
-            gains.push(captured_value);
+            gains[gain_count] = captured_value;
+            gain_count += 1;
 
             // should be the last capture anyways.
             // since we break none of this is needed.
@@ -327,8 +335,8 @@ pub fn see(board: &Board, mv: Move, victim: Option<PieceType>) -> i32 {
     }
 
     let mut value = 0;
-    for i in (1..gains.len()).rev() {
-        value = max(0, gains[i] - value);
+    for &gain in gains[1..gain_count].iter().rev() {
+        value = max(0, gain - value);
     }
     gains[0] - value
 }
