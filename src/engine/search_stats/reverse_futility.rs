@@ -5,14 +5,14 @@ use crate::engine::search_stats::formatting::{
 
 #[derive(Clone, Copy, Debug, Default)]
 #[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
-pub struct ReverseFutilityStats {
+pub struct DepthPruningStats {
     pub attempts: u64,
     pub cutoffs: u64,
     pub attempts_by_depth: DepthHistogram,
     pub cutoffs_by_depth: DepthHistogram,
 }
 
-impl ReverseFutilityStats {
+impl DepthPruningStats {
     pub(super) fn has_data(&self) -> bool {
         self.attempts > 0
             || self.cutoffs > 0
@@ -20,12 +20,12 @@ impl ReverseFutilityStats {
             || self.cutoffs_by_depth.total() > 0
     }
 
-    pub(super) fn print(&self) {
+    pub(super) fn print(&self, title: &str) {
         if !self.has_data() {
             return;
         }
 
-        subsection("Reverse futility pruning");
+        subsection(title);
         submetric_count("Attempts", self.attempts);
         submetric_count("Cutoffs", self.cutoffs);
         if self.attempts > 0 {
@@ -39,7 +39,7 @@ impl ReverseFutilityStats {
 }
 
 impl_counter_stats_ops!(
-    ReverseFutilityStats,
+    DepthPruningStats,
     attempts,
     cutoffs,
     attempts_by_depth,

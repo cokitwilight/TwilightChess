@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use crate::opening::OpeningBook;
 use crate::tournament::results::GameResult;
 use crate::tournament::{MatchPlayers, NotableGame, NotableReason, TournamentResult, run_game};
-use crate::types::Color;
+use crate::types::{Color, Score};
 
 pub fn play_games(
     opening_suite: OpeningBook,
@@ -83,8 +83,8 @@ pub fn play_games(
                     let game = g;
 
                     // eval is from whites perspective
-                    let mut smallest_eval = 30000;
-                    let mut largest_eval = -30000;
+                    let mut smallest_eval = Score::INFINITE;
+                    let mut largest_eval = -Score::INFINITE;
 
                     let mut average_eval = 0;
                     let mut total = 0;

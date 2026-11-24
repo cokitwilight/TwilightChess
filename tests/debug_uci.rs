@@ -75,7 +75,6 @@ impl Client {
         self.send("uci");
         self.until("uciok");
         self.send("setoption name Hash value 1");
-        self.send("setoption name limits.max_q_depth value 3");
         self.ready();
     }
     fn search(&mut self, go: &str) -> Vec<String> {
@@ -112,7 +111,6 @@ fn advertises_actual_defaults_and_runs_the_normal_instrumented_search() {
     .unwrap();
     assert_eq!(schema["defaults"]["search"]["lmr"]["history_scale"], 94);
     client.send("setoption name Hash value 1");
-    client.send("setoption name limits.max_q_depth value 3");
     client.ready();
     let lines = client.search("go depth 2");
     let result = report(&lines);
@@ -133,7 +131,7 @@ fn advertises_actual_defaults_and_runs_the_normal_instrumented_search() {
     let board = Board::from_fen(STARTPOS_FEN).unwrap();
     let cfg = EngineConfig {
         tt_size: 1,
-        limits: SearchLimits::depth(2, 3),
+        limits: SearchLimits::depth(2),
         ..EngineConfig::default()
     };
     let normal = Engine::new(cfg).search(

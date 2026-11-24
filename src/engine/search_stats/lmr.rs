@@ -21,6 +21,8 @@ pub struct LmrStats {
     pub history_reductions: u64,
     pub non_improving_adjustments: u64,
     pub non_improving_effects: u64,
+    pub cut_node_adjustments: u64,
+    pub cut_node_effects: u64,
     pub pv_adjustments: u64,
     pub pv_effects: u64,
     pub capture_adjustments: u64,
@@ -77,6 +79,7 @@ impl LmrStats {
 
         let modifier_adjustments = self.history_adjustments
             + self.non_improving_adjustments
+            + self.cut_node_adjustments
             + self.pv_adjustments
             + self.capture_adjustments
             + self.check_adjustments;
@@ -93,6 +96,7 @@ impl LmrStats {
                 self.non_improving_effects,
             );
             self.print_modifier("PV node", self.pv_adjustments, self.pv_effects);
+            self.print_modifier("Cut node", self.cut_node_adjustments, self.cut_node_effects);
             self.print_modifier("Capture", self.capture_adjustments, self.capture_effects);
             self.print_modifier("Gives check", self.check_adjustments, self.check_effects);
 
@@ -192,6 +196,8 @@ impl_counter_stats_ops!(
     history_reductions,
     non_improving_adjustments,
     non_improving_effects,
+    cut_node_adjustments,
+    cut_node_effects,
     pv_adjustments,
     pv_effects,
     capture_adjustments,

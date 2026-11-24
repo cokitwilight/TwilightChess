@@ -24,13 +24,17 @@ mod aspiration;
 mod correction_history;
 mod cutoffs;
 mod draws;
+mod estimated_score;
 mod formatting;
 mod futility;
 mod histogram;
 mod history;
+mod improvement;
 mod iterative_deepening;
 mod lmp;
 mod lmr;
+mod main_see;
+mod mate_distance;
 mod move_ordering;
 mod moves;
 mod nodes;
@@ -49,6 +53,7 @@ pub use correction_history::{
 };
 pub use cutoffs::CutoffStats;
 pub use draws::DrawStats;
+pub use estimated_score::EstimatedScoreStats;
 pub use futility::FutilityStats;
 pub use histogram::{
     CORRECTION_MAGNITUDE_BUCKETS, CorrectionMagnitudeHistogram, DepthHistogram, Histogram,
@@ -56,9 +61,12 @@ pub use histogram::{
     ReductionHistogram,
 };
 pub use history::HistoryStats;
+pub use improvement::{ImprovementGroupStats, ImprovementStats};
 pub use iterative_deepening::IterativeDeepeningStats;
 pub use lmp::LmpStats;
 pub use lmr::LmrStats;
+pub use main_see::MainSeeStats;
+pub use mate_distance::MateDistanceStats;
 pub use move_ordering::MoveOrderingStats;
 pub use moves::MoveStats;
 pub use nodes::NodeStats;
@@ -66,7 +74,7 @@ pub use null_move::NullMoveStats;
 pub use pvs::PvsStats;
 pub use quiescence::QuiescenceStats;
 pub use quiescence_pruning::QuiescencePruningStats;
-pub use reverse_futility::ReverseFutilityStats;
+pub use reverse_futility::{DepthPruningStats, DepthPruningStats as ReverseFutilityStats};
 pub use singular_extensions::SingularExtensionStats;
 pub use terminal::TerminalStats;
 pub use transposition_table::TranspositionTableStats;
@@ -95,6 +103,7 @@ pub(crate) use track_stat;
 #[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct SearchStats {
     pub node_stats: NodeStats,
+    pub improvement_stats: ImprovementStats,
     pub iterative_deepening_stats: IterativeDeepeningStats,
     pub move_stats: MoveStats,
     pub cutoff_stats: CutoffStats,
@@ -105,8 +114,12 @@ pub struct SearchStats {
     pub correction_stats: CorrectionHistoryStats,
     pub lmp_stats: LmpStats,
     pub lmr_stats: LmrStats,
+    pub estimated_score_stats: EstimatedScoreStats,
+    pub mate_distance_stats: MateDistanceStats,
+    pub razoring_stats: DepthPruningStats,
     pub rfp_stats: ReverseFutilityStats,
     pub fut_stats: FutilityStats,
+    pub main_see_stats: MainSeeStats,
     pub null_move_stats: NullMoveStats,
     pub q_pruning_stats: QuiescencePruningStats,
     pub quiescence_stats: QuiescenceStats,
@@ -134,6 +147,7 @@ impl SearchStats {
         report_header(title);
 
         self.print_nodes(elapsed_secs);
+        self.improvement_stats.print(self.node_stats.main);
         self.print_iterative_deepening();
         self.print_moves();
         self.print_cutoffs();
@@ -142,6 +156,7 @@ impl SearchStats {
         self.print_aspiration();
         self.print_history();
         self.print_correction_history();
+        self.estimated_score_stats.print();
         self.print_reductions();
         self.print_main_pruning();
         self.print_quiescence();
@@ -195,19 +210,25 @@ impl SearchStats {
     }
 
     pub fn print_main_pruning(&self) {
-        if !self.rfp_stats.has_data()
+        if self.mate_distance_stats.checks == 0
+            && !self.razoring_stats.has_data()
+            && !self.rfp_stats.has_data()
             && !self.fut_stats.has_data()
             && !self.lmp_stats.has_data()
             && !self.null_move_stats.has_data()
+            && !self.main_see_stats.has_data()
         {
             return;
         }
 
         section("Main-Search Pruning");
-        self.rfp_stats.print();
+        self.mate_distance_stats.print();
+        self.razoring_stats.print("Razoring");
+        self.rfp_stats.print("Reverse futility pruning");
         self.lmp_stats.print();
         self.fut_stats.print();
         self.null_move_stats.print();
+        self.main_see_stats.print();
     }
 
     pub fn print_q_pruning(&self) {
@@ -248,6 +269,7 @@ impl Sub for SearchStats {
     fn sub(self, rhs: Self) -> Self {
         Self {
             node_stats: self.node_stats - rhs.node_stats,
+            improvement_stats: self.improvement_stats - rhs.improvement_stats,
             iterative_deepening_stats: self.iterative_deepening_stats
                 - rhs.iterative_deepening_stats,
             move_stats: self.move_stats - rhs.move_stats,
@@ -259,8 +281,12 @@ impl Sub for SearchStats {
             correction_stats: self.correction_stats - rhs.correction_stats,
             lmp_stats: self.lmp_stats - rhs.lmp_stats,
             lmr_stats: self.lmr_stats - rhs.lmr_stats,
+            estimated_score_stats: self.estimated_score_stats - rhs.estimated_score_stats,
+            mate_distance_stats: self.mate_distance_stats - rhs.mate_distance_stats,
+            razoring_stats: self.razoring_stats - rhs.razoring_stats,
             rfp_stats: self.rfp_stats - rhs.rfp_stats,
             fut_stats: self.fut_stats - rhs.fut_stats,
+            main_see_stats: self.main_see_stats - rhs.main_see_stats,
             null_move_stats: self.null_move_stats - rhs.null_move_stats,
             q_pruning_stats: self.q_pruning_stats - rhs.q_pruning_stats,
             quiescence_stats: self.quiescence_stats - rhs.quiescence_stats,
@@ -275,6 +301,7 @@ impl Sub for SearchStats {
 impl AddAssign for SearchStats {
     fn add_assign(&mut self, rhs: Self) {
         self.node_stats += rhs.node_stats;
+        self.improvement_stats += rhs.improvement_stats;
         self.iterative_deepening_stats += rhs.iterative_deepening_stats;
         self.move_stats += rhs.move_stats;
         self.cutoff_stats += rhs.cutoff_stats;
@@ -285,8 +312,12 @@ impl AddAssign for SearchStats {
         self.correction_stats += rhs.correction_stats;
         self.lmp_stats += rhs.lmp_stats;
         self.lmr_stats += rhs.lmr_stats;
+        self.estimated_score_stats += rhs.estimated_score_stats;
+        self.mate_distance_stats += rhs.mate_distance_stats;
+        self.razoring_stats += rhs.razoring_stats;
         self.rfp_stats += rhs.rfp_stats;
         self.fut_stats += rhs.fut_stats;
+        self.main_see_stats += rhs.main_see_stats;
         self.null_move_stats += rhs.null_move_stats;
         self.q_pruning_stats += rhs.q_pruning_stats;
         self.quiescence_stats += rhs.quiescence_stats;
@@ -344,6 +375,8 @@ mod tests {
         total.lmr_stats.dynamic_searches = 5;
         total.lmr_stats.dynamic_searches_at_modified_depth = 4;
         total.fut_stats.pruned_moves = 7;
+        total.null_move_stats.reduction_histogram.bins[4] = 3;
+        total.null_move_stats.cutoffs_by_reduction.bins[4] = 2;
         total.correction_stats.record(8);
         total.correction_stats.record(-16);
 
@@ -358,6 +391,8 @@ mod tests {
         additional.lmr_stats.dynamic_searches = 2;
         additional.lmr_stats.dynamic_searches_at_modified_depth = 1;
         additional.fut_stats.pruned_moves = 2;
+        additional.null_move_stats.reduction_histogram.bins[4] = 2;
+        additional.null_move_stats.cutoffs_by_reduction.bins[4] = 1;
         additional.correction_stats.record(25);
 
         total += additional;
@@ -373,6 +408,10 @@ mod tests {
         assert_eq!(total.lmr_stats.dynamic_searches, 7);
         assert_eq!(total.lmr_stats.dynamic_searches_at_modified_depth, 5);
         assert_eq!(total.fut_stats.pruned_moves, 9);
+        assert_eq!(total.null_move_stats.reduction_histogram.bins[4], 5);
+        assert_eq!(total.null_move_stats.cutoffs_by_reduction.bins[4], 3);
+        assert_eq!(delta.null_move_stats.reduction_histogram.bins[4], 3);
+        assert_eq!(delta.null_move_stats.cutoffs_by_reduction.bins[4], 2);
         assert_eq!(total.correction_stats.lookups, 3);
         assert_eq!(total.correction_stats.magnitude_histogram.total(), 3);
         assert_eq!(delta.node_stats.main, 100);
@@ -482,7 +521,7 @@ mod tests {
         let result = engine.search(
             &game.board,
             &mut crate::engine::SearchContext::new(
-                SearchLimits::depth(4, 4),
+                SearchLimits::depth(4),
                 game.repetition_history.clone(),
             ),
             false,
@@ -491,6 +530,24 @@ mod tests {
         let stats = result.stats;
 
         assert!(stats.total_nodes() > 0);
+        assert!(stats.node_stats.cut > 0);
+        assert!(stats.node_stats.cut <= stats.node_stats.non_pv);
+        assert!(stats.improvement_stats.improving > 0);
+        assert!(stats.improvement_stats.non_improving > 0);
+        assert!(stats.improvement_stats.samples() <= stats.node_stats.main);
+        assert_eq!(
+            stats.improvement_stats.strong.nodes + stats.improvement_stats.weak.nodes,
+            stats.improvement_stats.improving
+        );
+        assert!(
+            stats
+                .improvement_stats
+                .not_reached_nodes(stats.node_stats.main)
+                > 0
+        );
+        assert!(
+            stats.improvement_stats.invalid_previous_ply_eval <= stats.improvement_stats.samples()
+        );
         assert_eq!(
             stats.iterative_deepening_stats.nodes_by_depth.total(),
             stats.total_nodes()
@@ -546,6 +603,18 @@ mod tests {
         assert_eq!(
             stats.null_move_stats.attempts_by_depth.total(),
             stats.null_move_stats.attempts
+        );
+        assert_eq!(
+            stats.null_move_stats.reduction_histogram.total(),
+            stats.null_move_stats.attempts
+        );
+        assert_eq!(
+            stats.null_move_stats.cutoffs_by_depth.total(),
+            stats.null_move_stats.cutoffs
+        );
+        assert_eq!(
+            stats.null_move_stats.cutoffs_by_reduction.total(),
+            stats.null_move_stats.cutoffs
         );
         assert_eq!(
             stats.tt_stats.main.exact_hits

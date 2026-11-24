@@ -235,6 +235,11 @@ mod tests {
         "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
         // Promotion available
         "7k/P7/8/8/8/8/7p/4K3 w - - 0 1",
+        // A queen imbalance exercises FEN material initialization and a subsequent capture.
+        "7k/8/8/8/8/8/q7/R6K w - - 0 1",
+        // A promotion can take raw phase above 24. Reloading must preserve the excess for captures.
+        "rnbqkbnr/2Pppppp/8/8/8/8/1PPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "rRbqkbnr/3ppppp/8/8/8/8/1PPPPPPP/RNBQKBNR b KQkq - 0 1",
         // More imbalanced material
         "2r2rk1/pp3ppp/2n1pn2/q2p4/3P4/2PBPN2/PPQ2PPP/R4RK1 w - - 0 1",
     ];

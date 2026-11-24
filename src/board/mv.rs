@@ -84,6 +84,10 @@ impl Move {
         self.mv.get() & FLAGS_MASK == CASTLE
     }
 
+    pub fn is_quiet(self) -> bool {
+        self.mv.get() & FLAGS_MASK == NORMAL && self.mv.get() & IS_PROMOTION == 0
+    }
+
     pub fn from(self) -> Square {
         (self.mv.get() & SQUARE_MASK) as Square
     }

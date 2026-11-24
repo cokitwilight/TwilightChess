@@ -2,13 +2,13 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::board::Board;
-use crate::engine::config::{CHECKMATE_SCORE, NEG_INF, POS_INF};
 use crate::engine::search::nodetype::Root;
 use crate::engine::search_stats::{SearchStats, fmt_nps, median_f64, track_stat};
 use crate::engine::{
     Engine, MAX_PV, PickerFrame, SearchContext, SearchOptions, SearchResult, SearchTermination,
 };
 use crate::moves::MoveGenInfo;
+use crate::types::Score;
 
 // for debug printing
 use thousands::Separable;
@@ -38,7 +38,7 @@ impl Engine {
             // A zero-duration/node limit can expire before depth one completes.
             // Keep a legal fallback so callers such as run_game can still move.
             best_move: fallback_move,
-            eval: 0,
+            eval: Score::ZERO,
             depth_reached: 0,
             seldepth: 0,
             stats: SearchStats::default(),
@@ -50,6 +50,7 @@ impl Engine {
         };
 
         let mut cumulative_stats = ctx.stats;
+        let mut last_iteration_summary = None;
 
         let mut total_time: f64 = 0.0;
 
@@ -73,21 +74,19 @@ impl Engine {
 
             ctx.seldepth = 0;
 
+            // Keep exact iteration extrema; cumulative extrema cannot be
+            // subtracted to recover an iteration's minimum and maximum.
+            let improvement_before = std::mem::take(&mut ctx.stats.improvement_stats);
             let stats_before = ctx.stats;
 
             let start = Instant::now();
 
-            let full_alpha = NEG_INF + 1;
-            let full_beta = POS_INF - 1;
-
-            debug_assert!(
-                CHECKMATE_SCORE + mate_margin < full_beta,
-                "POS_INF must be much larger than CHECKMATE_SCORE"
-            );
+            let full_alpha = -Score::INFINITE;
+            let full_beta = Score::INFINITE;
 
             let previous_eval = best_result.eval;
 
-            let previous_is_mate_score = previous_eval.abs() >= CHECKMATE_SCORE - mate_margin;
+            let previous_is_mate_score = previous_eval.abs() >= Score::MATE - mate_margin;
 
             let use_aspiration =
                 depth > 1 && !previous_is_mate_score && self.config.search.aspiration.enabled;
@@ -116,6 +115,7 @@ impl Engine {
             let mut aspiration_attempt = 0;
 
             let result = loop {
+                debug_assert!(full_alpha <= alpha && alpha < beta && beta <= full_beta);
                 #[cfg(feature = "search-stats")]
                 let nodes_before_attempt = ctx.stats.total_nodes();
 
@@ -159,10 +159,11 @@ impl Engine {
                 }
 
                 if ctx.should_stop() {
+                    ctx.stats.improvement_stats += improvement_before;
                     break 'depth_loop;
                 }
 
-                let result_is_mate_score = result.eval.abs() >= CHECKMATE_SCORE - mate_margin;
+                let result_is_mate_score = result.eval.abs() >= Score::MATE - mate_margin;
 
                 // Exact score.
                 if result.eval > alpha && result.eval < beta {
@@ -237,18 +238,23 @@ impl Engine {
 
             let elapsed_secs = elapsed.as_secs_f64();
             let depth_stats = ctx.stats - stats_before;
+            ctx.stats.improvement_stats += improvement_before;
 
             cumulative_stats += depth_stats;
 
             let depth_nodes = depth_stats.total_nodes();
 
-            cumulative_stats
-                .iterative_deepening_stats
-                .record_iteration(depth, depth_nodes);
+            cumulative_stats.iterative_deepening_stats.record_iteration(
+                depth,
+                depth_nodes,
+                result.seldepth,
+            );
 
-            ctx.stats
-                .iterative_deepening_stats
-                .record_iteration(depth, depth_nodes);
+            ctx.stats.iterative_deepening_stats.record_iteration(
+                depth,
+                depth_nodes,
+                result.seldepth,
+            );
 
             let depth_nps = if elapsed_secs > 0.0 {
                 depth_nodes as f64 / elapsed_secs
@@ -292,9 +298,10 @@ impl Engine {
                     estimated_node_growth,
                 );
 
-                println!(
-                    "Depth: {}. Eval: {}. Time: {:.3}s. NPS: {} | Avg: {} | Median: {} | Weighted: {}",
+                let summary = format!(
+                    "Depth: {}. SelDepth: {}. Eval: {}. Time: {:.3}s. NPS: {} | Avg: {} | Median: {} | Weighted: {}",
                     depth,
+                    result.seldepth,
                     result.eval,
                     elapsed_secs,
                     fmt_nps(depth_nps),
@@ -302,6 +309,8 @@ impl Engine {
                     fmt_nps(median_nps),
                     fmt_nps(weighted_avg_nps),
                 );
+                println!("{summary}");
+                last_iteration_summary = Some(summary);
             }
 
             if ctx.should_stop() {
@@ -329,17 +338,20 @@ impl Engine {
         };
 
         if can_print {
+            track_stat! {
+                println!();
+                println!("Cumulative Stats:");
+                cumulative_stats.print_all(best_result.depth_reached, total_time);
+            }
+            if let Some(summary) = last_iteration_summary {
+                println!("\n{summary}");
+            }
             println!(
                 "\nFinal Eval: {}. Total Time: {:.3}. Total NPS: {}\n",
                 best_result.eval,
                 total_time,
                 format!("{:.2}", total_nps).separate_with_commas()
             );
-            track_stat! {
-                println!();
-                println!("Cumulative Stats:");
-                cumulative_stats.print_all(best_result.depth_reached, total_time);
-            }
         }
 
         best_result.stats = ctx.stats;
@@ -362,6 +374,58 @@ mod tests {
     use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt};
 
     #[test]
+    #[cfg(feature = "search-stats")]
+    fn improvement_totals_survive_completed_and_interrupted_iterations() {
+        for max_nodes in [None, Some(2048)] {
+            let config = EngineConfig {
+                tt_size: 1,
+                ..EngineConfig::standard()
+            };
+            let mut limits = SearchLimits::depth(if max_nodes.is_some() { 20 } else { 3 });
+            limits.max_nodes = max_nodes;
+            let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
+            let mut context = SearchContext::new(limits, vec![board.board_hash()]);
+            context.stats.improvement_stats.record(-1_000_000);
+            context.stats.improvement_stats.record(1_000_000);
+            context.stats.improvement_stats.strong.record(1_000_000);
+            context.stats.improvement_stats.record(500_000);
+            context.stats.improvement_stats.weak.record(500_000);
+            context.stats.improvement_stats.invalid_previous_ply_eval = 10;
+
+            let result = Engine::new(config).search(&board, &mut context, false, false);
+            let stats = result.stats.improvement_stats;
+            assert!(stats.samples() > 2);
+            assert_eq!(stats.highest_improvement, Some(1_000_000));
+            assert_eq!(stats.lowest_improvement, Some(-1_000_000));
+            assert_eq!(stats.samples(), context.stats.improvement_stats.samples());
+            assert_eq!(stats.strong.max_improvement, Some(1_000_000));
+            assert_eq!(stats.weak.max_improvement, Some(500_000));
+            assert_eq!(
+                stats.strong.nodes,
+                context.stats.improvement_stats.strong.nodes
+            );
+            assert_eq!(stats.weak.nodes, context.stats.improvement_stats.weak.nodes);
+            assert_eq!(
+                stats.invalid_previous_ply_eval,
+                context.stats.improvement_stats.invalid_previous_ply_eval
+            );
+            assert!(stats.invalid_previous_ply_eval >= 10);
+            if max_nodes.is_some() {
+                assert_eq!(result.termination, SearchTermination::NodeLimit);
+            } else {
+                assert_eq!(result.depth_reached, 3);
+                assert_eq!(
+                    result
+                        .stats
+                        .iterative_deepening_stats
+                        .average_seldepth_at_depth(3),
+                    Some(result.seldepth as f64),
+                );
+            }
+        }
+    }
+
+    #[test]
     fn node_limits_work_with_or_without_statistics() {
         let config = EngineConfig {
             tt_size: 1,
@@ -369,7 +433,7 @@ mod tests {
         };
         let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
         for max_nodes in [0, 2048] {
-            let mut limits = SearchLimits::depth(20, 3);
+            let mut limits = SearchLimits::depth(20);
             limits.max_nodes = Some(max_nodes);
             let mut context = SearchContext::new(limits, vec![board.board_hash()]);
             let result = Engine::new(config).search(&board, &mut context, false, false);
@@ -395,7 +459,7 @@ mod tests {
         let board = Board::from_fen(crate::board::STARTPOS_FEN).unwrap();
         let result = Engine::new(config).search(
             &board,
-            &mut SearchContext::new(SearchLimits::depth(3, 2), vec![board.board_hash()]),
+            &mut SearchContext::new(SearchLimits::depth(3), vec![board.board_hash()]),
             false,
             false,
         );
@@ -433,11 +497,11 @@ mod tests {
         let history = vec![board.board_hash()];
         let completed = Engine::new(config).search(
             &board,
-            &mut SearchContext::new(SearchLimits::depth(1, 2), history.clone()),
+            &mut SearchContext::new(SearchLimits::depth(1), history.clone()),
             false,
             false,
         );
-        let mut limits = SearchLimits::depth(3, 2);
+        let mut limits = SearchLimits::depth(3);
         limits.max_nodes = Some(completed.stats.total_nodes() + 1);
         let result = Engine::new(config).search(
             &board,
@@ -469,13 +533,13 @@ mod tests {
             // material. Even a huge requested depth finishes immediately.
             let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").unwrap();
             let mut context =
-                SearchContext::new(SearchLimits::depth(depth, 1), vec![board.board_hash()]);
+                SearchContext::new(SearchLimits::depth(depth), vec![board.board_hash()]);
             let eval = engine.negamax::<Root>(
                 &mut board,
                 &mut context,
                 depth,
-                NEG_INF + 1,
-                POS_INF - 1,
+                -Score::INFINITE,
+                Score::INFINITE,
                 false,
                 0,
                 PickerFrame::ROOT,
@@ -497,7 +561,7 @@ mod tests {
     #[test]
     fn staged_root_detects_checkmate_and_stalemate() {
         let cases = [
-            ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", -CHECKMATE_SCORE),
+            ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", -Score::MATE),
             ("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", 0),
         ];
 
@@ -506,15 +570,14 @@ mod tests {
             config.tt_size = 1;
             let mut engine = Engine::new(config);
             let mut board = Board::from_fen(fen).expect("valid terminal FEN");
-            let mut context =
-                SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
 
             let eval = engine.negamax::<Root>(
                 &mut board,
                 &mut context,
                 1,
-                NEG_INF + 1,
-                POS_INF - 1,
+                -Score::INFINITE,
+                Score::INFINITE,
                 false,
                 0,
                 PickerFrame::ROOT,
@@ -550,10 +613,16 @@ mod tests {
             // The only legal move captures the queen and draws.
             let mut board = Board::from_fen("7k/6Q1/4K3/8/8/8/8/8 b - - 0 1").unwrap();
             let root_hash = board.board_hash();
-            engine
-                .tt
-                .insert(root_hash, true, flag, 6, cached_score, i16::MIN, None);
-            let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![root_hash]);
+            engine.tt.insert(
+                root_hash,
+                true,
+                flag,
+                6,
+                cached_score,
+                Score::NONE as i16,
+                None,
+            );
+            let mut context = SearchContext::new(SearchLimits::depth(1), vec![root_hash]);
 
             let eval = engine.negamax::<Root>(
                 &mut board,
@@ -591,15 +660,15 @@ mod tests {
             let mut board = Board::from_fen(fen).unwrap();
             let root_hash = board.board_hash();
             let history = vec![root_hash; if repeated { 3 } else { 1 }];
-            let mut context = SearchContext::new(SearchLimits::depth(1, 1), history.clone());
+            let mut context = SearchContext::new(SearchLimits::depth(1), history.clone());
             let legal_moves = board.all_legal_moves();
 
             let eval = engine.negamax::<Root>(
                 &mut board,
                 &mut context,
                 1,
-                NEG_INF + 1,
-                POS_INF - 1,
+                -Score::INFINITE,
+                Score::INFINITE,
                 false,
                 0,
                 PickerFrame::ROOT,
@@ -625,7 +694,7 @@ mod tests {
         // All children draw, so the first searched move wins the tie.
         let mut board = Board::from_fen("7k/8/8/8/8/8/8/K7 w - - 0 1").unwrap();
         let preferred = *board.all_legal_moves().as_slice().last().unwrap();
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
         context.previous_best_move = Some(preferred);
 
         let eval = engine.negamax::<Root>(
@@ -648,6 +717,27 @@ mod tests {
     }
 
     #[test]
+    fn compact_infinity_supports_mates_with_any_aspiration_margin() {
+        for margin in [0, 1000, 10_000] {
+            for (fen, expected) in [
+                ("7k/5Q2/6K1/8/8/8/8/8 w - - 0 1", Score::MATE - 1),
+                ("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", -Score::MATE),
+            ] {
+                let mut config = EngineConfig::standard();
+                config.tt_size = 1;
+                config.search.aspiration.mate_margin = margin;
+                let board = Board::from_fen(fen).unwrap();
+                let mut context =
+                    SearchContext::new(SearchLimits::depth(3), vec![board.board_hash()]);
+                let result = Engine::new(config).search(&board, &mut context, false, false);
+                assert_eq!(result.eval, expected);
+                assert_eq!(result.depth_reached, 3);
+                assert!(result.eval.abs() < Score::INFINITE);
+            }
+        }
+    }
+
+    #[test]
     fn root_stores_mate_scores_at_ply_zero() {
         let config = EngineConfig {
             tt_size: 1,
@@ -655,21 +745,21 @@ mod tests {
         };
         let mut engine = Engine::new(config);
         let mut board = Board::from_fen("7k/5Q2/6K1/8/8/8/8/8 w - - 0 1").unwrap();
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![board.board_hash()]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
 
         let eval = engine.negamax::<Root>(
             &mut board,
             &mut context,
             1,
-            NEG_INF + 1,
-            POS_INF - 1,
+            -Score::INFINITE,
+            Score::INFINITE,
             false,
             0,
             PickerFrame::ROOT,
             SearchOptions::NORMAL,
         );
 
-        assert_eq!(eval, CHECKMATE_SCORE - 1);
+        assert_eq!(eval, Score::MATE - 1);
         let entry = engine.tt.get(board.board_hash(), TTNodeType::Main).unwrap();
         assert_eq!(score_from_tt(i32::from(entry.eval), 0), eval);
         assert_eq!(entry.best_move, context.root_best_move);
@@ -685,7 +775,7 @@ mod tests {
         let mut board = Board::from_fen("7k/8/8/3pP3/8/8/8/K7 w - d6 0 1").unwrap();
         let root_hash = board.board_hash();
         let legal_moves = board.all_legal_moves();
-        let mut context = SearchContext::new(SearchLimits::depth(1, 1), vec![root_hash]);
+        let mut context = SearchContext::new(SearchLimits::depth(1), vec![root_hash]);
 
         let result = engine.search(&board, &mut context, false, false);
 

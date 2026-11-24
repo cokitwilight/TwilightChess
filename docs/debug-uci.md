@@ -24,7 +24,6 @@ uci
 setoption name tt_size value 128
 setoption name search.lmr.divisor value 2.25
 setoption name search.null_move.enabled value false
-setoption name limits.max_q_depth value 6
 isready
 position startpos
 go depth 8
