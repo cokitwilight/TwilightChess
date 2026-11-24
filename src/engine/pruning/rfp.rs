@@ -1,6 +1,6 @@
 use crate::engine::configs::RFPConfig;
 
 #[inline]
-pub fn rfp_margin(depth: usize, config: &RFPConfig) -> i32 {
-    config.margin_factor * depth as i32
+pub fn rfp_margin(depth: i32, improvement: i32, _config: &RFPConfig) -> i32 {
+    ((10 * depth * depth) - (64 * improvement / 1024) + (50 * depth)).max(10 * depth)
 }

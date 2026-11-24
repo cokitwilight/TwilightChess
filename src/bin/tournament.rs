@@ -71,7 +71,7 @@ fn print_usage() {
 
 fn tournament_different_depth() {
     let mut match_players =
-        MatchPlayers::from_depth("Depth 11".to_string(), "Depth 10".to_string(), 11, 6, 10, 6);
+        MatchPlayers::from_depth("Depth 11".to_string(), "Depth 10".to_string(), 11, 10);
 
     let opening_suite = build_important_opening_book();
 
@@ -91,9 +91,7 @@ fn tournament_different_configs() {
         "Singular on".to_string(),
         "Singular off".to_string(),
         10,
-        6,
         10,
-        6,
     );
 
     match_players.white.config.limits.soft_time_limit_ms = Some(1000);
@@ -128,9 +126,7 @@ fn tournament_same_nodes() {
         "Null Move on".to_string(),
         "Null Move off".to_string(),
         20,
-        6,
         20,
-        6,
     );
 
     match_players.white.config.limits.max_nodes = Some(1000000);
@@ -159,14 +155,8 @@ fn tournament_same_nodes() {
 }
 
 fn tournament_lmr() {
-    let mut match_players = MatchPlayers::from_depth(
-        "LMR 1 move".to_string(),
-        "LMR 3 move".to_string(),
-        24,
-        6,
-        24,
-        6,
-    );
+    let mut match_players =
+        MatchPlayers::from_depth("LMR 1 move".to_string(), "LMR 3 move".to_string(), 24, 24);
 
     match_players.white.config = EngineConfig::default();
     match_players.black.config = EngineConfig::default();
@@ -189,7 +179,7 @@ fn tournament_lmr() {
 
 fn tournament_null() {
     let mut match_players =
-        MatchPlayers::from_depth("Null on".to_string(), "Null off".to_string(), 12, 6, 12, 6);
+        MatchPlayers::from_depth("Null on".to_string(), "Null off".to_string(), 12, 12);
 
     match_players.white.config = EngineConfig::standard();
     match_players.black.config = EngineConfig::standard();
@@ -206,7 +196,7 @@ fn tournament_null() {
 
 fn tournament_rfp() {
     let mut match_players =
-        MatchPlayers::from_depth("RFP on".to_string(), "RFP off".to_string(), 12, 6, 12, 6);
+        MatchPlayers::from_depth("RFP on".to_string(), "RFP off".to_string(), 12, 12);
 
     match_players.white.config = EngineConfig::standard();
     match_players.black.config = EngineConfig::standard();
@@ -223,7 +213,7 @@ fn tournament_rfp() {
 
 fn tournament_fut() {
     let mut match_players =
-        MatchPlayers::from_depth("FUT on".to_string(), "FUT off".to_string(), 24, 6, 24, 6);
+        MatchPlayers::from_depth("FUT on".to_string(), "FUT off".to_string(), 24, 24);
 
     match_players.white.config = EngineConfig::standard();
     match_players.black.config = EngineConfig::standard();
@@ -242,7 +232,7 @@ fn tournament_fut() {
 
 fn tournament_see() {
     let mut match_players =
-        MatchPlayers::from_depth("SEE 250".to_string(), "SEE 200".to_string(), 12, 6, 12, 6);
+        MatchPlayers::from_depth("SEE 250".to_string(), "SEE 200".to_string(), 12, 12);
 
     match_players.white.config = EngineConfig::standard();
     match_players.black.config = EngineConfig::standard();
@@ -265,9 +255,7 @@ fn tournament_singular() {
         "Singular On".to_string(),
         "Singular Off".to_string(),
         20,
-        6,
         20,
-        6,
     );
 
     match_players.white.config = EngineConfig::standard();
@@ -285,7 +273,7 @@ fn tournament_singular() {
 
 fn tournament_lmp() {
     let mut match_players =
-        MatchPlayers::from_depth("LMP On".to_string(), "LMP Off".to_string(), 24, 6, 24, 6);
+        MatchPlayers::from_depth("LMP On".to_string(), "LMP Off".to_string(), 24, 24);
 
     match_players.white.config = EngineConfig::standard();
     match_players.black.config = EngineConfig::standard();
@@ -311,9 +299,7 @@ fn tournament_correction() {
         "Correction On".to_string(),
         "Correction Off".to_string(),
         20,
-        6,
         20,
-        6,
     );
 
     match_players.white.config = EngineConfig::standard();
@@ -334,9 +320,7 @@ fn tournament_experimental() {
         "Experimental On".to_string(),
         "Experimental Off".to_string(),
         30,
-        6,
         30,
-        6,
     );
 
     match_players.white.config = EngineConfig::default();
@@ -357,7 +341,7 @@ fn tournament_experimental() {
 
 fn tournament_suggestion() {
     let mut match_players =
-        MatchPlayers::from_depth("Engine 1".to_string(), "Engine 2".to_string(), 30, 6, 30, 6);
+        MatchPlayers::from_depth("Engine 1".to_string(), "Engine 2".to_string(), 30, 30);
 
     match_players.white.config.limits.soft_time_limit_ms = Some(1000);
     match_players.black.config.limits.soft_time_limit_ms = Some(1000);

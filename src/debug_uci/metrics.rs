@@ -1,5 +1,6 @@
 //! Search metrics exposed by debug UCI.
-use crate::engine::{CHECKMATE_SCORE, MATE_THRESHOLD, SearchIteration, SearchResult};
+use crate::engine::{SearchIteration, SearchResult};
+use crate::types::{Score as SearchScore, is_mate};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -11,9 +12,9 @@ pub enum Score {
 
 impl Score {
     fn from_raw(raw: i32) -> Self {
-        if raw.abs() >= MATE_THRESHOLD {
+        if is_mate(raw) {
             Self::Mate {
-                plies: (CHECKMATE_SCORE - raw.abs()).max(0) as u32,
+                plies: (SearchScore::MATE - raw.abs()).max(0) as u32,
                 winning: raw > 0,
             }
         } else {

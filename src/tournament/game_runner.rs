@@ -237,7 +237,7 @@ mod tests {
     pub fn test_game_2() {
         let engine1: String = String::from("Lmr History Off");
         let engine2: String = String::from("Lmr History On");
-        let mut players = MatchPlayers::from_depth(engine1.clone(), engine2.clone(), 16, 7, 16, 7);
+        let mut players = MatchPlayers::from_depth(engine1.clone(), engine2.clone(), 16, 16);
 
         players.white.config.limits.soft_time_limit_ms = Some(6_000);
         players.black.config.limits.soft_time_limit_ms = Some(6_000);
@@ -334,7 +334,7 @@ mod tests {
     pub fn test_game_3() {
         let engine1: String = String::from("8 s");
         let engine2: String = String::from("10 s");
-        let mut players = MatchPlayers::from_depth(engine1.clone(), engine2.clone(), 40, 7, 40, 7);
+        let mut players = MatchPlayers::from_depth(engine1.clone(), engine2.clone(), 40, 40);
 
         players.white.config.limits.soft_time_limit_ms = Some(8_000);
         players.black.config.limits.soft_time_limit_ms = Some(10_000);

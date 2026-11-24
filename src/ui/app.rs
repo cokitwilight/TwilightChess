@@ -20,7 +20,6 @@ use crate::ui::{
 use eframe::egui;
 
 const DEFAULT_BOT_DEPTH: u16 = 30;
-const DEFAULT_Q_BOT_DEPTH: u16 = 4;
 
 const DEFAULT_BOT_TIME_MS: u64 = 1_000;
 
@@ -258,11 +257,7 @@ impl ChessApp {
 
         self.bot = Some(Bot::new(
             bot_color,
-            SearchLimits::depth_and_time(
-                DEFAULT_BOT_DEPTH,
-                DEFAULT_Q_BOT_DEPTH,
-                DEFAULT_BOT_TIME_MS,
-            ),
+            SearchLimits::depth_and_time(DEFAULT_BOT_DEPTH, DEFAULT_BOT_TIME_MS),
         ));
         self.bot_rx = None;
 
@@ -531,11 +526,7 @@ impl ChessApp {
                 let bot_color = human.opposite();
                 self.bot = Some(Bot::new(
                     bot_color,
-                    SearchLimits::depth_and_time(
-                        DEFAULT_BOT_DEPTH,
-                        DEFAULT_Q_BOT_DEPTH,
-                        DEFAULT_BOT_TIME_MS,
-                    ),
+                    SearchLimits::depth_and_time(DEFAULT_BOT_DEPTH, DEFAULT_BOT_TIME_MS),
                 ));
             }
         }

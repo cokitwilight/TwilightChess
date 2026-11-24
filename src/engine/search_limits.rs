@@ -3,7 +3,6 @@
 #[cfg_attr(feature = "debug-uci", serde(deny_unknown_fields))]
 pub struct SearchLimits {
     pub max_depth: u16,
-    pub max_q_depth: u16,
     pub max_nodes: Option<u64>,
     /// Time budget for one `Engine::search` call, not for an entire game.
     pub soft_time_limit_ms: Option<u64>,
@@ -11,20 +10,18 @@ pub struct SearchLimits {
 }
 
 impl SearchLimits {
-    pub fn depth(max_depth: u16, max_q_depth: u16) -> Self {
+    pub fn depth(max_depth: u16) -> Self {
         Self {
             max_depth,
-            max_q_depth,
             max_nodes: None,
             soft_time_limit_ms: None,
             hard_time_limit_ms: None,
         }
     }
 
-    pub fn depth_and_time(max_depth: u16, max_q_depth: u16, time_limit_ms: u64) -> Self {
+    pub fn depth_and_time(max_depth: u16, time_limit_ms: u64) -> Self {
         Self {
             max_depth,
-            max_q_depth,
             max_nodes: None,
             soft_time_limit_ms: Some(time_limit_ms),
             hard_time_limit_ms: Some(time_limit_ms + 100),

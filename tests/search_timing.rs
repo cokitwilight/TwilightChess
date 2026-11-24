@@ -8,7 +8,7 @@ fn timed_search(limit_ms: u64) -> (Duration, chess_final::engine::SearchResult) 
     let board = Board::from_fen(STARTPOS_FEN).expect("valid start position");
     let config = EngineConfig {
         tt_size: 1,
-        limits: SearchLimits::depth_and_time(64, 6, limit_ms),
+        limits: SearchLimits::depth_and_time(64, limit_ms),
         ..EngineConfig::default()
     };
     let mut engine = Engine::new(config);
@@ -58,7 +58,7 @@ fn depth_limit_can_finish_before_a_larger_time_limit() {
     let board = Board::from_fen(STARTPOS_FEN).expect("valid start position");
     let config = EngineConfig {
         tt_size: 1,
-        limits: SearchLimits::depth_and_time(1, 6, 1_000),
+        limits: SearchLimits::depth_and_time(1, 1_000),
         ..EngineConfig::default()
     };
     let mut engine = Engine::new(config);

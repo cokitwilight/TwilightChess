@@ -35,6 +35,7 @@ pub struct Board {
     // pub non_pawn_hash: u64,
     pub material: i32,
 
+    /// Uncapped material phase. Use phase() for evaluation and search thresholds.
     pub phase: i32,
 
     pub mg_pst: i32,
@@ -61,7 +62,7 @@ impl Board {
             board_hash: 0,
             pawn_hash: 0,
             material: 0, // in centi pawns
-            phase: 24,   // 24 is the default
+            phase: 0,
             mg_pst: 0,
             eg_pst: 0,
         }

@@ -1,8 +1,8 @@
 use crate::board::Move;
 use crate::engine::history::HistoryKey;
-use crate::types::PieceType;
+use crate::types::{PieceType, Score};
 
-#[derive(Clone, Debug, Copy, Default)]
+#[derive(Clone, Debug, Copy)]
 pub struct SearchStackEntry {
     pub mv: Option<Move>, // the incoming mv. The move that produced the node
 
@@ -10,5 +10,16 @@ pub struct SearchStackEntry {
 
     pub history_index: Option<HistoryKey>, // the history key of mv
 
-    pub static_eval: Option<i32>, // current static eval. NOT the static eval from the incoming node.
+    pub static_eval: i32, // current raw static eval, or Score::NONE when unavailable.
+}
+
+impl Default for SearchStackEntry {
+    fn default() -> Self {
+        Self {
+            mv: None,
+            piece: None,
+            history_index: None,
+            static_eval: Score::NONE,
+        }
+    }
 }
