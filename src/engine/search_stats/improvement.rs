@@ -151,6 +151,10 @@ impl ImprovementStats {
     }
 
     pub(super) fn print(&self, main_nodes: u64) {
+        if self.samples() == 0 {
+            return;
+        }
+
         section("Evaluation Improvement");
         metric_count("Reached calculation", self.samples());
         metric_count(

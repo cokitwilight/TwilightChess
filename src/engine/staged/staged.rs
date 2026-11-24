@@ -1,6 +1,7 @@
 use crate::board::mv::MAX_MOVES;
 use crate::board::{Board, Move};
 use crate::engine::history::{HistoryKey, HistoryTables};
+use crate::engine::search_stats::track_stat;
 use crate::engine::staged::verify::verify_move;
 use crate::engine::{Engine, PickerFrame, SearchContext};
 use crate::moves::MoveGenInfo;
@@ -168,6 +169,9 @@ impl Engine {
 }
 
 impl MovePicker {
+    pub fn current_stage(&self) -> Stage {
+        return self.stage;
+    }
     pub fn next_stage(
         &mut self,
         board: &Board,
@@ -200,7 +204,7 @@ impl MovePicker {
         // As moves are generated the "good" moves get added to the front while "bad" moves get added to the back
         // since each of the "folds" together in the array this works nicely when indexing
 
-        loop {
+        let entry = loop {
             match self.stage {
                 Stage::PvTt => {
                     // verify legality of pv move and tt move and return them if legal, otherwise go to next stage
@@ -213,13 +217,13 @@ impl MovePicker {
                             if let Some(pv) =
                                 self.pv_move.filter(|&mv| verify_move(board, mv, info))
                             {
-                                return Some(ScoredMove {
+                                break ScoredMove {
                                     mv: pv,
                                     score: 1_500_000,
                                     history_key: None,
                                     see: None,
                                     captured: None,
-                                });
+                                };
                             }
                         }
 
@@ -229,13 +233,13 @@ impl MovePicker {
                             if let Some(tt) = self.tt_move.filter(|&mv| {
                                 Some(mv) != self.pv_move && verify_move(board, mv, info)
                             }) {
-                                return Some(ScoredMove {
+                                break ScoredMove {
                                     mv: tt,
                                     score: 1_000_000,
                                     history_key: None,
                                     see: None,
                                     captured: None,
-                                });
+                                };
                             }
 
                             self.next_stage(board, info, context, history);
@@ -261,13 +265,13 @@ impl MovePicker {
                                     && Some(mv) != self.tt_move
                                     && verify_move(board, mv, info)
                             }) {
-                                return Some(ScoredMove {
+                                break ScoredMove {
                                     mv: k1,
                                     score: 1_500_000,
                                     history_key: None,
                                     see: None,
                                     captured: None,
-                                });
+                                };
                             }
                         }
 
@@ -279,13 +283,13 @@ impl MovePicker {
                                     && Some(mv) != self.tt_move
                                     && verify_move(board, mv, info)
                             }) {
-                                return Some(ScoredMove {
+                                break ScoredMove {
                                     mv: k2,
                                     score: 1_000_000,
                                     history_key: None,
                                     see: None,
                                     captured: None,
-                                });
+                                };
                             }
 
                             self.next_stage(board, info, context, history);
@@ -304,7 +308,7 @@ impl MovePicker {
                     if let Some(entry) =
                         pick_best(move_buffer, &mut self.current_idx, self.current_len)
                     {
-                        return Some(entry);
+                        break entry;
                     } else {
                         return None;
                     }
@@ -315,13 +319,31 @@ impl MovePicker {
                     if let Some(entry) =
                         pick_best(move_buffer, &mut self.current_idx, self.current_len)
                     {
-                        return Some(entry);
+                        break entry;
                     } else {
                         self.next_stage(board, info, context, history);
                     }
                 }
             }
+        };
+
+        track_stat! {
+            let stats = &mut context.stats.move_stats;
+            let missing_see = u64::from(entry.see.is_none());
+            let missing_captured = u64::from(entry.captured.is_none());
+            let missing_history_key = u64::from(entry.history_key.is_none());
+            stats.picked += 1;
+            stats.missing_see += missing_see;
+            stats.missing_captured += missing_captured;
+            stats.missing_history_key += missing_history_key;
+            if !matches!(self.stage, Stage::PvTt | Stage::Killers) {
+                stats.non_special_picked += 1;
+                stats.non_special_missing_see += missing_see;
+                stats.non_special_missing_captured += missing_captured;
+                stats.non_special_missing_history_key += missing_history_key;
+            }
         }
+        Some(entry)
     }
 
     pub fn recompute_staged(
@@ -577,6 +599,21 @@ mod tests {
         context.killer_moves.add(0, pv_move);
 
         assert_matches_legal_moves(&engine, &board, &mut context, Some(pv_move), Some(tt_move));
+
+        #[cfg(feature = "search-stats")]
+        {
+            let stats = context.stats.move_stats;
+            let quiets = expected.iter().filter(|mv| !mv.is_capture()).count() as u64;
+            // The PV and killer are quiet. The TT capture also has no cached metadata.
+            assert_eq!(stats.picked, expected.len() as u64);
+            assert_eq!(stats.non_special_picked, stats.picked - 3);
+            assert_eq!(stats.missing_see, quiets + 1);
+            assert_eq!(stats.missing_captured, quiets + 1);
+            assert_eq!(stats.missing_history_key, 3);
+            assert_eq!(stats.non_special_missing_see, quiets - 2);
+            assert_eq!(stats.non_special_missing_captured, quiets - 2);
+            assert_eq!(stats.non_special_missing_history_key, 0);
+        }
     }
 
     #[test]
