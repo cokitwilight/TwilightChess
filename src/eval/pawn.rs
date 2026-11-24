@@ -232,7 +232,7 @@ pub(super) fn passed_pawn_bonus(
         let file = FILE_MASKS[file_of(sq) as usize];
         let forward_mask = pawn_mask & file;
 
-        let is_candidate = current_mask & (FILE_A | FILE_H) != 0;
+        let outside_passer = current_mask & (FILE_A | FILE_H) != 0;
 
         let is_protected = current_mask & info.all_attacks(color) != 0;
 
@@ -267,7 +267,7 @@ pub(super) fn passed_pawn_bonus(
             }
         }
 
-        if is_candidate {
+        if outside_passer {
             mg_bonus += 15;
             eg_bonus += 35;
         }
