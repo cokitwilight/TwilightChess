@@ -80,6 +80,17 @@ pub fn pop_lsb(bb: &mut Bitboard) -> Option<Square> {
 }
 
 #[inline]
+pub fn pop_msb(bb: &mut Bitboard) -> Option<Square> {
+    if *bb == 0 {
+        return None;
+    }
+
+    let sq = (63 - bb.leading_zeros()) as Square;
+    *bb &= !(1u64 << sq);
+    Some(sq)
+}
+
+#[inline]
 pub const fn file_of(sq: Square) -> u8 {
     sq % 8
 }

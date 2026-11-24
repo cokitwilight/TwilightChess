@@ -176,16 +176,29 @@ impl Board {
     }
 
     pub fn update_material_and_phase(&mut self) {
-        self.material = crate::eval::material::calculate_material(self);
+        let mut material = 0;
+        let mut phase = 0;
 
-        self.phase = 0;
-        for kind in PIECE_TYPES {
-            let pieces = self.pieces(Color::White, kind) | self.pieces(Color::Black, kind);
-            self.phase += pieces.count_ones() as i32 * kind.phase_value();
+        for color in COLORS {
+            let sign = match color {
+                Color::White => 1,
+                Color::Black => -1,
+            };
+
+            for piece in PIECE_TYPES {
+                let count = self.pieces(color, piece).count_ones() as i32;
+                material += sign * count * piece.value();
+                phase += count * piece.phase_value();
+            }
         }
 
-        self.mg_pst = crate::eval::pst::mg_pst_bonus(self);
-        self.eg_pst = crate::eval::pst::eg_pst_bonus(self);
+        let mg_pst_bonus = crate::eval::pst::mg_pst_bonus(self);
+        let eg_pst_bonus = crate::eval::pst::eg_pst_bonus(self);
+
+        self.material = material;
+        self.phase = phase;
+        self.mg_pst = mg_pst_bonus;
+        self.eg_pst = eg_pst_bonus;
     }
 
     // *************************

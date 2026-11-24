@@ -1,10 +1,10 @@
 use crate::bitboard::{
-    Bitboard, Square, bishop_attacks, bit, king_attacks, knight_attacks, pawn_attacks_from_square,
+    Bitboard, NOT_FILE_A, NOT_FILE_H, Square, bishop_attacks, bit, king_attacks, knight_attacks,
     pop_lsb, queen_attacks, rook_attacks,
 };
 use crate::board::Board;
 use crate::eval::MAX_PHASE;
-use crate::eval::king::king_eval;
+use crate::eval::king::{KingAttackers, attack_zone, king_eval};
 use crate::eval::knight::knight_eval;
 pub use crate::eval::lookup::KING_DANGER_TABLE;
 use crate::eval::mobility::mobility_score;
@@ -13,6 +13,8 @@ use crate::eval::sliders::sliders_eval;
 use crate::types::{COLORS, Color, PieceType};
 
 pub const CENTER_SQUARES: Bitboard = 0x0000_3C3C_3C3C_0000;
+
+pub const CENTER_FILES: Bitboard = 0x3C3C_3C3C_3C3C_3C3C;
 
 pub const CENTER_4: Bitboard = 0x0000_0018_1800_0000;
 
@@ -71,6 +73,8 @@ pub struct EvalInfo {
     pub king_squares: [Square; 2], // indexed as color
     pub king_ring: [Bitboard; 2],
     pub king_attack_weight: [i32; 2], // color is the defender -- ...[white] = danger to the white king
+    pub(super) king_attackers: [KingAttackers; 2], // indexed by defender
+    pub(super) king_double_attacks: [Bitboard; 2], // indexed by attacking color, includes king support
 
     // attacker info
     pub attacks: [[Bitboard; 6]; 2], // Stores all attacks of each piece type [color][piece type]
@@ -87,6 +91,8 @@ impl EvalInfo {
             king_squares: [0; 2],
             king_ring: [0; 2],
             king_attack_weight: [0i32; 2],
+            king_attackers: [KingAttackers::default(); 2],
+            king_double_attacks: [0; 2],
 
             attacks: [[0; 6]; 2],
             all_attacks: [0; 2],
@@ -103,6 +109,7 @@ impl EvalInfo {
 
             eval_info.king_squares[color.idx()] = king_sq;
             eval_info.king_ring[color.idx()] = king_attacks(king_sq) | bit(king_sq);
+            eval_info.king_attackers[color.idx()].zone = attack_zone(color, king_sq);
         }
 
         let king_rings = [
@@ -114,20 +121,26 @@ impl EvalInfo {
 
         for color in COLORS {
             let color_idx = color.idx();
+            let defender_idx = color.opposite().idx();
+            let neighbors = king_rings[defender_idx];
 
-            let mut pawns = board.pieces(color, PieceType::Pawn);
-            while let Some(sq) = pop_lsb(&mut pawns) {
-                // OPTIMIZE THIS TO JUST USE SHIFTS
-                let attacks = pawn_attacks_from_square(color, sq);
-
-                attack_counts[color_idx].add(attacks);
-
-                eval_info.attacks[color_idx][PieceType::Pawn.idx()] |= attacks;
-            }
+            let pawns = board.pieces(color, PieceType::Pawn);
+            let (left, right) = match color {
+                Color::White => ((pawns & NOT_FILE_A) << 7, (pawns & NOT_FILE_H) << 9),
+                Color::Black => ((pawns & NOT_FILE_A) >> 9, (pawns & NOT_FILE_H) >> 7),
+            };
+            attack_counts[color_idx].ones = left ^ right;
+            attack_counts[color_idx].twos = left & right;
+            eval_info.attacks[color_idx][PieceType::Pawn.idx()] = left | right;
 
             let mut knights = board.pieces(color, PieceType::Knight);
             while let Some(sq) = pop_lsb(&mut knights) {
                 let attacks = knight_attacks(sq);
+                eval_info.king_attackers[defender_idx].record(
+                    PieceType::Knight,
+                    attacks,
+                    neighbors,
+                );
 
                 attack_counts[color_idx].add(attacks);
 
@@ -137,6 +150,11 @@ impl EvalInfo {
             let mut bishops = board.pieces(color, PieceType::Bishop);
             while let Some(sq) = pop_lsb(&mut bishops) {
                 let attacks = bishop_attacks(sq, occupied);
+                eval_info.king_attackers[defender_idx].record(
+                    PieceType::Bishop,
+                    attacks,
+                    neighbors,
+                );
 
                 attack_counts[color_idx].add(attacks);
 
@@ -146,6 +164,7 @@ impl EvalInfo {
             let mut rooks = board.pieces(color, PieceType::Rook);
             while let Some(sq) = pop_lsb(&mut rooks) {
                 let attacks = rook_attacks(sq, occupied);
+                eval_info.king_attackers[defender_idx].record(PieceType::Rook, attacks, neighbors);
 
                 attack_counts[color_idx].add(attacks);
 
@@ -155,6 +174,7 @@ impl EvalInfo {
             let mut queens = board.pieces(color, PieceType::Queen);
             while let Some(sq) = pop_lsb(&mut queens) {
                 let attacks = queen_attacks(sq, occupied);
+                eval_info.king_attackers[defender_idx].record(PieceType::Queen, attacks, neighbors);
 
                 attack_counts[color_idx].add(attacks);
 
@@ -169,15 +189,18 @@ impl EvalInfo {
                 | eval_info.attacks[color_idx][PieceType::Knight.idx()]
                 | eval_info.attacks[color_idx][PieceType::Bishop.idx()]
                 | eval_info.attacks[color_idx][PieceType::Rook.idx()]
-                | eval_info.attacks[color_idx][PieceType::Queen.idx()]
-                | eval_info.attacks[color_idx][PieceType::King.idx()];
+                | eval_info.attacks[color_idx][PieceType::Queen.idx()];
 
             eval_info.attacked_by_two[color_idx] = attack_counts[color_idx].attacked_by_two();
+            eval_info.king_double_attacks[color_idx] =
+                eval_info.attacked_by_two[color_idx] | (attacks & eval_info.all_attacks[color_idx]);
+            eval_info.all_attacks[color_idx] |= attacks;
         }
 
         for defender in COLORS {
             let attacker = defender.opposite();
-            let mut current_king_ring = king_rings[defender.idx()];
+            let mut current_king_ring =
+                king_rings[defender.idx()] & eval_info.all_attacks(attacker);
             let mut danger = 0i32;
 
             while let Some(sq) = pop_lsb(&mut current_king_ring) {
@@ -229,65 +252,36 @@ impl EvalInfo {
     }
 }
 
-pub fn evaluation(board: &Board) -> i32 {
-    let mut total_eval = 0;
-
+/// Static score in centipawns from the requested side's perspective.
+pub fn evaluation(board: &Board, perspective: Color) -> i32 {
     let eval_info = EvalInfo::calculate(board);
+    let mut mg = board.mg_pst();
+    let mut eg = board.eg_pst();
+    for (term_mg, term_eg) in [
+        mobility_score(board, &eval_info),
+        pawn_eval(board, &eval_info),
+        knight_eval(board, &eval_info),
+        sliders_eval(board, &eval_info),
+        king_eval(board, &eval_info),
+    ] {
+        mg += term_mg;
+        eg += term_eg;
+    }
 
-    let phase = board.phase();
-    let eg_phase = MAX_PHASE - phase;
-
-    let mg_pst = board.mg_pst();
-    let eg_pst = board.eg_pst();
-
-    let pst_eval = (mg_pst * phase + eg_pst * eg_phase) / MAX_PHASE;
-
-    total_eval += board.material();
-    total_eval += pst_eval;
-
-    total_eval += mobility_score(board, &eval_info);
-
-    total_eval += pawn_eval(board, &eval_info);
-    total_eval += knight_eval(board, &eval_info);
-    // bishop, rook, queen
-    total_eval += sliders_eval(board, &eval_info);
-    total_eval += king_eval(board, &eval_info);
-
-    match board.side_to_move() {
-        // for tempo
-        Color::White => total_eval += 15,
-        Color::Black => total_eval -= 15,
-    };
-
-    total_eval
-}
-
-pub fn lazy_eval(board: &Board) -> i32 {
-    let phase = board.phase();
-
-    let pst_eval = if phase > 12 {
-        board.mg_pst()
+    let tempo = if board.side_to_move() == Color::White {
+        15
     } else {
-        board.eg_pst()
+        -15
     };
-
-    pst_eval + board.material()
-}
-
-pub fn lazy_eval_for_turn(board: &Board) -> i32 {
-    let eval = lazy_eval(board);
-    match board.side_to_move() {
-        Color::White => eval,
-        Color::Black => -eval,
+    let white_score = board.material() + tempo + blend(mg, eg, board.phase());
+    match perspective {
+        Color::White => white_score,
+        Color::Black => -white_score,
     }
 }
 
-pub fn evaluation_for_turn(board: &Board) -> i32 {
-    let eval = evaluation(board);
-    match board.side_to_move() {
-        Color::White => eval,
-        Color::Black => -eval,
-    }
+pub(super) fn blend(mg: i32, eg: i32, phase: i32) -> i32 {
+    (mg * phase + eg * (MAX_PHASE - phase)) / MAX_PHASE
 }
 
 // takes the score and scales based on the min phase(start) to the max phase(full)

@@ -18,7 +18,7 @@ use crate::engine::staged::ScoredMove;
 use crate::engine::tt::{TTFlag, TTNodeType, score_from_tt, score_to_tt};
 use crate::engine::{Engine, MAX_PLY, PickerFrame, SearchStackEntry};
 use crate::engine::{SearchContext, SearchOptions};
-use crate::eval::evaluation_for_turn;
+use crate::eval::evaluation;
 use crate::moves::MoveGenInfo;
 use crate::types::{PieceType, Score, is_decisive, is_loss, is_valid, is_win, mate_in, mated_in};
 
@@ -90,7 +90,7 @@ impl Engine {
 
             if ply >= MAX_PLY - 1 {
                 track_stat!(context.stats.terminal_stats.max_ply_returns += 1);
-                return evaluation_for_turn(board);
+                return evaluation(board, board.side_to_move());
             }
 
             // Mate Distance Pruning:
@@ -203,7 +203,7 @@ impl Engine {
         let raw_static_eval = if is_valid(tt_eval) {
             tt_eval
         } else {
-            evaluation_for_turn(board)
+            evaluation(board, board.side_to_move())
         };
 
         let correction = if self.config.search.correction.enabled {
@@ -1518,7 +1518,7 @@ mod tests {
             // A stalemate reaches the improving check without searching children.
             let mut board = Board::from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1").unwrap();
             let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
-            context.stack[0].static_eval = evaluation_for_turn(&board) - improvement;
+            context.stack[0].static_eval = evaluation(&board, board.side_to_move()) - improvement;
             engine.negamax::<NonPV>(
                 &mut board,
                 &mut context,
@@ -1572,7 +1572,7 @@ mod tests {
         ] {
             let mut engine = test_engine();
             let mut board = Board::from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1").unwrap();
-            let eval = evaluation_for_turn(&board);
+            let eval = evaluation(&board, board.side_to_move());
             let mut context = SearchContext::new(SearchLimits::depth(1), vec![board.board_hash()]);
             context.stack[2].static_eval = prev_2.map_or(Score::NONE, |offset| eval + offset);
             context.stack[0].static_eval = prev_4.map_or(Score::NONE, |offset| eval + offset);
@@ -1688,7 +1688,7 @@ mod tests {
     fn assert_static_eval_is_available(cached: Option<(u8, i16)>) {
         let mut engine = test_engine();
         let mut board = Board::from_fen("7k/8/8/8/8/8/4Q3/4K3 w - - 0 1").unwrap();
-        let computed_eval = evaluation_for_turn(&board);
+        let computed_eval = evaluation(&board, board.side_to_move());
         assert_ne!(
             computed_eval, 0,
             "the fixture must expose a missing evaluation"

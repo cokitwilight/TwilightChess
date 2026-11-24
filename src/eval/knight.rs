@@ -1,84 +1,80 @@
-use crate::bitboard::{Bitboard, bit, pop_lsb, rank_of};
+use crate::bitboard::pins::generate_pin_masks;
+use crate::bitboard::{Bitboard, RANK_3, RANK_4, RANK_5, RANK_6, bit, knight_attacks, pop_lsb};
 use crate::board::Board;
 use crate::eval::EvalInfo;
-use crate::eval::lookup::KNIGHT_OUTPOSTS;
-use crate::eval::scale_by_phase;
 use crate::types::{Color, PieceType};
 
-pub fn knight_eval(board: &Board, info: &EvalInfo) -> i32 {
-    knight_eval_raw(board, Color::White, info) - knight_eval_raw(board, Color::Black, info)
+pub fn knight_eval(board: &Board, info: &EvalInfo) -> (i32, i32) {
+    let (white_mg, white_eg) = knight_eval_raw(board, Color::White, info);
+    let (black_mg, black_eg) = knight_eval_raw(board, Color::Black, info);
+    (white_mg - black_mg, white_eg - black_eg)
 }
 
-pub fn knight_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> i32 {
-    let mut score = 0;
+pub fn knight_eval_raw(board: &Board, color: Color, info: &EvalInfo) -> (i32, i32) {
+    let mut mg = 0;
+    let mut eg = mg;
 
     let knights = board.pieces(color, PieceType::Knight);
 
-    score += knight_outpost_bonus(board, color, knights, info);
+    let (term_mg, term_eg) = knight_outpost_bonus(board, color, knights, info);
+    mg += term_mg;
+    eg += term_eg;
 
-    score
+    (mg, eg)
 }
 
-// range per knight: -40 <-> 60
 pub fn knight_outpost_bonus(
     board: &Board,
     color: Color,
-    knights: Bitboard,
+    mut knights: Bitboard,
     info: &EvalInfo,
-) -> i32 {
-    let mut score = 0;
-
-    let enemy = color.opposite();
-
-    let enemy_pawns = board.pieces(enemy, PieceType::Pawn);
-
-    let mut knights = knights;
-
-    while let Some(knight_sq) = pop_lsb(&mut knights) {
-        let rank = rank_of(knight_sq);
-
-        match color {
-            // don't give a bonus if the knight is still in own half
-            Color::White => {
-                if rank < 4 {
-                    continue;
-                }
-            }
-            Color::Black => {
-                if rank > 3 {
-                    continue;
-                }
-            }
+) -> (i32, i32) {
+    let mut enemy_span = info.attacks(color.opposite(), PieceType::Pawn);
+    let ranks = match color {
+        Color::White => {
+            enemy_span |= enemy_span >> 8;
+            enemy_span |= enemy_span >> 16;
+            enemy_span |= enemy_span >> 32;
+            RANK_4 | RANK_5 | RANK_6
         }
-
-        let outpost_mask = KNIGHT_OUTPOSTS[color.idx()][knight_sq as usize]; // all squares to the adjacent files and in front of the knight
-
-        if enemy_pawns & outpost_mask == 0 {
-            let knight_bb = bit(knight_sq);
-            // no adjacent pawns can attack the knight
-            let defended = knight_bb & info.attacks(color, PieceType::Pawn) != 0;
-
-            let attacked = knight_bb
-                & (info.attacks(enemy, PieceType::Knight) | info.attacks(enemy, PieceType::Bishop))
-                != 0;
-
-            if defended {
-                // friendly pawn defending knight
-                score += 30;
-            } else {
-                score += 10;
-            }
-
-            if attacked {
-                score -= 50;
-            } else {
-                score += 30;
-            }
-            // TODO: Later add more detail like how valuable the knight outpost is
+        Color::Black => {
+            enemy_span |= enemy_span << 8;
+            enemy_span |= enemy_span << 16;
+            enemy_span |= enemy_span << 32;
+            RANK_3 | RANK_4 | RANK_5
         }
+    };
+    let outposts = ranks & !enemy_span;
+    let supported = info.attacks(color, PieceType::Pawn);
+    let destinations = outposts & !board.occupancy_of(color);
+    let mut pin_masks = None;
+    let (mut mg, mut eg) = (0, 0);
+    while let Some(sq) = pop_lsb(&mut knights) {
+        let occupied = bit(sq);
+        let bonus = if occupied & outposts != 0 {
+            if occupied & supported != 0 {
+                (35, 12)
+            } else {
+                (21, 6)
+            }
+        } else {
+            let reachable = knight_attacks(sq) & destinations;
+            if reachable == 0 {
+                continue;
+            }
+            let pins = pin_masks
+                .get_or_insert_with(|| generate_pin_masks(board, color, info.king_square(color)));
+            if reachable & pins[sq as usize] == 0 {
+                continue;
+            }
+            if reachable & supported != 0 {
+                (17, 6)
+            } else {
+                (11, 3)
+            }
+        };
+        mg += bonus.0;
+        eg += bonus.1;
     }
-
-    score = scale_by_phase(score, info.phase(), 4, 8);
-
-    score
+    (mg, eg)
 }
