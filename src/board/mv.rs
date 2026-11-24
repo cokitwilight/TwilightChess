@@ -85,8 +85,7 @@ impl Move {
     }
 
     pub fn is_quiet(self) -> bool {
-        self.mv.get() & FLAGS_MASK == NORMAL
-            && self.mv.get() & IS_PROMOTION == 0
+        self.mv.get() & FLAGS_MASK == NORMAL && self.mv.get() & IS_PROMOTION == 0
     }
 
     pub fn from(self) -> Square {
