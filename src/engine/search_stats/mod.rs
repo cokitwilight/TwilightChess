@@ -20,6 +20,36 @@ macro_rules! impl_counter_stats_ops {
     };
 }
 
+// A feature-off build calls the original printer directly.
+macro_rules! report_part {
+    ($settings:expr, $part:ident, $body:expr) => {{
+        #[cfg(feature = "search-stats")]
+        $settings.print(crate::engine::search_stats::ReportSection::$part, || $body);
+        #[cfg(not(feature = "search-stats"))]
+        {
+            $body
+        }
+    }};
+}
+
+macro_rules! report_visible {
+    ($settings:expr, $part:ident) => {{
+        #[cfg(feature = "search-stats")]
+        {
+            $settings.printed & crate::engine::search_stats::ReportSection::$part.mask() != 0
+        }
+        #[cfg(not(feature = "search-stats"))]
+        {
+            true
+        }
+    }};
+}
+
+#[cfg(feature = "search-stats")]
+mod report_settings;
+#[cfg(feature = "search-stats")]
+pub use report_settings::{ReportSection, ReportSettings};
+
 mod aspiration;
 mod correction_history;
 mod cutoffs;
@@ -102,6 +132,9 @@ pub(crate) use track_stat;
 #[derive(Clone, Copy, Debug, Default)]
 #[cfg_attr(feature = "debug-uci", derive(serde::Serialize))]
 pub struct SearchStats {
+    #[cfg(feature = "search-stats")]
+    #[cfg_attr(feature = "debug-uci", serde(skip))]
+    pub report_settings: ReportSettings,
     pub node_stats: NodeStats,
     pub improvement_stats: ImprovementStats,
     pub iterative_deepening_stats: IterativeDeepeningStats,
@@ -144,10 +177,17 @@ impl SearchStats {
     }
 
     fn print_report(&self, title: &str, elapsed_secs: f64) {
+        if !report_visible!(self.report_settings, All) {
+            return;
+        }
         report_header(title);
 
         self.print_nodes(elapsed_secs);
-        self.improvement_stats.print(self.node_stats.main);
+        report_part!(
+            self.report_settings,
+            Improvement,
+            self.improvement_stats.print(self.node_stats.main)
+        );
         self.print_iterative_deepening();
         self.print_moves();
         self.print_cutoffs();
@@ -156,7 +196,11 @@ impl SearchStats {
         self.print_aspiration();
         self.print_history();
         self.print_correction_history();
-        self.estimated_score_stats.print();
+        report_part!(
+            self.report_settings,
+            Estimated,
+            self.estimated_score_stats.print()
+        );
         self.print_reductions();
         self.print_main_pruning();
         self.print_quiescence();
@@ -170,73 +214,127 @@ impl SearchStats {
     }
 
     pub fn print_nodes(&self, elapsed_secs: f64) {
-        self.node_stats.print(elapsed_secs);
+        report_part!(
+            self.report_settings,
+            Nodes,
+            self.node_stats.print(elapsed_secs)
+        );
     }
 
     pub fn print_iterative_deepening(&self) {
-        self.iterative_deepening_stats.print();
+        report_part!(
+            self.report_settings,
+            Iterative,
+            self.iterative_deepening_stats.print()
+        );
     }
 
     pub fn print_moves(&self) {
-        self.move_stats.print(&self.node_stats);
+        report_part!(
+            self.report_settings,
+            Moves,
+            self.move_stats.print(&self.node_stats)
+        );
     }
 
     pub fn print_cutoffs(&self) {
-        self.cutoff_stats.print(&self.node_stats, &self.move_stats);
+        report_part!(
+            self.report_settings,
+            Cutoffs,
+            self.cutoff_stats.print(&self.node_stats, &self.move_stats)
+        );
     }
 
     pub fn print_aspiration(&self) {
-        self.aspiration_stats.print();
+        report_part!(
+            self.report_settings,
+            Aspiration,
+            self.aspiration_stats.print()
+        );
     }
 
     pub fn print_pvs(&self) {
-        self.pvs_stats.print();
+        report_part!(self.report_settings, Pvs, self.pvs_stats.print());
     }
 
     pub fn print_move_ordering(&self) {
-        self.move_ordering_stats.print();
+        report_part!(
+            self.report_settings,
+            MoveOrdering,
+            self.move_ordering_stats.print()
+        );
     }
 
     pub fn print_history(&self) {
-        self.history_stats.print();
+        report_part!(self.report_settings, History, self.history_stats.print());
     }
 
     pub fn print_correction_history(&self) {
-        self.correction_stats.print();
+        report_part!(
+            self.report_settings,
+            Correction,
+            self.correction_stats.print()
+        );
     }
 
     pub fn print_reductions(&self) {
-        self.lmr_stats.print();
+        report_part!(self.report_settings, Lmr, self.lmr_stats.print());
     }
 
     pub fn print_main_pruning(&self) {
-        if self.mate_distance_stats.checks == 0
-            && !self.razoring_stats.has_data()
-            && !self.rfp_stats.has_data()
-            && !self.fut_stats.has_data()
-            && !self.lmp_stats.has_data()
-            && !self.null_move_stats.has_data()
-            && !self.main_see_stats.has_data()
-        {
-            return;
+        let mut heading = Some("Main-Search Pruning");
+        macro_rules! pruning {
+            ($part:ident, $has_data:expr, $body:expr) => {
+                if report_visible!(self.report_settings, $part) && $has_data {
+                    if let Some(title) = heading.take() {
+                        report_part!(self.report_settings, MainPruning, section(title));
+                    }
+                    report_part!(self.report_settings, $part, $body);
+                }
+            };
         }
-
-        section("Main-Search Pruning");
-        self.mate_distance_stats.print();
-        self.razoring_stats.print("Razoring");
-        self.rfp_stats.print("Reverse futility pruning");
-        self.lmp_stats.print();
-        self.fut_stats.print();
-        self.null_move_stats.print();
-        self.main_see_stats.print();
+        pruning!(
+            MateDistance,
+            self.mate_distance_stats.checks > 0,
+            self.mate_distance_stats.print()
+        );
+        pruning!(
+            Razoring,
+            self.razoring_stats.has_data(),
+            self.razoring_stats.print("Razoring")
+        );
+        pruning!(
+            Rfp,
+            self.rfp_stats.has_data(),
+            self.rfp_stats.print("Reverse futility pruning")
+        );
+        pruning!(Lmp, self.lmp_stats.has_data(), self.lmp_stats.print());
+        pruning!(Futility, self.fut_stats.has_data(), self.fut_stats.print());
+        pruning!(
+            NullMove,
+            self.null_move_stats.has_data(),
+            self.null_move_stats.print()
+        );
+        pruning!(
+            MainSee,
+            self.main_see_stats.has_data(),
+            self.main_see_stats.print()
+        );
     }
 
     pub fn print_q_pruning(&self) {
-        self.q_pruning_stats.print();
+        self.q_pruning_stats.print(
+            #[cfg(feature = "search-stats")]
+            self.report_settings,
+        );
     }
 
     pub fn print_quiescence(&self) {
-        self.quiescence_stats.print();
+        report_part!(
+            self.report_settings,
+            Quiescence,
+            self.quiescence_stats.print()
+        );
     }
 
     // Kept as a convenience wrapper for existing callers.
@@ -247,19 +345,27 @@ impl SearchStats {
     }
 
     pub fn print_singular_extensions(&self) {
-        self.singular_stats.print(self.total_nodes());
+        report_part!(
+            self.report_settings,
+            Singular,
+            self.singular_stats.print(self.total_nodes())
+        );
     }
 
     pub fn print_returns(&self) {
-        self.draw_stats.print();
+        report_part!(self.report_settings, Draws, self.draw_stats.print());
     }
 
     pub fn print_terminal(&self) {
-        self.terminal_stats.print();
+        report_part!(
+            self.report_settings,
+            TerminalNodes,
+            self.terminal_stats.print()
+        );
     }
 
     pub fn print_tts(&self) {
-        self.tt_stats.print();
+        report_part!(self.report_settings, Tt, self.tt_stats.print());
     }
 }
 
@@ -269,6 +375,8 @@ impl Sub for SearchStats {
     fn sub(self, rhs: Self) -> Self {
         Self {
             node_stats: self.node_stats - rhs.node_stats,
+            #[cfg(feature = "search-stats")]
+            report_settings: self.report_settings,
             improvement_stats: self.improvement_stats - rhs.improvement_stats,
             iterative_deepening_stats: self.iterative_deepening_stats
                 - rhs.iterative_deepening_stats,
