@@ -5,7 +5,7 @@ edition = "2024"
 default-run = "chess_final"
 
 [features]
-search-stats = []
+search-stats = ["dep:termcolor"]
 debug-uci = ["search-stats", "dep:serde", "dep:serde_json"]
 
 [[bin]]
@@ -14,6 +14,7 @@ path = "src/bin/twilight-debug.rs"
 required-features = ["debug-uci"]
 
 [dependencies]
+termcolor = { version = "1.4", optional = true }
 eframe = "0.34.3"
 num-format = "0.4"
 rand = "0.10.2"

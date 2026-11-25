@@ -6,6 +6,8 @@ use crate::bitboard::{Square, square_to_algebraic};
 use crate::board::{Move, MoveList};
 use crate::bot::Bot;
 use crate::engine::configs::EngineConfig;
+#[cfg(feature = "search-stats")]
+use crate::engine::search_stats::ReportSettings;
 use crate::engine::{
     Engine, SearchContext, SearchLimits, SearchResult, SearchStats, SearchTermination,
 };
@@ -173,17 +175,13 @@ impl BotGameSearchStats {
         }
     }
 
-    fn aggregate(&self, report: SearchStatsReport) -> &SearchStatsAggregate {
+    fn aggregate_mut(&mut self, report: SearchStatsReport) -> &mut SearchStatsAggregate {
         match report {
-            SearchStatsReport::Total => &self.total,
-            SearchStatsReport::Opening => &self.opening,
-            SearchStatsReport::Middlegame => &self.middlegame,
-            SearchStatsReport::Endgame => &self.endgame,
+            SearchStatsReport::Total => &mut self.total,
+            SearchStatsReport::Opening => &mut self.opening,
+            SearchStatsReport::Middlegame => &mut self.middlegame,
+            SearchStatsReport::Endgame => &mut self.endgame,
         }
-    }
-
-    fn print_report(&self, report: SearchStatsReport, game_ply_count: usize) {
-        self.aggregate(report).print_report(report, game_ply_count);
     }
 }
 
@@ -205,6 +203,8 @@ pub struct ChessApp {
 
     bot_game_search_stats: BotGameSearchStats,
     selected_search_stats_report: SearchStatsReport,
+    #[cfg(feature = "search-stats")]
+    report_settings: ReportSettings,
 }
 
 impl Default for ChessApp {
@@ -227,6 +227,8 @@ impl Default for ChessApp {
 
             bot_game_search_stats: BotGameSearchStats::default(),
             selected_search_stats_report: SearchStatsReport::default(),
+            #[cfg(feature = "search-stats")]
+            report_settings: ReportSettings::default(),
         }
     }
 }
@@ -486,6 +488,8 @@ impl ChessApp {
                         selected_move_count,
                         show_pgn,
                         pgn_text,
+                        #[cfg(feature = "search-stats")]
+                        &mut self.report_settings,
                     );
                 },
             );
@@ -550,6 +554,7 @@ impl ChessApp {
         selected_move_count: usize,
         show_pgn: bool,
         pgn_text: &mut String,
+        #[cfg(feature = "search-stats")] report_settings: &mut ReportSettings,
     ) -> GameScreenAction {
         let mut action = GameScreenAction::None;
 
@@ -593,6 +598,8 @@ impl ChessApp {
         if ui.button("Print Eval").clicked() {
             action = GameScreenAction::PrintEval;
         }
+        #[cfg(feature = "search-stats")]
+        super::stats_tree::show(ui, report_settings);
 
         if state != GameState::Ongoing {
             ui.add_space(8.0);
@@ -753,6 +760,8 @@ impl ChessApp {
                         show_pgn,
                         pgn_text,
                         selected_search_stats_report,
+                        #[cfg(feature = "search-stats")]
+                        &mut self.report_settings,
                     );
                 },
             );
@@ -790,6 +799,7 @@ impl ChessApp {
         show_pgn: bool,
         pgn_text: &mut String,
         selected_search_stats_report: &mut SearchStatsReport,
+        #[cfg(feature = "search-stats")] report_settings: &mut ReportSettings,
     ) -> GameScreenAction {
         let mut action = GameScreenAction::None;
 
@@ -852,6 +862,9 @@ impl ChessApp {
         if ui.button("Print Eval").clicked() {
             action = GameScreenAction::PrintEval;
         }
+
+        #[cfg(feature = "search-stats")]
+        super::stats_tree::show(ui, report_settings);
 
         if state != GameState::Ongoing {
             ui.add_space(8.0);
@@ -966,6 +979,8 @@ impl ChessApp {
         self.selected_moves.clear();
         self.pending_promotion = None;
 
+        #[cfg(feature = "search-stats")]
+        let report_settings = self.report_settings;
         thread::spawn(move || {
             let BotSearchRequest {
                 board,
@@ -975,6 +990,10 @@ impl ChessApp {
             } = request;
             println!("----------- Start -----------");
             let mut context = SearchContext::new(limits, repetition_history);
+            #[cfg(feature = "search-stats")]
+            {
+                context.stats.report_settings = report_settings;
+            }
             let result = engine.search(&board, &mut context, true, true);
             println!("------------ End ------------");
 
@@ -1168,7 +1187,7 @@ impl ChessApp {
         self.pgn_text.clear();
     }
 
-    fn print_selected_search_stats(&self) {
+    fn print_selected_search_stats(&mut self) {
         let Some(game) = &self.game else {
             return;
         };
@@ -1177,8 +1196,13 @@ impl ChessApp {
             return;
         }
 
-        self.bot_game_search_stats
-            .print_report(self.selected_search_stats_report, game.move_history.len());
+        let report = self.selected_search_stats_report;
+        let aggregate = self.bot_game_search_stats.aggregate_mut(report);
+        #[cfg(feature = "search-stats")]
+        {
+            aggregate.stats.report_settings = self.report_settings;
+        }
+        aggregate.print_report(report, game.move_history.len());
     }
 
     fn clear_search_stats(&mut self) {

@@ -12,25 +12,37 @@ pub struct QuiescencePruningStats {
 }
 
 impl QuiescencePruningStats {
-    pub(super) fn print(&self) {
-        if self.delta_attempts == 0 && self.see_attempts == 0 {
+    pub(super) fn print(&self, #[cfg(feature = "search-stats")] settings: super::ReportSettings) {
+        let delta = report_visible!(settings, Delta);
+        let see = report_visible!(settings, QSee);
+        if !(delta && self.delta_attempts > 0 || see && self.see_attempts > 0) {
             return;
         }
 
-        section("Quiescence Pruning");
+        report_part!(settings, QPruning, section("Quiescence Pruning"));
         if self.delta_attempts > 0 {
-            subsection("Delta pruning");
-            submetric_count("Attempts", self.delta_attempts);
-            submetric_count("Pruned moves", self.delta_prunes);
-            submetric_pct("Prune rate", self.delta_prunes, self.delta_attempts);
+            report_part!(settings, Delta, {
+                subsection("Delta pruning");
+                submetric_count("Attempts", self.delta_attempts);
+                submetric_count("Pruned moves", self.delta_prunes);
+                submetric_pct("Prune rate", self.delta_prunes, self.delta_attempts);
+            });
         }
         if self.see_attempts > 0 {
-            subsection("SEE pruning");
-            submetric_count("Attempts", self.see_attempts);
-            submetric_count("Pruned moves", self.see_prunes);
-            submetric_pct("Prune rate", self.see_prunes, self.see_attempts);
+            report_part!(settings, QSee, {
+                subsection("SEE pruning");
+                submetric_count("Attempts", self.see_attempts);
+                submetric_count("Pruned moves", self.see_prunes);
+                submetric_pct("Prune rate", self.see_prunes, self.see_attempts);
+            });
         }
-        metric_count("Total pruned moves", self.delta_prunes + self.see_prunes);
+        if delta && see {
+            report_part!(
+                settings,
+                QPruning,
+                metric_count("Total pruned moves", self.delta_prunes + self.see_prunes)
+            );
+        }
     }
 }
 
